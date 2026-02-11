@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+*.node
+*.log
+.DS_Store
+
+# Build artifacts for foonathan/memory
+third_party/memory/build/
+*.md
+!README.md

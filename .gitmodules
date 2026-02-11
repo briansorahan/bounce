@@ -1,0 +1,12 @@
+[submodule "flucoma-core"]
+	path = flucoma-core
+	url = https://github.com/flucoma/flucoma-core.git
+[submodule "third_party/eigen"]
+	path = third_party/eigen
+	url = https://gitlab.com/libeigen/eigen.git
+[submodule "third_party/hisstools"]
+	path = third_party/hisstools
+	url = https://github.com/AlexHarker/HISSTools_Library.git
+[submodule "third_party/memory"]
+	path = third_party/memory
+	url = https://github.com/foonathan/memory.git

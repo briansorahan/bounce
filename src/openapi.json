@@ -1,0 +1,198 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Bounce API",
+    "version": "1.0.0",
+    "description": "REST API for FluCoMa audio analysis using Node.js bindings"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns the health status of the API server",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyze/onset": {
+      "put": {
+        "summary": "Analyze audio for onset features",
+        "description": "Process WAV audio data and extract onset features using FluCoMa's OnsetFeature algorithm. Returns an array of spectral difference values (one per analysis frame) representing the amount of spectral change over time. Higher values indicate more spectral change (potential onset events like drum hits or note attacks), while lower values indicate less change. The algorithm computes the spectral difference between consecutive frames using the chosen metric, then applies median filtering to reduce noise.",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["audio/wav"]
+            },
+            "description": "Must be audio/wav"
+          },
+          {
+            "name": "function",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9,
+              "default": 0
+            },
+            "description": "Spectral change metric: 0=Energy, 1=HFC, 2=Spectral Flux, 3=MKL, 4=IS, 5=Cosine, 6=Phase Deviation, 7=Weighted Phase Deviation, 8=Complex Domain, 9=Rectified Complex Domain"
+          },
+          {
+            "name": "filterSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 5
+            },
+            "description": "Median filter size for onset detection"
+          },
+          {
+            "name": "frameDelta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Frame delta parameter"
+          },
+          {
+            "name": "windowSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1024
+            },
+            "description": "Analysis window size in samples"
+          },
+          {
+            "name": "fftSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1024
+            },
+            "description": "FFT size in samples"
+          },
+          {
+            "name": "hopSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 512
+            },
+            "description": "Hop size between analysis frames in samples"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "audio/wav": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Onset features extracted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "features": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "description": "Array of spectral difference values, one per analysis frame. Each value represents the amount of spectral change at that point in time. Higher values indicate more change (potential onsets), lower values indicate less change. Number of frames = (audioLength - windowSize) / hopSize + 1"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request - request body must contain audio data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Request body must contain audio data"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity - Content-Type must be audio/wav",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Content-Type must be audio/wav"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error during analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Error processing audio buffer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
