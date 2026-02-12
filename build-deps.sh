@@ -14,9 +14,8 @@ cmake .. -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
          -DCMAKE_INSTALL_PREFIX=../../..
 make -j4
 
-# Copy generated config header to include directory
-mkdir -p ../include/foonathan/memory/detail
-cp src/config_impl.hpp ../include/foonathan/memory/detail/
+# Copy generated config header to include directory (next to config.hpp)
+cp src/config_impl.hpp ../include/foonathan/memory/
 
 cd ../../..
 
