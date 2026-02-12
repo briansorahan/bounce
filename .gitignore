@@ -7,6 +7,7 @@ build/
 
 # Build artifacts for foonathan/memory
 third_party/memory/build/
+third_party/memory/install/
 
 # Prevent crufty AI markdown files
 *.md

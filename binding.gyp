@@ -17,12 +17,10 @@
         "third_party/eigen",
         "third_party/hisstools/include",
         "third_party/hisstools",
-        "third_party/memory/include/foonathan",
-        "third_party/memory/build/src",
-        "third_party/memory/build/include/foonathan/memory/detail"
+        "third_party/memory/install/include/foonathan"
       ],
       "libraries": [
-        "../third_party/memory/build/src/libfoonathan_memory-0.7.4.a"
+        "../third_party/memory/install/lib/libfoonathan_memory-0.7.4.a"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "xcode_settings": {
