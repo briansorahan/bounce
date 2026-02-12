@@ -193,6 +193,184 @@
           }
         }
       }
+    },
+    "/analyze/onset-slice": {
+      "put": {
+        "summary": "Detect onset slice points in audio",
+        "description": "Process WAV audio data and detect onset slice points using FluCoMa's OnsetSlice algorithm. Returns an array of sample indices where onsets were detected based on spectral change exceeding the threshold. This is useful for automatically segmenting audio into slices at onset points (e.g., slicing drum loops into individual hits). The algorithm analyzes spectral change frame-by-frame, applies thresholding and debouncing, then returns the sample positions of detected onsets.",
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["audio/wav"]
+            },
+            "description": "Must be audio/wav"
+          },
+          {
+            "name": "function",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9,
+              "default": 0
+            },
+            "description": "Spectral change metric: 0=Energy, 1=HFC, 2=Spectral Flux, 3=MKL, 4=IS, 5=Cosine, 6=Phase Deviation, 7=Weighted Phase Deviation, 8=Complex Domain, 9=Rectified Complex Domain"
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0.5
+            },
+            "description": "Threshold for onset detection (0.0-1.0). Higher values detect fewer, stronger onsets; lower values detect more onsets but may include false positives"
+          },
+          {
+            "name": "minSliceLength",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 2
+            },
+            "description": "Minimum number of frames between detected slices (debounce). Prevents detecting multiple onsets for a single event"
+          },
+          {
+            "name": "filterSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 5
+            },
+            "description": "Median filter size for onset detection"
+          },
+          {
+            "name": "frameDelta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Frame delta parameter for spectral difference computation"
+          },
+          {
+            "name": "windowSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1024
+            },
+            "description": "Analysis window size in samples"
+          },
+          {
+            "name": "fftSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1024
+            },
+            "description": "FFT size in samples"
+          },
+          {
+            "name": "hopSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 512
+            },
+            "description": "Hop size between analysis frames in samples"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "audio/wav": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Onset slices detected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slices": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "description": "Array of sample indices where onsets were detected. Each index represents the starting position (in samples) of a detected onset. Use these indices to slice the audio buffer into segments."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request - request body must contain audio data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Request body must contain audio data"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity - Content-Type must be audio/wav",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Content-Type must be audio/wav"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error during analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Error processing audio buffer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
