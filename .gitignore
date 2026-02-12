@@ -7,5 +7,6 @@ build/
 
 # Build artifacts for foonathan/memory
 third_party/memory/build/
+third_party/memory/install/
 *.md
 !README.md
