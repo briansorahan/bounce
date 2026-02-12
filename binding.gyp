@@ -7,6 +7,7 @@
       "sources": [
         "native/src/addon.cpp",
         "native/src/onset_feature.cpp",
+        "native/src/onset_slice.cpp",
         "third_party/hisstools/HISSTools_FFT/HISSTools_FFT.cpp"
       ],
       "include_dirs": [

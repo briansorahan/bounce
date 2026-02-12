@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <title>Bounce - FluCoMa Audio Editor</title>
+  <link rel="stylesheet" href="../xterm/xterm/css/xterm.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@xterm/xterm": "../xterm/xterm/lib/xterm.mjs",
+        "@xterm/addon-fit": "../xterm/addon-fit/lib/addon-fit.mjs"
+      }
+    }
+  </script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #1e1e1e;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #terminal {
+      flex: 0 0 40%;
+      padding: 10px;
+      background: #1e1e1e;
+      border-bottom: 2px solid #333;
+    }
+
+    #waveform-container {
+      flex: 1;
+      display: none;
+      position: relative;
+      background: #252525;
+    }
+
+    #waveform-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60%;
+    }
+
+    #analysis-canvas {
+      position: absolute;
+      top: 60%;
+      left: 0;
+      width: 100%;
+      height: 40%;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <div id="waveform-container">
+    <canvas id="waveform-canvas"></canvas>
+    <canvas id="analysis-canvas"></canvas>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
