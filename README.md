@@ -35,13 +35,10 @@ This project provides Node.js bindings to the FluCoMa (Fluid Corpus Manipulation
 git clone --recursive https://github.com/briansorahan/bounce.git
 cd bounce
 
-# Build dependencies
-./build-deps.sh
-
 # Install Node.js dependencies
 npm install
 
-# Build native addon and TypeScript
+# Build everything (dependencies, native addon, and TypeScript)
 npm run build
 
 # Run tests
@@ -224,10 +221,12 @@ The project uses:
 
 Build commands:
 ```bash
+npm run build:deps    # Build third-party C++ dependencies only
 npm run build:native  # Build C++ addon only
 npm run build:ts      # Build TypeScript only
-npm run build         # Build both
-npm run clean         # Remove build artifacts
+npm run build         # Build all (deps + native + TypeScript)
+npm run clean         # Remove build artifacts (including third-party)
+npm run clean:full    # Remove all build artifacts and node_modules
 ```
 
 ### Dependencies
@@ -268,7 +267,7 @@ ls /System/Library/Frameworks/Accelerate.framework
 
 Verify dependencies are built:
 ```bash
-./build-deps.sh
+npm run build:deps
 ```
 
 **Submodule directories empty**

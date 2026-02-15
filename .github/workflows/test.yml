@@ -32,14 +32,8 @@ jobs:
     - name: Install Electron binary
       run: node node_modules/electron/install.js
     
-    - name: Build dependencies
-      run: ./build-deps.sh
-    
-    - name: Build native addon
-      run: npm run build:native
-    
-    - name: Build TypeScript
-      run: npm run build:ts
+    - name: Build all
+      run: npm run build
     
     - name: Run tests
       run: npm test
