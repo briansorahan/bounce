@@ -2,17 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { OnsetSlice } from '../index';
-
-// Audio context for decoding various formats
-let audioContext: AudioContext | null = null;
-
-function getAudioContext(): AudioContext {
-  if (!audioContext) {
-    const AudioContextConstructor = (global as any).AudioContext || (global as any).webkitAudioContext;
-    audioContext = new AudioContextConstructor();
-  }
-  return audioContext;
-}
+import decode from 'audio-decode';
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -49,13 +39,7 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
     }
 
     const fileBuffer = fs.readFileSync(resolvedPath);
-    const arrayBuffer = fileBuffer.buffer.slice(
-      fileBuffer.byteOffset,
-      fileBuffer.byteOffset + fileBuffer.byteLength
-    );
-
-    const ctx = getAudioContext();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    const audioBuffer = await decode(fileBuffer);
 
     const channelData = audioBuffer.getChannelData(0);
     const sampleRate = audioBuffer.sampleRate;

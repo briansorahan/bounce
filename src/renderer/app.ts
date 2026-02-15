@@ -45,6 +45,13 @@ export class BounceApp {
     this.audioContext = new AudioContext();
 
     this.setupEventHandlers();
+
+    // Expose terminal and executeCommand for testing
+    (window as any).__bounceTerminal = this.terminal;
+    (window as any).__bounceExecuteCommand = (cmd: string) => {
+      this.commandBuffer = cmd;
+      this.executeCommand(cmd);
+    };
   }
 
   mount(containerId: string): void {
@@ -61,6 +68,10 @@ export class BounceApp {
 
     window.addEventListener('resize', () => {
       this.fitAddon.fit();
+    });
+
+    this.audioContext.setPlaybackUpdateCallback((position) => {
+      this.updatePlaybackCursor(position);
     });
   }
 
@@ -124,6 +135,8 @@ export class BounceApp {
     this.terminal.writeln('');
     this.terminal.writeln('Commands:');
     this.terminal.writeln('  \x1b[33mdisplay "path/to/audio/file"\x1b[0m - Load and visualize audio');
+    this.terminal.writeln('  \x1b[33mplay "path/to/audio/file"\x1b[0m - Play audio with cursor');
+    this.terminal.writeln('  \x1b[33mstop\x1b[0m - Stop playback');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show all available commands');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
@@ -173,6 +186,14 @@ export class BounceApp {
         await this.handleDisplayCommand(args);
         return true;
       
+      case 'play':
+        await this.handlePlayCommand(args);
+        return true;
+      
+      case 'stop':
+        this.handleStopCommand();
+        return true;
+      
       case 'help':
         this.handleHelpCommand();
         return true;
@@ -211,7 +232,7 @@ export class BounceApp {
   private async handleDisplayCommand(args: string[]): Promise<void> {
     if (args.length === 0) {
       this.terminal.writeln('\x1b[31mError: display requires a file path\x1b[0m');
-      this.terminal.writeln('Usage: display "path/to/file.wav"');
+      this.terminal.writeln('Usage: display "path/to/audio/file"');
       return;
     }
 
@@ -233,6 +254,7 @@ export class BounceApp {
         audioData: audioData.channelData,
         sampleRate: audioData.sampleRate,
         duration: audioData.duration,
+        filePath: filePath,
         visualize: () => 'Visualization updated',
         analyzeOnsetSlice: async (options?: any) => {
           const slices = await window.electron.analyzeOnsetSlice(audioData.channelData, options);
@@ -250,11 +272,50 @@ export class BounceApp {
     }
   }
 
+  private async handlePlayCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      this.terminal.writeln('\x1b[31mError: play requires a file path\x1b[0m');
+      this.terminal.writeln('Usage: play "path/to/audio/file"');
+      return;
+    }
+
+    const filePath = args[0];
+    const currentAudio = this.audioContext.getCurrentAudio();
+
+    if (currentAudio && currentAudio.filePath === filePath) {
+      try {
+        await this.audioContext.playAudio(currentAudio.audioData, currentAudio.sampleRate);
+        this.terminal.writeln(`\x1b[32mPlaying: ${filePath}\x1b[0m`);
+      } catch (error) {
+        this.terminal.writeln(`\x1b[31mError playing audio: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+      }
+    } else {
+      await this.handleDisplayCommand(args);
+      
+      const audio = this.audioContext.getCurrentAudio();
+      if (audio) {
+        try {
+          await this.audioContext.playAudio(audio.audioData, audio.sampleRate);
+          this.terminal.writeln(`\x1b[32mPlaying: ${filePath}\x1b[0m`);
+        } catch (error) {
+          this.terminal.writeln(`\x1b[31mError playing audio: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+        }
+      }
+    }
+  }
+
+  private handleStopCommand(): void {
+    this.audioContext.stopAudio();
+    this.terminal.writeln('\x1b[32mPlayback stopped\x1b[0m');
+  }
+
   private handleHelpCommand(): void {
     this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
     this.terminal.writeln('');
     this.terminal.writeln('  \x1b[33mdisplay "path/to/audio/file"\x1b[0m - Load and visualize audio file');
     this.terminal.writeln('    Supports: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
+    this.terminal.writeln('  \x1b[33mplay "path/to/audio/file"\x1b[0m - Play audio file with cursor visualization');
+    this.terminal.writeln('  \x1b[33mstop\x1b[0m - Stop audio playback');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
@@ -278,6 +339,7 @@ export class BounceApp {
     }
 
     if (this.waveformVisualizer) {
+      this.waveformVisualizer.setAudioContext(this.audioContext);
       this.waveformVisualizer.drawWaveform(audio.audioData, audio.sampleRate);
       
       const slices = this.audioContext.getCurrentSlices();
@@ -285,5 +347,12 @@ export class BounceApp {
         this.waveformVisualizer.drawSliceMarkers(slices, audio.audioData.length);
       }
     }
+  }
+
+  private updatePlaybackCursor(position: number): void {
+    const audio = this.audioContext.getCurrentAudio();
+    if (!audio || !this.waveformVisualizer) return;
+
+    this.waveformVisualizer.updatePlaybackCursor(position, audio.audioData.length);
   }
 }
