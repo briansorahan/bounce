@@ -1,16 +1,21 @@
 {
   "name": "bounce",
   "version": "1.0.0",
-  "description": "Node.js TypeScript REST API wrapper for FluCoMa audio analysis library",
-  "main": "dist/index.js",
+  "description": "FluCoMa-powered audio editor built with Electron",
+  "main": "dist/electron/main.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "build:deps": "cd third_party/memory && rm -rf build install && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=../install -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DFOONATHAN_MEMORY_BUILD_EXAMPLES=OFF -DFOONATHAN_MEMORY_BUILD_TESTS=OFF -DFOONATHAN_MEMORY_BUILD_TOOLS=OFF && make -j4 && make install",
     "build:native": "node-gyp rebuild",
     "build:ts": "tsc && cp src/openapi.json dist/openapi.json",
-    "build": "npm run build:native && npm run build:ts",
-    "clean": "node-gyp clean && rm -rf dist build",
+    "build:electron": "tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
+    "build": "npm run build:deps && npm run build:native && npm run build:ts",
+    "clean": "node-gyp clean && rm -rf dist build && rm -rf third_party/memory/build third_party/memory/install",
+    "clean:full": "npm run clean && rm -rf node_modules package-lock.json",
     "dev": "tsx watch src/server.ts",
+    "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "start": "node dist/server.js",
+    "start:electron": "npm run build:electron && electron .",
     "test": "tsx src/test.ts"
   },
   "keywords": [
@@ -26,16 +31,24 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/express": "^5.0.6",
     "@types/node": "^25.2.3",
+    "electron": "^40.4.0",
+    "electron-builder": "^26.7.0",
     "node-addon-api": "^8.5.0",
     "node-gyp": "^12.2.0",
+    "playwright": "^1.58.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "express": "^5.2.1",
     "redoc-express": "^2.1.3",
-    "wav-decoder": "^1.3.0"
+    "wav-decoder": "^1.3.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
   }
 }

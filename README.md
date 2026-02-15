@@ -4,7 +4,7 @@ Node.js native bindings for the FluCoMa audio analysis library, enabling server-
 
 ## Overview
 
-This project provides Node.js bindings to the FluCoMa (Fluid Corpus Manipulation) C++ library, allowing you to use advanced audio analysis algorithms in Node.js applications. Currently implements the OnsetFeature algorithm for onset detection in audio signals.
+This project provides Node.js bindings to the FluCoMa (Fluid Corpus Manipulation) C++ library, allowing you to use advanced audio analysis algorithms in Node.js applications. Currently implements OnsetFeature for extracting onset detection features and OnsetSlice for detecting onset slice points in audio signals.
 
 ### Features
 
@@ -13,6 +13,8 @@ This project provides Node.js bindings to the FluCoMa (Fluid Corpus Manipulation
 - Support for Float32Array and Float64Array audio buffers
 - Configurable analysis parameters (FFT size, window size, detection function, etc.)
 - Multiple spectral change metrics for onset detection
+- OnsetFeature: Extract frame-by-frame onset strength values
+- OnsetSlice: Detect slice points based on onset detection with configurable threshold
 
 ## Installation
 
@@ -33,13 +35,10 @@ This project provides Node.js bindings to the FluCoMa (Fluid Corpus Manipulation
 git clone --recursive https://github.com/briansorahan/bounce.git
 cd bounce
 
-# Build dependencies
-./build-deps.sh
-
 # Install Node.js dependencies
 npm install
 
-# Build native addon and TypeScript
+# Build everything (dependencies, native addon, and TypeScript)
 npm run build
 
 # Run tests
@@ -48,7 +47,7 @@ npm test
 
 ## Usage
 
-### Basic Example
+### OnsetFeature - Extract Onset Detection Features
 
 ```typescript
 import { OnsetFeature } from 'bounce';
@@ -70,6 +69,38 @@ const onsetFeatures = analyzer.process(audioBuffer);
 console.log(`Extracted ${onsetFeatures.length} frames`);
 ```
 
+### OnsetSlice - Detect Onset Slice Points
+
+```typescript
+import { OnsetSlice } from 'bounce';
+
+// Create slicer with configuration
+const slicer = new OnsetSlice({
+  function: 2,          // Spectral Flux
+  threshold: 0.5,       // Onset detection threshold
+  minSliceLength: 2,    // Minimum frames between slices
+  filterSize: 5,        // Median filter size
+  windowSize: 1024,     // Analysis window
+  fftSize: 1024,        // FFT size
+  hopSize: 512          // Hop between frames
+});
+
+// Process audio buffer and get slice indices
+const audioBuffer = new Float32Array(44100); // 1 second at 44.1kHz
+// ... load audio data ...
+
+const sliceIndices = slicer.process(audioBuffer);
+console.log('Onset slice points (in samples):', sliceIndices);
+
+// Use slice indices to split audio
+for (let i = 0; i < sliceIndices.length - 1; i++) {
+  const start = sliceIndices[i];
+  const end = sliceIndices[i + 1];
+  const segment = audioBuffer.slice(start, end);
+  // Process segment...
+}
+```
+
 ### Spectral Change Metrics
 
 ```typescript
@@ -86,6 +117,27 @@ function: 9  // Rectified Complex Domain
 ```
 
 ## Running Locally
+
+### Desktop App (Electron)
+
+```bash
+# Run the desktop audio editor
+npm run dev:electron
+```
+
+The terminal UI allows you to interactively load audio files, visualize waveforms, and analyze onset slices using TypeScript commands. See [TERMINAL_UI.md](./TERMINAL_UI.md) for detailed usage instructions.
+
+**Quick Start:**
+
+```typescript
+// In the terminal UI, run:
+const audio = await loadAudio('./flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav')
+audio.visualize()
+const slices = await audio.analyzeOnsetSlice({ function: 2, threshold: 0.5 })
+slices.visualize()
+```
+
+### API Server
 
 ```bash
 # Start API server on port 8000
@@ -169,10 +221,12 @@ The project uses:
 
 Build commands:
 ```bash
+npm run build:deps    # Build third-party C++ dependencies only
 npm run build:native  # Build C++ addon only
 npm run build:ts      # Build TypeScript only
-npm run build         # Build both
-npm run clean         # Remove build artifacts
+npm run build         # Build all (deps + native + TypeScript)
+npm run clean         # Remove build artifacts (including third-party)
+npm run clean:full    # Remove all build artifacts and node_modules
 ```
 
 ### Dependencies
@@ -213,7 +267,7 @@ ls /System/Library/Frameworks/Accelerate.framework
 
 Verify dependencies are built:
 ```bash
-./build-deps.sh
+npm run build:deps
 ```
 
 **Submodule directories empty**

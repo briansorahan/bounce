@@ -1,7 +1,7 @@
-import { OnsetFeature as NativeOnsetFeature } from './native';
+import { OnsetFeature as NativeOnsetFeature, OnsetSlice as NativeOnsetSlice } from './native';
 
 // Re-export types
-export type { OnsetFeatureOptions } from './native';
+export type { OnsetFeatureOptions, OnsetSliceOptions } from './native';
 
 // Load the native addon
 const addon = require('../build/Release/flucoma_native.node');
@@ -25,6 +25,40 @@ export class OnsetFeature {
 
   /**
    * Process audio buffer and extract onset features
+   */
+  process(audioBuffer: Float32Array | Float64Array): number[] {
+    return this._native.process(audioBuffer);
+  }
+
+  /**
+   * Reset analyzer state
+   */
+  reset(): void {
+    this._native.reset();
+  }
+}
+
+/**
+ * OnsetSlice analyzer wrapper
+ */
+export class OnsetSlice {
+  private _native: NativeOnsetSlice;
+
+  constructor(options?: {
+    function?: number;
+    threshold?: number;
+    minSliceLength?: number;
+    filterSize?: number;
+    frameDelta?: number;
+    windowSize?: number;
+    fftSize?: number;
+    hopSize?: number;
+  }) {
+    this._native = new addon.OnsetSlice(options || {});
+  }
+
+  /**
+   * Process audio buffer and detect onset slice points
    */
   process(audioBuffer: Float32Array | Float64Array): number[] {
     return this._native.process(audioBuffer);
