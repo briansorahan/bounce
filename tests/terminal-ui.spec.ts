@@ -1,10 +1,13 @@
 import { test, expect, _electron as electron } from '@playwright/test';
 import * as path from 'path';
 
+// Get Electron executable path
+const electronPath = require('electron') as string;
+
 test.describe('Bounce Terminal UI', () => {
   test('should launch app and show terminal', async () => {
     const electronApp = await electron.launch({
-      executablePath: require('electron'),
+      executablePath: electronPath,
       args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
       env: {
         ...process.env,
@@ -24,7 +27,7 @@ test.describe('Bounce Terminal UI', () => {
 
   test('should display welcome message', async () => {
     const electronApp = await electron.launch({
-      executablePath: require('electron'),
+      executablePath: electronPath,
       args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
       env: {
         ...process.env,
