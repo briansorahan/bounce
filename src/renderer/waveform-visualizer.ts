@@ -4,6 +4,8 @@ export class WaveformVisualizer {
   private waveformCtx: CanvasRenderingContext2D;
   private analysisCtx: CanvasRenderingContext2D;
   private playbackCursorPosition: number = 0;
+  private currentAudioData: Float32Array | null = null;
+  private currentSampleRate: number = 0;
 
   constructor(waveformCanvasId: string, analysisCanvasId: string) {
     this.waveformCanvas = document.getElementById(waveformCanvasId) as HTMLCanvasElement;
@@ -38,6 +40,9 @@ export class WaveformVisualizer {
   }
 
   drawWaveform(audioData: Float32Array, sampleRate: number): void {
+    this.currentAudioData = audioData;
+    this.currentSampleRate = sampleRate;
+    
     const width = this.waveformCanvas.width;
     const height = this.waveformCanvas.height;
     const ctx = this.waveformCtx;
@@ -121,10 +126,8 @@ export class WaveformVisualizer {
   updatePlaybackCursor(position: number, totalSamples: number): void {
     this.playbackCursorPosition = position;
     
-    // Redraw the entire waveform to clear previous cursor
-    const audio = this.audioContext?.getCurrentAudio();
-    if (audio) {
-      this.drawWaveform(audio.audioData, audio.sampleRate);
+    if (this.currentAudioData && this.currentSampleRate) {
+      this.drawWaveform(this.currentAudioData, this.currentSampleRate);
     }
   }
 
@@ -139,7 +142,6 @@ export class WaveformVisualizer {
 
     const x = (this.playbackCursorPosition / totalSamples) * width;
 
-    // Draw just a thin vertical line
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 1;
     ctx.beginPath();
