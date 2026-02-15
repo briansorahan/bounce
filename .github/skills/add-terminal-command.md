@@ -1,10 +1,10 @@
 ---
 name: add-terminal-command
 description: Guide for adding built-in commands to the xterm TypeScript REPL
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-15
 updated: 2026-02-15
-tags: [electron, terminal, xterm, renderer, commands]
+tags: [electron, terminal, xterm, renderer, commands, async, prompt]
 ---
 
 # Skill: Add Terminal Command
@@ -385,6 +385,87 @@ private async handleBuiltInCommand(command: string): Promise<boolean> {
 }
 ```
 
+### CRITICAL: Ensure Prompt Appears After Command Output
+
+**The `> ` prompt must always appear AFTER all command output is printed.**
+
+#### Problem: Async operations can cause the prompt to appear too early
+
+When a command handler calls async operations without `await`, the function returns before the async work completes, causing the prompt to print before the command's output.
+
+#### Solution: Always await async operations in command handlers
+
+```typescript
+// ❌ WRONG - Prompt will appear before output
+private async handleMyCommand(args: string[]): Promise<void> {
+  this.someAsyncOperation();  // Not awaited!
+  this.terminal.writeln('Done');
+  // Function returns here, prompt prints
+  // THEN async operation completes and prints output
+}
+
+// ✅ CORRECT - Prompt appears after all output
+private async handleMyCommand(args: string[]): Promise<void> {
+  await this.someAsyncOperation();  // Awaited!
+  this.terminal.writeln('Done');
+  // All work completes, THEN function returns
+  // Prompt prints at the right time
+}
+```
+
+#### Real Example: The play command bug
+
+The `play` command was being executed from reverse search mode, but `exitSearchMode()` wasn't awaiting the command execution:
+
+```typescript
+// ❌ WRONG - Caused prompt to appear before audio metadata
+private exitSearchMode(executeCommand: boolean): void {
+  if (executeCommand && this.searchResultIndex >= 0) {
+    const command = this.matchedCommands[this.searchResultIndex];
+    this.terminal.write(`> ${command}`);
+    this.terminal.write('\r\n');
+    this.executeCommand(command);  // Not awaited!
+    this.commandBuffer = '';
+  }
+  this.printPrompt();  // Prints immediately!
+}
+
+// ✅ CORRECT - Wait for command to finish before printing prompt
+private async exitSearchMode(executeCommand: boolean): Promise<void> {
+  if (executeCommand && this.searchResultIndex >= 0) {
+    const command = this.matchedCommands[this.searchResultIndex];
+    this.terminal.write(`> ${command}`);
+    this.terminal.write('\r\n');
+    await this.executeCommand(command);  // Awaited!
+    this.commandBuffer = '';
+  }
+  this.printPrompt();  // Prints after command completes
+}
+```
+
+#### Checklist for proper async handling:
+
+1. **Mark command handlers as `async`** if they do any async work
+2. **Always `await`** async operations (IPC calls, file I/O, etc.)
+3. **Ensure `handleBuiltInCommand` properly awaits** command handlers
+4. **Any function that calls `executeCommand()` must await it**
+5. **Test from both normal input AND reverse search mode** (Ctrl+R)
+
+#### Debugging prompt timing issues:
+
+If the prompt appears too early, add logging to trace execution:
+
+```typescript
+console.log('[handler] Starting command');
+await someAsyncOperation();
+console.log('[handler] Async operation complete');
+this.terminal.writeln('Output message');
+console.log('[handler] Terminal write complete');
+// Function returns here - prompt should print after this log
+```
+
+Look for logs appearing AFTER the function returns - that indicates a missing `await`.
+
 ## Common Issues
 
 **Command not recognized**
@@ -401,6 +482,13 @@ private async handleBuiltInCommand(command: string): Promise<boolean> {
 - Ensure all async functions use `await`
 - Check that Electron IPC handlers exist
 - Verify error handling doesn't swallow exceptions
+
+**Prompt appears before command output** ⚠️ CRITICAL
+- This is a UX bug - the `> ` should ALWAYS appear after all output
+- Add `await` before ALL async operations in command handlers
+- Check that functions calling `executeCommand()` also await it
+- Verify both normal command execution AND reverse search mode work correctly
+- Use console.log debugging to trace when functions return vs when output appears
 
 **TypeScript eval conflicts**
 - Check built-in commands are handled BEFORE eval

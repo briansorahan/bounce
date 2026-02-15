@@ -9,8 +9,16 @@ export class BounceApp {
   private audioContext: AudioContext;
   private waveformVisualizer: WaveformVisualizer | null = null;
   private commandBuffer: string = '';
+  private cursorPosition: number = 0; // Position within commandBuffer
   private commandHistory: string[] = [];
   private historyIndex: number = -1;
+  
+  // Reverse search state
+  private isReverseSearchMode: boolean = false;
+  private searchQuery: string = '';
+  private searchResultIndex: number = -1;
+  private matchedCommands: string[] = [];
+  private savedCommandBuffer: string = '';
 
   constructor() {
     this.terminal = new Terminal({
@@ -45,6 +53,9 @@ export class BounceApp {
     this.audioContext = new AudioContext();
 
     this.setupEventHandlers();
+    this.loadHistoryFromStorage().catch(err => {
+      console.error('Failed to load history:', err);
+    });
 
     // Expose terminal and executeCommand for testing
     (window as any).__bounceTerminal = this.terminal;
@@ -84,27 +95,147 @@ export class BounceApp {
   private handleInput(data: string): void {
     const code = data.charCodeAt(0);
 
+    // Check for Ctrl+R (ASCII 18)
+    if (code === 18) {
+      this.handleReverseSearch();
+      return;
+    }
+
+    // If in search mode, handle search input differently
+    if (this.isReverseSearchMode) {
+      this.handleSearchInput(data);
+      return;
+    }
+
+    // Normal mode input handling
     if (code === 13) {
+      // Enter
       this.terminal.write('\r\n');
-      this.executeCommand(this.commandBuffer);
+      this.executeCommand(this.commandBuffer)
+        .then(() => {
+          this.printPrompt();
+        })
+        .catch((error) => {
+          console.error('[handleInput] Command execution error:', error);
+          this.printPrompt();
+        });
       this.commandBuffer = '';
+      this.cursorPosition = 0;
       this.historyIndex = -1;
-      this.printPrompt();
     } else if (code === 127) {
-      if (this.commandBuffer.length > 0) {
-        this.commandBuffer = this.commandBuffer.slice(0, -1);
-        this.terminal.write('\b \b');
+      // Backspace
+      if (this.cursorPosition > 0) {
+        this.commandBuffer = 
+          this.commandBuffer.slice(0, this.cursorPosition - 1) + 
+          this.commandBuffer.slice(this.cursorPosition);
+        this.cursorPosition--;
+        this.redrawCommandLine();
       }
+    } else if (code === 1) {
+      // Ctrl+A - Move to beginning
+      this.cursorPosition = 0;
+      this.updateCursorPosition();
+    } else if (code === 5) {
+      // Ctrl+E - Move to end
+      this.cursorPosition = this.commandBuffer.length;
+      this.updateCursorPosition();
+    } else if (code === 6) {
+      // Ctrl+F - Move forward one character
+      if (this.cursorPosition < this.commandBuffer.length) {
+        this.cursorPosition++;
+        this.updateCursorPosition();
+      }
+    } else if (code === 2) {
+      // Ctrl+B - Move backward one character
+      if (this.cursorPosition > 0) {
+        this.cursorPosition--;
+        this.updateCursorPosition();
+      }
+    } else if (code === 16) {
+      // Ctrl+P - Previous command (like up arrow)
+      this.navigateHistory(-1);
+    } else if (code === 14) {
+      // Ctrl+N - Next command (like down arrow)
+      this.navigateHistory(1);
     } else if (code === 27) {
+      // ESC sequences (arrows, Alt+f, Alt+b)
       if (data === '\x1b[A') {
+        // Up arrow
         this.navigateHistory(-1);
       } else if (data === '\x1b[B') {
+        // Down arrow
         this.navigateHistory(1);
+      } else if (data === '\x1b[C') {
+        // Right arrow
+        if (this.cursorPosition < this.commandBuffer.length) {
+          this.cursorPosition++;
+          this.updateCursorPosition();
+        }
+      } else if (data === '\x1b[D') {
+        // Left arrow
+        if (this.cursorPosition > 0) {
+          this.cursorPosition--;
+          this.updateCursorPosition();
+        }
+      } else if (data === '\x1bf' || data === '\x1bf') {
+        // Alt+F - Move forward one word
+        this.moveToNextWord();
+      } else if (data === '\x1bb' || data === '\x1bB') {
+        // Alt+B - Move backward one word
+        this.moveToPreviousWord();
       }
     } else if (code >= 32) {
-      this.commandBuffer += data;
-      this.terminal.write(data);
+      // Regular character
+      this.commandBuffer = 
+        this.commandBuffer.slice(0, this.cursorPosition) + 
+        data + 
+        this.commandBuffer.slice(this.cursorPosition);
+      this.cursorPosition++;
+      this.redrawCommandLine();
     }
+  }
+
+  private moveToNextWord(): void {
+    // Skip current word
+    while (this.cursorPosition < this.commandBuffer.length && 
+           this.commandBuffer[this.cursorPosition] !== ' ') {
+      this.cursorPosition++;
+    }
+    // Skip spaces
+    while (this.cursorPosition < this.commandBuffer.length && 
+           this.commandBuffer[this.cursorPosition] === ' ') {
+      this.cursorPosition++;
+    }
+    this.updateCursorPosition();
+  }
+
+  private moveToPreviousWord(): void {
+    // Skip trailing spaces
+    while (this.cursorPosition > 0 && 
+           this.commandBuffer[this.cursorPosition - 1] === ' ') {
+      this.cursorPosition--;
+    }
+    // Skip to beginning of word
+    while (this.cursorPosition > 0 && 
+           this.commandBuffer[this.cursorPosition - 1] !== ' ') {
+      this.cursorPosition--;
+    }
+    this.updateCursorPosition();
+  }
+
+  private redrawCommandLine(): void {
+    // Clear the current line and redraw with cursor at correct position
+    this.terminal.write('\r\x1b[K');
+    this.terminal.write(`\x1b[32m>\x1b[0m ${this.commandBuffer}`);
+    // Move cursor to correct position
+    const targetColumn = 2 + this.cursorPosition; // 2 = "> " prompt
+    this.terminal.write(`\r\x1b[${targetColumn}G`);
+  }
+
+  private updateCursorPosition(): void {
+    // Move cursor to correct position without redrawing
+    const targetColumn = 2 + this.cursorPosition; // 2 = "> " prompt
+    this.terminal.write(`\r\x1b[${targetColumn}G`);
   }
 
   private navigateHistory(direction: number): void {
@@ -121,6 +252,7 @@ export class BounceApp {
         this.commandBuffer = this.commandHistory[this.commandHistory.length - 1 - this.historyIndex];
       }
 
+      this.cursorPosition = this.commandBuffer.length;
       this.terminal.write(`> ${this.commandBuffer}`);
     }
   }
@@ -140,10 +272,15 @@ export class BounceApp {
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show all available commands');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
+    this.terminal.writeln('Keyboard Shortcuts:');
+    this.terminal.writeln('  \x1b[90mCtrl+R\x1b[0m - Reverse search | \x1b[90mCtrl+P/N\x1b[0m - History | \x1b[90m↑/↓\x1b[0m - History');
+    this.terminal.writeln('  \x1b[90mCtrl+A/E\x1b[0m - Line start/end | \x1b[90mCtrl+F/B\x1b[0m - Char forward/back');
+    this.terminal.writeln('  \x1b[90mAlt+F/B\x1b[0m - Word forward/back | \x1b[90m←/→\x1b[0m - Move cursor');
+    this.terminal.writeln('');
   }
 
   private printPrompt(): void {
-    this.terminal.write('\x1b[32m>\x1b[0m ');
+    this.terminal.write('\r\x1b[32m>\x1b[0m ');
   }
 
   private async executeCommand(command: string): Promise<void> {
@@ -151,6 +288,7 @@ export class BounceApp {
     if (!trimmed) return;
 
     this.commandHistory.push(trimmed);
+    await window.electron.saveCommand(trimmed);
 
     try {
       if (await this.handleBuiltInCommand(trimmed)) {
@@ -319,6 +457,11 @@ export class BounceApp {
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
+    this.terminal.writeln('\x1b[1;36mKeyboard Shortcuts:\x1b[0m');
+    this.terminal.writeln('  \x1b[33mCtrl+R\x1b[0m - Reverse search command history');
+    this.terminal.writeln('  \x1b[33m↑/↓\x1b[0m - Navigate command history');
+    this.terminal.writeln('  \x1b[33mEsc / Ctrl+G\x1b[0m - Exit search mode');
+    this.terminal.writeln('');
     this.terminal.writeln('\x1b[1;36mTypeScript REPL:\x1b[0m');
     this.terminal.writeln('  \x1b[33mconst audio = await loadAudio(path)\x1b[0m - Load audio file');
     this.terminal.writeln('  \x1b[33maudio.visualize()\x1b[0m - Show waveform');
@@ -354,5 +497,137 @@ export class BounceApp {
     if (!audio || !this.waveformVisualizer) return;
 
     this.waveformVisualizer.updatePlaybackCursor(position, audio.audioData.length);
+  }
+
+  // Reverse search methods
+  private handleReverseSearch(): void {
+    if (!this.isReverseSearchMode) {
+      // Enter search mode
+      this.isReverseSearchMode = true;
+      this.searchQuery = '';
+      this.searchResultIndex = -1;
+      this.matchedCommands = [];
+      this.savedCommandBuffer = this.commandBuffer;
+      this.commandBuffer = '';
+      this.updateSearchPrompt();
+    } else {
+      // Cycle to next match
+      this.findNextMatch();
+    }
+  }
+
+  private handleSearchInput(data: string): void {
+    const code = data.charCodeAt(0);
+
+    if (code === 27) {
+      // Esc - exit search mode without executing
+      this.exitSearchMode(false);
+    } else if (code === 3) {
+      // Ctrl+C - cancel search
+      this.exitSearchMode(false);
+    } else if (code === 7) {
+      // Ctrl+G - cancel search (bash-style)
+      this.exitSearchMode(false);
+    } else if (code === 13) {
+      // Enter - execute matched command
+      this.exitSearchMode(true).catch(error => {
+        console.error('Error executing command from search:', error);
+      });
+    } else if (code === 127) {
+      // Backspace - remove character from search
+      if (this.searchQuery.length > 0) {
+        this.searchQuery = this.searchQuery.slice(0, -1);
+        this.performSearch();
+      }
+    } else if (code >= 32) {
+      // Regular character - add to search query
+      this.searchQuery += data;
+      this.performSearch();
+    }
+  }
+
+  private performSearch(): void {
+    this.matchedCommands = [];
+    
+    if (this.searchQuery === '') {
+      this.updateSearchPrompt();
+      return;
+    }
+
+    // Search history in reverse order (most recent first)
+    for (let i = this.commandHistory.length - 1; i >= 0; i--) {
+      const command = this.commandHistory[i];
+      if (command.toLowerCase().includes(this.searchQuery.toLowerCase())) {
+        this.matchedCommands.push(command);
+      }
+    }
+
+    // Set to first match
+    this.searchResultIndex = this.matchedCommands.length > 0 ? 0 : -1;
+    this.updateSearchPrompt();
+  }
+
+  private findNextMatch(): void {
+    if (this.matchedCommands.length === 0) return;
+    
+    this.searchResultIndex = (this.searchResultIndex + 1) % this.matchedCommands.length;
+    this.updateSearchPrompt();
+  }
+
+  private updateSearchPrompt(): void {
+    this.clearCurrentLine();
+    
+    const matchedCommand = this.matchedCommands[this.searchResultIndex] || '';
+    const highlighted = matchedCommand ? this.highlightMatch(matchedCommand, this.searchQuery) : '';
+    
+    this.terminal.write(`(reverse-i-search)\x1b[33m'${this.searchQuery}'\x1b[0m: ${highlighted}`);
+  }
+
+  private highlightMatch(command: string, query: string): string {
+    if (!query) return command;
+    
+    const index = command.toLowerCase().indexOf(query.toLowerCase());
+    if (index === -1) return command;
+    
+    const before = command.substring(0, index);
+    const match = command.substring(index, index + query.length);
+    const after = command.substring(index + query.length);
+    
+    return `${before}\x1b[1;32m${match}\x1b[0m${after}`;
+  }
+
+  private async exitSearchMode(executeCommand: boolean): Promise<void> {
+    this.isReverseSearchMode = false;
+    
+    this.clearCurrentLine();
+    
+    if (executeCommand && this.searchResultIndex >= 0) {
+      const command = this.matchedCommands[this.searchResultIndex];
+      this.terminal.write(`> ${command}`);
+      this.terminal.write('\r\n');
+      await this.executeCommand(command);
+      this.commandBuffer = '';
+    } else {
+      // Restore saved buffer if not executing
+      this.commandBuffer = this.savedCommandBuffer;
+    }
+    
+    this.searchQuery = '';
+    this.searchResultIndex = -1;
+    this.matchedCommands = [];
+    this.savedCommandBuffer = '';
+    this.printPrompt();
+  }
+
+  // History persistence methods
+  private async loadHistoryFromStorage(): Promise<void> {
+    try {
+      const history = await window.electron.getCommandHistory();
+      if (Array.isArray(history)) {
+        this.commandHistory = history;
+      }
+    } catch (error) {
+      console.error('Failed to load command history:', error);
+    }
   }
 }

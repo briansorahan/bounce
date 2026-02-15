@@ -14,6 +14,8 @@ export interface ElectronAPI {
     fftSize?: number;
     hopSize?: number;
   }) => Promise<number[]>;
+  saveCommand: (command: string) => Promise<void>;
+  getCommandHistory: () => Promise<string[]>;
 }
 
 declare global {

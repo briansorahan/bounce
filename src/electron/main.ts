@@ -3,6 +3,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { OnsetSlice } from '../index';
 import decode from 'audio-decode';
+import { DatabaseManager } from './database';
+
+let dbManager: DatabaseManager | null = null;
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -65,6 +68,45 @@ ipcMain.handle('analyze-onset-slice', async (_event, audioDataArray: number[], o
     return Array.from(slices);
   } catch (error) {
     throw new Error(`Failed to analyze onset slices: ${error instanceof Error ? error.message : String(error)}`);
+  }
+});
+
+ipcMain.handle('save-command', async (_event, command: string) => {
+  try {
+    if (dbManager) {
+      dbManager.addCommand(command);
+    }
+  } catch (error) {
+    console.error('Failed to save command to database:', error);
+  }
+});
+
+ipcMain.handle('get-command-history', async () => {
+  try {
+    return dbManager ? dbManager.getCommandHistory(1000) : [];
+  } catch (error) {
+    console.error('Failed to load command history:', error);
+    return [];
+  }
+});
+
+app.whenReady().then(() => {
+  dbManager = new DatabaseManager();
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (dbManager) {
+    dbManager.close();
+  }
+  if (process.platform !== 'darwin') {
+    app.quit();
   }
 });
 
