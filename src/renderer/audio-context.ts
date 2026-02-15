@@ -25,6 +25,10 @@ export class AudioContext {
   private currentAudio: AudioData | null = null;
   private currentSlices: number[] | null = null;
 
+  setCurrentAudio(audio: AudioData): void {
+    this.currentAudio = audio;
+  }
+
   async evaluate(code: string): Promise<any> {
     const loadAudio = async (path: string): Promise<AudioData> => {
       const audioData = await this.loadAudioFile(path);

@@ -122,11 +122,10 @@ export class BounceApp {
     this.terminal.writeln('\x1b[1;36mBounce - FluCoMa Audio Analysis Tool\x1b[0m');
     this.terminal.writeln('\x1b[90mTypeScript REPL for audio analysis\x1b[0m');
     this.terminal.writeln('');
-    this.terminal.writeln('Available commands:');
-    this.terminal.writeln('  \x1b[33mconst audio = await loadAudio(path)\x1b[0m - Load an audio file');
-    this.terminal.writeln('  \x1b[33maudio.visualize()\x1b[0m - Show waveform visualization');
-    this.terminal.writeln('  \x1b[33mconst slices = await audio.analyzeOnsetSlice(options)\x1b[0m - Detect onset slices');
-    this.terminal.writeln('  \x1b[33mslices.visualize()\x1b[0m - Show slice markers');
+    this.terminal.writeln('Commands:');
+    this.terminal.writeln('  \x1b[33mdisplay "path/to/file.wav"\x1b[0m - Load and visualize audio file');
+    this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show all available commands');
+    this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
   }
 
@@ -141,6 +140,10 @@ export class BounceApp {
     this.commandHistory.push(trimmed);
 
     try {
+      if (await this.handleBuiltInCommand(trimmed)) {
+        return;
+      }
+
       const result = await this.audioContext.evaluate(trimmed);
       
       if (result !== undefined) {
@@ -157,6 +160,104 @@ export class BounceApp {
     } catch (error) {
       this.terminal.writeln(`\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
     }
+  }
+
+  private async handleBuiltInCommand(command: string): Promise<boolean> {
+    const parts = this.parseCommand(command);
+    if (!parts) return false;
+
+    const { name, args } = parts;
+
+    switch (name) {
+      case 'display':
+        await this.handleDisplayCommand(args);
+        return true;
+      
+      case 'help':
+        this.handleHelpCommand();
+        return true;
+      
+      case 'clear':
+        this.terminal.clear();
+        return true;
+      
+      default:
+        return false;
+    }
+  }
+
+  private parseCommand(input: string): { name: string; args: string[] } | null {
+    const quotedArgsRegex = /^(\w+)\s+(.+)$/;
+    const match = input.match(quotedArgsRegex);
+    
+    if (!match) {
+      return { name: input.trim(), args: [] };
+    }
+
+    const name = match[1];
+    const argsString = match[2];
+    
+    const args: string[] = [];
+    const quotedArgRegex = /"([^"]+)"|'([^']+)'|(\S+)/g;
+    let argMatch;
+    
+    while ((argMatch = quotedArgRegex.exec(argsString)) !== null) {
+      args.push(argMatch[1] || argMatch[2] || argMatch[3]);
+    }
+    
+    return { name, args };
+  }
+
+  private async handleDisplayCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      this.terminal.writeln('\x1b[31mError: display requires a file path\x1b[0m');
+      this.terminal.writeln('Usage: display "path/to/file.wav"');
+      return;
+    }
+
+    const filePath = args[0];
+
+    if (!filePath.toLowerCase().endsWith('.wav')) {
+      this.terminal.writeln('\x1b[31mError: display only supports .wav files\x1b[0m');
+      return;
+    }
+
+    try {
+      const audioData = await window.electron.readAudioFile(filePath);
+      
+      const audio = {
+        audioData: audioData.channelData,
+        sampleRate: audioData.sampleRate,
+        duration: audioData.duration,
+        visualize: () => 'Visualization updated',
+        analyzeOnsetSlice: async (options?: any) => {
+          const slices = await window.electron.analyzeOnsetSlice(audioData.channelData, options);
+          return { slices, visualize: () => 'Slice markers updated' };
+        }
+      };
+
+      this.audioContext.setCurrentAudio(audio);
+      this.updateWaveformVisualization();
+
+      this.terminal.writeln(`\x1b[32mLoaded: ${filePath}\x1b[0m`);
+      this.terminal.writeln(`Duration: ${audioData.duration.toFixed(2)}s, Sample Rate: ${audioData.sampleRate}Hz`);
+    } catch (error) {
+      this.terminal.writeln(`\x1b[31mError loading file: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private handleHelpCommand(): void {
+    this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
+    this.terminal.writeln('');
+    this.terminal.writeln('  \x1b[33mdisplay "path/to/file.wav"\x1b[0m - Load and visualize audio file');
+    this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
+    this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
+    this.terminal.writeln('');
+    this.terminal.writeln('\x1b[1;36mTypeScript REPL:\x1b[0m');
+    this.terminal.writeln('  \x1b[33mconst audio = await loadAudio(path)\x1b[0m - Load audio file');
+    this.terminal.writeln('  \x1b[33maudio.visualize()\x1b[0m - Show waveform');
+    this.terminal.writeln('  \x1b[33mconst slices = await audio.analyzeOnsetSlice(options)\x1b[0m - Analyze onsets');
+    this.terminal.writeln('');
   }
 
   private updateWaveformVisualization(): void {
