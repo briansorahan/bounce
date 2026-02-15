@@ -38,8 +38,10 @@ jobs:
     - name: Run tests
       run: npm test
     
-    - name: Build Electron
-      run: npm run build:electron
+    - name: Clean and build Electron
+      run: |
+        rm -rf dist
+        npm run build:electron
     
     - name: Install Playwright browsers
       run: |
