@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: no-debug-logging
+        name: Check for debug logging
+        entry: scripts/check-no-debug-logging.sh
+        language: system
+        pass_filenames: false
+        always_run: true

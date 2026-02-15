@@ -101,9 +101,6 @@ export class BounceApp {
   private handleInput(data: string): void {
     const code = data.charCodeAt(0);
     
-    // Log to SQLite instead of console
-    window.electron.debugLog('debug', 'handleInput', { data, code });
-
     // Check for Ctrl+R (ASCII 18)
     if (code === 18) {
       this.handleReverseSearch();
@@ -215,8 +212,7 @@ export class BounceApp {
         // Alt+Delete or Alt+Backspace - Delete previous word
         this.deleteWordBackward();
       } else {
-        // Unknown escape sequence - log it but don't insert
-        window.electron.debugLog('warn', 'Unknown escape sequence', { data, code });
+        // Unknown escape sequence - ignore it
       }
     } else if (code >= 32) {
       // Regular character
@@ -302,19 +298,11 @@ export class BounceApp {
   }
 
   private navigateHistory(direction: number): void {
-    window.electron.debugLog('debug', 'navigateHistory', { 
-      direction, 
-      historyLength: this.commandHistory.length, 
-      currentIndex: this.historyIndex 
-    });
-    
     if (this.commandHistory.length === 0) {
-      window.electron.debugLog('warn', 'navigateHistory: history is empty');
       return;
     }
 
     const newIndex = this.historyIndex + direction;
-    window.electron.debugLog('debug', 'navigateHistory newIndex', { newIndex });
     
     if (newIndex >= -1 && newIndex < this.commandHistory.length) {
       this.clearCurrentLine();
@@ -326,7 +314,6 @@ export class BounceApp {
         this.commandBuffer = this.commandHistory[this.commandHistory.length - 1 - this.historyIndex];
       }
 
-      window.electron.debugLog('debug', 'navigateHistory setting buffer', { commandBuffer: this.commandBuffer });
       this.cursorPosition = this.commandBuffer.length;
       this.terminal.write(`> ${this.commandBuffer}`);
     }
@@ -736,10 +723,8 @@ export class BounceApp {
   private async loadHistoryFromStorage(): Promise<void> {
     try {
       const history = await window.electron.getCommandHistory();
-      await window.electron.debugLog('info', 'loadHistoryFromStorage', { history });
       if (Array.isArray(history)) {
         this.commandHistory = history;
-        await window.electron.debugLog('info', 'commandHistory set', { length: this.commandHistory.length });
       }
     } catch (error) {
       console.error('Failed to load command history:', error);
