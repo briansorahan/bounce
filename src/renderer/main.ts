@@ -1,6 +1,6 @@
 import { BounceApp } from './app.js';
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const app = new BounceApp();
-  app.mount('terminal');
+  await app.mount('terminal');
 });

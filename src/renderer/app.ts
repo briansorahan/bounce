@@ -65,7 +65,7 @@ export class BounceApp {
     };
   }
 
-  mount(containerId: string): void {
+  async mount(containerId: string): Promise<void> {
     const container = document.getElementById(containerId);
     if (!container) {
       throw new Error(`Container ${containerId} not found`);
@@ -74,8 +74,14 @@ export class BounceApp {
     this.terminal.open(container);
     this.fitAddon.fit();
 
+    // Load history before showing the prompt
+    await this.loadHistoryFromStorage();
+
     this.printWelcome();
     this.printPrompt();
+
+    // Auto-focus the terminal
+    this.terminal.focus();
 
     window.addEventListener('resize', () => {
       this.fitAddon.fit();
@@ -94,10 +100,26 @@ export class BounceApp {
 
   private handleInput(data: string): void {
     const code = data.charCodeAt(0);
+    
+    // Log to SQLite instead of console
+    window.electron.debugLog('debug', 'handleInput', { data, code });
 
     // Check for Ctrl+R (ASCII 18)
     if (code === 18) {
       this.handleReverseSearch();
+      return;
+    }
+
+    // Handle macOS Option key combinations (these come as Unicode characters)
+    // Option+b produces ∫ (integral sign, code 8747)
+    // Option+f produces ƒ (function sign, code 402)
+    if (code === 8747) {
+      // Option+b - Move backward one word
+      this.moveToPreviousWord();
+      return;
+    } else if (code === 402) {
+      // Option+f - Move forward one word
+      this.moveToNextWord();
       return;
     }
 
@@ -151,20 +173,26 @@ export class BounceApp {
         this.cursorPosition--;
         this.updateCursorPosition();
       }
+    } else if (code === 11) {
+      // Ctrl+K - Kill (delete) from cursor to end of line
+      if (this.cursorPosition < this.commandBuffer.length) {
+        this.commandBuffer = this.commandBuffer.slice(0, this.cursorPosition);
+        this.redrawCommandLine();
+      }
     } else if (code === 16) {
       // Ctrl+P - Previous command (like up arrow)
-      this.navigateHistory(-1);
+      this.navigateHistory(1);
     } else if (code === 14) {
       // Ctrl+N - Next command (like down arrow)
-      this.navigateHistory(1);
+      this.navigateHistory(-1);
     } else if (code === 27) {
       // ESC sequences (arrows, Alt+f, Alt+b)
       if (data === '\x1b[A') {
         // Up arrow
-        this.navigateHistory(-1);
+        this.navigateHistory(1);
       } else if (data === '\x1b[B') {
         // Down arrow
-        this.navigateHistory(1);
+        this.navigateHistory(-1);
       } else if (data === '\x1b[C') {
         // Right arrow
         if (this.cursorPosition < this.commandBuffer.length) {
@@ -177,12 +205,18 @@ export class BounceApp {
           this.cursorPosition--;
           this.updateCursorPosition();
         }
-      } else if (data === '\x1bf' || data === '\x1bf') {
+      } else if (data === '\x1bf' || data === '\x1bF') {
         // Alt+F - Move forward one word
         this.moveToNextWord();
       } else if (data === '\x1bb' || data === '\x1bB') {
         // Alt+B - Move backward one word
         this.moveToPreviousWord();
+      } else if (data === '\x1b[3;3~' || data === '\x1b\x7f') {
+        // Alt+Delete or Alt+Backspace - Delete previous word
+        this.deleteWordBackward();
+      } else {
+        // Unknown escape sequence - log it but don't insert
+        window.electron.debugLog('warn', 'Unknown escape sequence', { data, code });
       }
     } else if (code >= 32) {
       // Regular character
@@ -195,32 +229,61 @@ export class BounceApp {
     }
   }
 
+  private isWordChar(char: string): boolean {
+    // Consider letters and numbers as word characters
+    return /[a-zA-Z0-9]/.test(char);
+  }
+
   private moveToNextWord(): void {
-    // Skip current word
+    // Skip current word (alphanumeric characters)
     while (this.cursorPosition < this.commandBuffer.length && 
-           this.commandBuffer[this.cursorPosition] !== ' ') {
+           this.isWordChar(this.commandBuffer[this.cursorPosition])) {
       this.cursorPosition++;
     }
-    // Skip spaces
+    // Skip non-word characters
     while (this.cursorPosition < this.commandBuffer.length && 
-           this.commandBuffer[this.cursorPosition] === ' ') {
+           !this.isWordChar(this.commandBuffer[this.cursorPosition])) {
       this.cursorPosition++;
     }
     this.updateCursorPosition();
   }
 
   private moveToPreviousWord(): void {
-    // Skip trailing spaces
+    // Skip non-word characters
     while (this.cursorPosition > 0 && 
-           this.commandBuffer[this.cursorPosition - 1] === ' ') {
+           !this.isWordChar(this.commandBuffer[this.cursorPosition - 1])) {
       this.cursorPosition--;
     }
-    // Skip to beginning of word
+    // Skip to beginning of word (alphanumeric characters)
     while (this.cursorPosition > 0 && 
-           this.commandBuffer[this.cursorPosition - 1] !== ' ') {
+           this.isWordChar(this.commandBuffer[this.cursorPosition - 1])) {
       this.cursorPosition--;
     }
     this.updateCursorPosition();
+  }
+
+  private deleteWordBackward(): void {
+    if (this.cursorPosition === 0) return;
+
+    const originalPosition = this.cursorPosition;
+    
+    // Skip non-word characters
+    while (this.cursorPosition > 0 && 
+           !this.isWordChar(this.commandBuffer[this.cursorPosition - 1])) {
+      this.cursorPosition--;
+    }
+    // Skip to beginning of word (alphanumeric characters)
+    while (this.cursorPosition > 0 && 
+           this.isWordChar(this.commandBuffer[this.cursorPosition - 1])) {
+      this.cursorPosition--;
+    }
+
+    // Delete from new cursor position to original position
+    this.commandBuffer = 
+      this.commandBuffer.slice(0, this.cursorPosition) + 
+      this.commandBuffer.slice(originalPosition);
+    
+    this.redrawCommandLine();
   }
 
   private redrawCommandLine(): void {
@@ -228,20 +291,31 @@ export class BounceApp {
     this.terminal.write('\r\x1b[K');
     this.terminal.write(`\x1b[32m>\x1b[0m ${this.commandBuffer}`);
     // Move cursor to correct position
-    const targetColumn = 2 + this.cursorPosition; // 2 = "> " prompt
+    const targetColumn = 3 + this.cursorPosition; // 3 = "> " prompt (including space)
     this.terminal.write(`\r\x1b[${targetColumn}G`);
   }
 
   private updateCursorPosition(): void {
     // Move cursor to correct position without redrawing
-    const targetColumn = 2 + this.cursorPosition; // 2 = "> " prompt
+    const targetColumn = 3 + this.cursorPosition; // 3 = "> " prompt (including space)
     this.terminal.write(`\r\x1b[${targetColumn}G`);
   }
 
   private navigateHistory(direction: number): void {
-    if (this.commandHistory.length === 0) return;
+    window.electron.debugLog('debug', 'navigateHistory', { 
+      direction, 
+      historyLength: this.commandHistory.length, 
+      currentIndex: this.historyIndex 
+    });
+    
+    if (this.commandHistory.length === 0) {
+      window.electron.debugLog('warn', 'navigateHistory: history is empty');
+      return;
+    }
 
     const newIndex = this.historyIndex + direction;
+    window.electron.debugLog('debug', 'navigateHistory newIndex', { newIndex });
+    
     if (newIndex >= -1 && newIndex < this.commandHistory.length) {
       this.clearCurrentLine();
       this.historyIndex = newIndex;
@@ -252,6 +326,7 @@ export class BounceApp {
         this.commandBuffer = this.commandHistory[this.commandHistory.length - 1 - this.historyIndex];
       }
 
+      window.electron.debugLog('debug', 'navigateHistory setting buffer', { commandBuffer: this.commandBuffer });
       this.cursorPosition = this.commandBuffer.length;
       this.terminal.write(`> ${this.commandBuffer}`);
     }
@@ -275,7 +350,7 @@ export class BounceApp {
     this.terminal.writeln('Keyboard Shortcuts:');
     this.terminal.writeln('  \x1b[90mCtrl+R\x1b[0m - Reverse search | \x1b[90mCtrl+P/N\x1b[0m - History | \x1b[90m↑/↓\x1b[0m - History');
     this.terminal.writeln('  \x1b[90mCtrl+A/E\x1b[0m - Line start/end | \x1b[90mCtrl+F/B\x1b[0m - Char forward/back');
-    this.terminal.writeln('  \x1b[90mAlt+F/B\x1b[0m - Word forward/back | \x1b[90m←/→\x1b[0m - Move cursor');
+    this.terminal.writeln('  \x1b[90mAlt+F/B\x1b[0m - Word forward/back | \x1b[90mAlt+Del\x1b[0m - Delete word | \x1b[90mCtrl+K\x1b[0m - Kill');
     this.terminal.writeln('');
   }
 
@@ -330,6 +405,14 @@ export class BounceApp {
       
       case 'stop':
         this.handleStopCommand();
+        return true;
+      
+      case 'debug':
+        await this.handleDebugCommand(args);
+        return true;
+      
+      case 'clear-debug':
+        await this.handleClearDebugCommand();
         return true;
       
       case 'help':
@@ -447,6 +530,34 @@ export class BounceApp {
     this.terminal.writeln('\x1b[32mPlayback stopped\x1b[0m');
   }
 
+  private async handleDebugCommand(args: string[]): Promise<void> {
+    const limit = args.length > 0 ? parseInt(args[0]) : 20;
+    const logs = await window.electron.getDebugLogs(limit);
+    
+    this.terminal.writeln(`\x1b[1;36mDebug Logs (${logs.length} entries):\x1b[0m`);
+    this.terminal.writeln('');
+    
+    for (const log of logs.reverse()) {
+      const levelColor = log.level === 'error' ? '\x1b[31m' : 
+                        log.level === 'warn' ? '\x1b[33m' : 
+                        '\x1b[90m';
+      
+      const timestamp = new Date(log.timestamp).toISOString();
+      const data = log.data ? ` ${log.data}` : '';
+      
+      this.terminal.writeln(`${levelColor}[${timestamp}] ${log.level.toUpperCase()}: ${log.message}${data}\x1b[0m`);
+    }
+    
+    if (logs.length === 0) {
+      this.terminal.writeln('\x1b[90mNo debug logs found\x1b[0m');
+    }
+  }
+
+  private async handleClearDebugCommand(): Promise<void> {
+    await window.electron.clearDebugLogs();
+    this.terminal.writeln('\x1b[32mDebug logs cleared\x1b[0m');
+  }
+
   private handleHelpCommand(): void {
     this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
     this.terminal.writeln('');
@@ -454,6 +565,8 @@ export class BounceApp {
     this.terminal.writeln('    Supports: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
     this.terminal.writeln('  \x1b[33mplay "path/to/audio/file"\x1b[0m - Play audio file with cursor visualization');
     this.terminal.writeln('  \x1b[33mstop\x1b[0m - Stop audio playback');
+    this.terminal.writeln('  \x1b[33mdebug [limit]\x1b[0m - Show debug logs (default: 20)');
+    this.terminal.writeln('  \x1b[33mclear-debug\x1b[0m - Clear all debug logs');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
@@ -623,8 +736,10 @@ export class BounceApp {
   private async loadHistoryFromStorage(): Promise<void> {
     try {
       const history = await window.electron.getCommandHistory();
+      await window.electron.debugLog('info', 'loadHistoryFromStorage', { history });
       if (Array.isArray(history)) {
         this.commandHistory = history;
+        await window.electron.debugLog('info', 'commandHistory set', { length: this.commandHistory.length });
       }
     } catch (error) {
       console.error('Failed to load command history:', error);

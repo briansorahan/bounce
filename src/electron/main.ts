@@ -90,6 +90,35 @@ ipcMain.handle('get-command-history', async () => {
   }
 });
 
+ipcMain.handle('debug-log', async (_event, level: string, message: string, data?: any) => {
+  try {
+    if (dbManager) {
+      dbManager.addDebugLog(level, message, data);
+    }
+  } catch (error) {
+    console.error('Failed to save debug log:', error);
+  }
+});
+
+ipcMain.handle('get-debug-logs', async (_event, limit?: number) => {
+  try {
+    return dbManager ? dbManager.getDebugLogs(limit || 100) : [];
+  } catch (error) {
+    console.error('Failed to get debug logs:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('clear-debug-logs', async () => {
+  try {
+    if (dbManager) {
+      dbManager.clearDebugLogs();
+    }
+  } catch (error) {
+    console.error('Failed to clear debug logs:', error);
+  }
+});
+
 app.whenReady().then(() => {
   dbManager = new DatabaseManager();
   createWindow();
