@@ -9,4 +9,4 @@
 	url = https://github.com/AlexHarker/HISSTools_Library.git
 [submodule "third_party/memory"]
 	path = third_party/memory
-	url = https://github.com/foonathan/memory.git
+	url = git@github.com:briansorahan/memory
