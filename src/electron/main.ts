@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { OnsetSlice } from '../index';
-import * as WavDecoder from 'wav-decoder';
+import decode from 'audio-decode';
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -27,7 +27,7 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
       const result = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: 'Audio Files', extensions: ['wav'] }
+          { name: 'Audio Files', extensions: ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'opus'] }
         ]
       });
 
@@ -39,11 +39,11 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
     }
 
     const fileBuffer = fs.readFileSync(resolvedPath);
-    const audioData = await WavDecoder.decode(fileBuffer);
+    const audioBuffer = await decode(fileBuffer);
 
-    const channelData = audioData.channelData[0];
-    const sampleRate = audioData.sampleRate;
-    const duration = audioData.length / sampleRate;
+    const channelData = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    const duration = audioBuffer.duration;
 
     return {
       channelData: Array.from(channelData),

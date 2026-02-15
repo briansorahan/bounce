@@ -3,6 +3,7 @@ export class WaveformVisualizer {
   private analysisCanvas: HTMLCanvasElement;
   private waveformCtx: CanvasRenderingContext2D;
   private analysisCtx: CanvasRenderingContext2D;
+  private playbackCursorPosition: number = 0;
 
   constructor(waveformCanvasId: string, analysisCanvasId: string) {
     this.waveformCanvas = document.getElementById(waveformCanvasId) as HTMLCanvasElement;
@@ -88,6 +89,8 @@ export class WaveformVisualizer {
     ctx.fillText(`Duration: ${duration.toFixed(2)}s`, 10, 20);
     ctx.fillText(`Sample Rate: ${sampleRate}Hz`, 10, 35);
     ctx.fillText(`Samples: ${audioData.length}`, 10, 50);
+
+    this.drawPlaybackCursor(audioData.length);
   }
 
   drawSliceMarkers(slices: number[], totalSamples: number): void {
@@ -111,5 +114,43 @@ export class WaveformVisualizer {
     ctx.fillStyle = '#f14c4c';
     ctx.font = '12px monospace';
     ctx.fillText(`Slices: ${slices.length}`, 10, 20);
+
+    this.drawPlaybackCursor(totalSamples);
+  }
+
+  updatePlaybackCursor(position: number, totalSamples: number): void {
+    this.playbackCursorPosition = position;
+    
+    // Redraw the entire waveform to clear previous cursor
+    const audio = this.audioContext?.getCurrentAudio();
+    if (audio) {
+      this.drawWaveform(audio.audioData, audio.sampleRate);
+    }
+  }
+
+  private drawPlaybackCursor(totalSamples: number): void {
+    if (this.playbackCursorPosition <= 0) {
+      return;
+    }
+
+    const width = this.waveformCanvas.width;
+    const height = this.waveformCanvas.height;
+    const ctx = this.waveformCtx;
+
+    const x = (this.playbackCursorPosition / totalSamples) * width;
+
+    // Draw just a thin vertical line
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+
+  private audioContext: any = null;
+
+  setAudioContext(audioContext: any): void {
+    this.audioContext = audioContext;
   }
 }
