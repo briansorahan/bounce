@@ -4,7 +4,12 @@ import * as path from 'path';
 test.describe('Bounce Terminal UI', () => {
   test('should launch app and show terminal', async () => {
     const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../dist/electron/main.js')]
+      executablePath: require('electron'),
+      args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
+      env: {
+        ...process.env,
+        ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+      },
     });
 
     const window = await electronApp.firstWindow();
@@ -19,7 +24,12 @@ test.describe('Bounce Terminal UI', () => {
 
   test('should display welcome message', async () => {
     const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../dist/electron/main.js')]
+      executablePath: require('electron'),
+      args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
+      env: {
+        ...process.env,
+        ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+      },
     });
 
     const window = await electronApp.firstWindow();
