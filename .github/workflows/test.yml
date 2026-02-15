@@ -27,7 +27,10 @@ jobs:
         sudo apt-get install -y build-essential cmake libblas-dev liblapack-dev
     
     - name: Install dependencies
-      run: npm ci
+      run: npm ci --ignore-scripts
+    
+    - name: Install Electron binary
+      run: node node_modules/electron/install.js
     
     - name: Build dependencies
       run: ./build-deps.sh
@@ -45,10 +48,14 @@ jobs:
       run: npm run build:electron
     
     - name: Install Playwright browsers
-      run: npx playwright install --with-deps chromium
+      run: |
+        npx playwright install --with-deps chromium
+        sudo apt-get install -y libgtk-3-0 libgbm1 libasound2 xvfb
     
     - name: Run Playwright tests
-      run: npx playwright test
+      run: |
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        DISPLAY=:99 npx playwright test
     
     - name: Upload test results
       if: always()
