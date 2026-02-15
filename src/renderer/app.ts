@@ -123,7 +123,7 @@ export class BounceApp {
     this.terminal.writeln('\x1b[90mTypeScript REPL for audio analysis\x1b[0m');
     this.terminal.writeln('');
     this.terminal.writeln('Commands:');
-    this.terminal.writeln('  \x1b[33mdisplay "path/to/file.wav"\x1b[0m - Load and visualize audio file');
+    this.terminal.writeln('  \x1b[33mdisplay "path/to/audio/file"\x1b[0m - Load and visualize audio');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show all available commands');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');
@@ -217,8 +217,12 @@ export class BounceApp {
 
     const filePath = args[0];
 
-    if (!filePath.toLowerCase().endsWith('.wav')) {
-      this.terminal.writeln('\x1b[31mError: display only supports .wav files\x1b[0m');
+    const supportedExtensions = ['.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.opus'];
+    const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+    
+    if (!supportedExtensions.includes(ext)) {
+      this.terminal.writeln('\x1b[31mError: unsupported file format\x1b[0m');
+      this.terminal.writeln('Supported formats: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
       return;
     }
 
@@ -249,7 +253,8 @@ export class BounceApp {
   private handleHelpCommand(): void {
     this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
     this.terminal.writeln('');
-    this.terminal.writeln('  \x1b[33mdisplay "path/to/file.wav"\x1b[0m - Load and visualize audio file');
+    this.terminal.writeln('  \x1b[33mdisplay "path/to/audio/file"\x1b[0m - Load and visualize audio file');
+    this.terminal.writeln('    Supports: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
     this.terminal.writeln('');

@@ -2,7 +2,17 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { OnsetSlice } from '../index';
-import * as WavDecoder from 'wav-decoder';
+
+// Audio context for decoding various formats
+let audioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    const AudioContextConstructor = (global as any).AudioContext || (global as any).webkitAudioContext;
+    audioContext = new AudioContextConstructor();
+  }
+  return audioContext;
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -27,7 +37,7 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
       const result = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
-          { name: 'Audio Files', extensions: ['wav'] }
+          { name: 'Audio Files', extensions: ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'opus'] }
         ]
       });
 
@@ -39,11 +49,17 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
     }
 
     const fileBuffer = fs.readFileSync(resolvedPath);
-    const audioData = await WavDecoder.decode(fileBuffer);
+    const arrayBuffer = fileBuffer.buffer.slice(
+      fileBuffer.byteOffset,
+      fileBuffer.byteOffset + fileBuffer.byteLength
+    );
 
-    const channelData = audioData.channelData[0];
-    const sampleRate = audioData.sampleRate;
-    const duration = audioData.length / sampleRate;
+    const ctx = getAudioContext();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const channelData = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    const duration = audioBuffer.duration;
 
     return {
       channelData: Array.from(channelData),
