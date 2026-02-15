@@ -10,7 +10,7 @@
     "build:ts": "tsc && cp src/openapi.json dist/openapi.json",
     "build:electron": "tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
     "build": "npm run build:deps && npm run build:native && npm run build:ts",
-    "rebuild": "npx @electron/rebuild",
+    "rebuild": "npm run build:deps && npx @electron/rebuild",
     "clean": "node-gyp clean && rm -rf dist build && rm -rf third_party/memory/build third_party/memory/install",
     "clean:full": "npm run clean && rm -rf node_modules package-lock.json",
     "dev": "tsx watch src/server.ts",
