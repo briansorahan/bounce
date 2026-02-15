@@ -32,6 +32,9 @@ jobs:
     - name: Install Electron binary
       run: node node_modules/electron/install.js
     
+    - name: Rebuild native modules
+      run: npm run rebuild
+    
     - name: Build all
       run: npm run build
     
