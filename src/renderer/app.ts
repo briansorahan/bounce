@@ -410,6 +410,10 @@ export class BounceApp {
         this.terminal.clear();
         return true;
       
+      case 'analyze':
+        await this.handleAnalyzeCommand(args);
+        return true;
+      
       default:
         return false;
     }
@@ -545,6 +549,112 @@ export class BounceApp {
     this.terminal.writeln('\x1b[32mDebug logs cleared\x1b[0m');
   }
 
+  private async handleAnalyzeCommand(args: string[]): Promise<void> {
+    if (args.length < 2) {
+      this.terminal.writeln('\x1b[31mError: analyze requires a subcommand and arguments\x1b[0m');
+      this.terminal.writeln('Usage: analyze onset-slice "path/to/audio/file" [options]');
+      return;
+    }
+
+    const subcommand = args[0];
+    const filePath = args[1];
+
+    switch (subcommand) {
+      case 'onset-slice':
+        await this.handleOnsetSliceCommand(filePath, args.slice(2));
+        break;
+      
+      default:
+        this.terminal.writeln(`\x1b[31mUnknown analysis type: ${subcommand}\x1b[0m`);
+        this.terminal.writeln('Available: onset-slice');
+    }
+  }
+
+  private async handleOnsetSliceCommand(filePath: string, optionArgs: string[]): Promise<void> {
+    try {
+      window.electron.debugLog('info', '[OnsetSlice] Starting analysis', { filePath });
+      
+      // Load audio if not already loaded
+      const currentAudio = this.audioContext.getCurrentAudio();
+      if (!currentAudio || currentAudio.filePath !== filePath) {
+        window.electron.debugLog('info', '[OnsetSlice] Loading audio file', { filePath });
+        await this.handleDisplayCommand([filePath]);
+      }
+
+      const audio = this.audioContext.getCurrentAudio();
+      if (!audio) {
+        this.terminal.writeln('\x1b[31mFailed to load audio file\x1b[0m');
+        window.electron.debugLog('error', '[OnsetSlice] Failed to load audio', { filePath });
+        return;
+      }
+
+      window.electron.debugLog('info', '[OnsetSlice] Audio loaded, analyzing', { 
+        samples: audio.audioData.length,
+        sampleRate: audio.sampleRate 
+      });
+      this.terminal.writeln('\x1b[36mAnalyzing onset slices...\x1b[0m');
+
+      // Parse options from command line if provided
+      const options = this.parseOnsetSliceOptions(optionArgs);
+      const slices = await window.electron.analyzeOnsetSlice(audio.audioData, options);
+
+      window.electron.debugLog('info', '[OnsetSlice] Analysis complete', { 
+        sliceCount: slices.length,
+        options 
+      });
+      this.terminal.writeln(`\x1b[32mFound ${slices.length} onset slices\x1b[0m`);
+
+      // Store slices in audio context
+      this.audioContext.setCurrentSlices(slices);
+      
+      // Redraw waveform with onset markers
+      this.updateWaveformVisualization();
+
+    } catch (error) {
+      window.electron.debugLog('error', '[OnsetSlice] Error in analysis', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      this.terminal.writeln(`\x1b[31mError analyzing onset slices: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private parseOnsetSliceOptions(args: string[]): any {
+    const options: any = {};
+    
+    for (let i = 0; i < args.length; i += 2) {
+      const key = args[i];
+      const value = args[i + 1];
+      
+      if (!value) continue;
+
+      switch (key) {
+        case '--threshold':
+          options.threshold = parseFloat(value);
+          break;
+        case '--min-slice-length':
+          options.minSliceLength = parseInt(value);
+          break;
+        case '--filter-size':
+          options.filterSize = parseInt(value);
+          break;
+        case '--window-size':
+          options.windowSize = parseInt(value);
+          break;
+        case '--fft-size':
+          options.fftSize = parseInt(value);
+          break;
+        case '--hop-size':
+          options.hopSize = parseInt(value);
+          break;
+        case '--function':
+          options.function = parseInt(value);
+          break;
+      }
+    }
+
+    return options;
+  }
+
   private handleHelpCommand(): void {
     this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
     this.terminal.writeln('');
@@ -552,6 +662,8 @@ export class BounceApp {
     this.terminal.writeln('    Supports: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
     this.terminal.writeln('  \x1b[33mplay "path/to/audio/file"\x1b[0m - Play audio file with cursor visualization');
     this.terminal.writeln('  \x1b[33mstop\x1b[0m - Stop audio playback');
+    this.terminal.writeln('  \x1b[33manalyze onset-slice "path/to/audio/file"\x1b[0m - Analyze onset slices');
+    this.terminal.writeln('    Options: --threshold, --min-slice-length, --filter-size, etc.');
     this.terminal.writeln('  \x1b[33mdebug [limit]\x1b[0m - Show debug logs (default: 20)');
     this.terminal.writeln('  \x1b[33mclear-debug\x1b[0m - Clear all debug logs');
     this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
@@ -573,22 +685,19 @@ export class BounceApp {
     const audio = this.audioContext.getCurrentAudio();
     if (!audio) return;
 
+    const container = document.getElementById('waveform-container');
+    if (!container) return;
+
+    container.classList.add('active');
+
     if (!this.waveformVisualizer) {
-      const container = document.getElementById('waveform-container');
-      if (container) {
-        container.style.display = 'block';
-        this.waveformVisualizer = new WaveformVisualizer('waveform-canvas', 'analysis-canvas');
-      }
+      this.waveformVisualizer = new WaveformVisualizer('waveform-canvas');
     }
 
     if (this.waveformVisualizer) {
       this.waveformVisualizer.setAudioContext(this.audioContext);
-      this.waveformVisualizer.drawWaveform(audio.audioData, audio.sampleRate);
-      
       const slices = this.audioContext.getCurrentSlices();
-      if (slices) {
-        this.waveformVisualizer.drawSliceMarkers(slices, audio.audioData.length);
-      }
+      this.waveformVisualizer.drawWaveform(audio.audioData, audio.sampleRate, slices || undefined);
     }
   }
 

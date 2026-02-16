@@ -162,6 +162,10 @@ export class AudioContext {
     return this.currentAudio;
   }
 
+  setCurrentSlices(slices: number[]): void {
+    this.currentSlices = slices;
+  }
+
   getCurrentSlices(): number[] | null {
     return this.currentSlices;
   }
