@@ -6,6 +6,8 @@ export class WaveformVisualizer {
   private playbackCursorPosition: number = 0;
   private currentAudioData: Float32Array | null = null;
   private currentSampleRate: number = 0;
+  private currentSlices: number[] | null = null;
+  private currentTotalSamples: number = 0;
 
   constructor(waveformCanvasId: string, analysisCanvasId: string) {
     this.waveformCanvas = document.getElementById(waveformCanvasId) as HTMLCanvasElement;
@@ -33,6 +35,16 @@ export class WaveformVisualizer {
       this.waveformCanvas.height = container.clientHeight;
       this.analysisCanvas.width = container.clientWidth;
       this.analysisCanvas.height = container.clientHeight;
+
+      // Redraw waveform after resize if we have audio data
+      if (this.currentAudioData && this.currentSampleRate) {
+        this.drawWaveform(this.currentAudioData, this.currentSampleRate);
+      }
+
+      // Redraw slice markers after resize if we have them
+      if (this.currentSlices && this.currentTotalSamples) {
+        this.drawSliceMarkers(this.currentSlices, this.currentTotalSamples);
+      }
     };
 
     resize();
@@ -99,6 +111,9 @@ export class WaveformVisualizer {
   }
 
   drawSliceMarkers(slices: number[], totalSamples: number): void {
+    this.currentSlices = slices;
+    this.currentTotalSamples = totalSamples;
+
     const width = this.analysisCanvas.width;
     const height = this.analysisCanvas.height;
     const ctx = this.analysisCtx;
