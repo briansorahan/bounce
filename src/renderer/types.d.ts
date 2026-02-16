@@ -15,7 +15,9 @@ export interface ElectronAPI {
     hopSize?: number;
   }) => Promise<number[]>;
   saveCommand: (command: string) => Promise<void>;
-  getCommandHistory: () => Promise<string[]>;
+  getCommandHistory: (limit?: number) => Promise<string[]>;
+  clearCommandHistory: () => Promise<void>;
+  dedupeCommandHistory: () => Promise<{ removed: number }>;
   debugLog: (level: string, message: string, data?: any) => Promise<void>;
   getDebugLogs: (limit?: number) => Promise<any[]>;
   clearDebugLogs: () => Promise<void>;
