@@ -90,9 +90,7 @@ test.describe('Audio Format Support', () => {
     fs.unlinkSync(testFile);
   });
 
-  test.skip('should handle missing file gracefully', async () => {
-    // TODO: This test is flaky - terminal content doesn't always capture error text
-    // The functionality works correctly when tested manually
+  test('should handle missing file gracefully', async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
@@ -105,13 +103,14 @@ test.describe('Audio Format Support', () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, 'display "nonexistent.wav"');
-    await window.waitForTimeout(500);
+    const nonexistentPath = path.join(__dirname, 'nonexistent-file-12345.wav');
+    await sendCommand(window, `display "${nonexistentPath}"`);
+    await window.waitForTimeout(1000);
 
     const terminalContent = await window.locator('.xterm-rows').textContent();
     
     if (!terminalContent?.toLowerCase().includes('error')) {
-      throw new Error('Expected error message for missing file');
+      throw new Error(`Expected error message for missing file. Got: ${terminalContent}`);
     }
 
     await electronApp.close();

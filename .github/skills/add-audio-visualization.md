@@ -3,7 +3,7 @@ name: add-audio-visualization
 description: Guide for adding audio visualizations using the multi-canvas rendering system
 version: 1.0.0
 created: 2026-02-15
-updated: 2026-02-15
+updated: 2026-02-16
 tags: [electron, visualization, canvas, audio, renderer]
 ---
 
@@ -291,6 +291,8 @@ for (let i = 0; i < canvasWidth; i++) {
 
 ### Always Handle Canvas Resize
 
+Canvas content is cleared when dimensions change, so you must redraw after resize:
+
 ```typescript
 private setupCanvases(): void {
   const resize = () => {
@@ -300,13 +302,43 @@ private setupCanvases(): void {
     this.canvas.width = container.clientWidth;
     this.canvas.height = container.clientHeight;
     
-    // Redraw after resize
-    this.redraw();
+    // CRITICAL: Redraw after resize to restore content
+    // Store your visualization state so you can redraw it
+    if (this.hasData()) {
+      this.redraw();
+    }
   };
 
   resize();
   window.addEventListener('resize', resize);
 }
+```
+
+**Important:** Store visualization state (waveform data, slice markers, etc.) so you can redraw when the canvas is resized. See `WaveformVisualizer` for an example:
+
+```typescript
+private currentAudioData: Float32Array | null = null;
+private currentSampleRate: number = 0;
+private currentSlices: number[] | null = null;
+
+// Store data when drawing
+drawWaveform(audioData: Float32Array, sampleRate: number): void {
+  this.currentAudioData = audioData;
+  this.currentSampleRate = sampleRate;
+  // ... draw logic ...
+}
+
+// Restore data on resize
+private resize = () => {
+  // Update dimensions...
+  
+  if (this.currentAudioData && this.currentSampleRate) {
+    this.drawWaveform(this.currentAudioData, this.currentSampleRate);
+  }
+  if (this.currentSlices) {
+    this.drawSliceMarkers(this.currentSlices, totalSamples);
+  }
+};
 ```
 
 ### Clear Before Drawing Overlays
@@ -337,6 +369,11 @@ const colors = {
 - Check that canvas width/height are set (not just CSS dimensions)
 - Verify context is obtained successfully
 - Check if coordinates are within canvas bounds
+
+**Canvas clears on window resize**
+- Canvas content is lost when dimensions change
+- Store visualization state and redraw on resize
+- See "Always Handle Canvas Resize" pattern above
 
 **Visualization doesn't update**
 - Ensure you're calling the draw method after data changes

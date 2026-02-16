@@ -81,12 +81,31 @@ ipcMain.handle('save-command', async (_event, command: string) => {
   }
 });
 
-ipcMain.handle('get-command-history', async () => {
+ipcMain.handle('get-command-history', async (_event, limit?: number) => {
   try {
-    return dbManager ? dbManager.getCommandHistory(1000) : [];
+    return dbManager ? dbManager.getCommandHistory(limit || 1000) : [];
   } catch (error) {
     console.error('Failed to load command history:', error);
     return [];
+  }
+});
+
+ipcMain.handle('clear-command-history', async () => {
+  try {
+    if (dbManager) {
+      dbManager.clearCommandHistory();
+    }
+  } catch (error) {
+    console.error('Failed to clear command history:', error);
+  }
+});
+
+ipcMain.handle('dedupe-command-history', async () => {
+  try {
+    return dbManager ? dbManager.dedupeCommandHistory() : { removed: 0 };
+  } catch (error) {
+    console.error('Failed to dedupe command history:', error);
+    return { removed: 0 };
   }
 });
 
@@ -134,22 +153,6 @@ app.on('window-all-closed', () => {
   if (dbManager) {
     dbManager.close();
   }
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }

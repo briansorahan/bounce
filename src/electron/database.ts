@@ -64,6 +64,16 @@ export class DatabaseManager {
   }
 
   addCommand(command: string): void {
+    const lastCommand = this.db.prepare(`
+      SELECT command FROM command_history 
+      ORDER BY timestamp DESC 
+      LIMIT 1
+    `).get() as { command: string } | undefined;
+
+    if (lastCommand?.command === command) {
+      return;
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO command_history (command, timestamp) 
       VALUES (?, ?)
@@ -85,6 +95,26 @@ export class DatabaseManager {
 
   clearCommandHistory(): void {
     this.db.prepare('DELETE FROM command_history').run();
+  }
+
+  dedupeCommandHistory(): { removed: number } {
+    const stmt = this.db.prepare(`
+      DELETE FROM command_history
+      WHERE id IN (
+        SELECT h1.id
+        FROM command_history h1
+        INNER JOIN command_history h2 
+          ON h1.command = h2.command 
+          AND h1.timestamp > h2.timestamp
+        WHERE NOT EXISTS (
+          SELECT 1 FROM command_history h3
+          WHERE h3.timestamp > h2.timestamp 
+            AND h3.timestamp < h1.timestamp
+        )
+      )
+    `);
+    const result = stmt.run();
+    return { removed: result.changes };
   }
 
   close(): void {
