@@ -8,6 +8,14 @@ SQLite commands for managing the Bounce application database.
 ~/Library/Application Support/bounce/bounce.db
 ```
 
+## Database Schema
+
+### Tables
+
+- **command_history** - Command line history
+- **debug_logs** - Application debug logs
+- **samples** - Audio samples with content hash and binary data
+
 ## Common Operations
 
 ### Deduplicate Command History
@@ -168,5 +176,173 @@ SELECT
 FROM command_history 
 WHERE command LIKE '%play%'
 ORDER BY timestamp DESC;
+"
+```
+
+## Sample Management
+
+### View Stored Samples
+
+List all stored audio samples:
+
+```bash
+sqlite3 -column -header bounce.db "
+SELECT 
+  id,
+  substr(hash, 1, 8) as short_hash,
+  file_path,
+  sample_rate,
+  channels,
+  duration,
+  length(audio_data) as data_size,
+  datetime(created_at) as created
+FROM samples 
+ORDER BY created_at DESC;
+"
+```
+
+### Find Sample by Hash
+
+```bash
+sqlite3 bounce.db "
+SELECT 
+  id,
+  hash,
+  file_path,
+  sample_rate,
+  channels,
+  duration
+FROM samples 
+WHERE hash = 'YOUR_HASH_HERE';
+"
+```
+
+### Get Sample Statistics
+
+```bash
+sqlite3 -column bounce.db "
+SELECT 
+  COUNT(*) as total_samples,
+  SUM(length(audio_data)) / 1024 / 1024 as total_mb,
+  AVG(duration) as avg_duration_sec,
+  MIN(duration) as min_duration_sec,
+  MAX(duration) as max_duration_sec
+FROM samples;
+"
+```
+
+### Remove Old Samples
+
+Delete samples older than 30 days:
+
+```bash
+sqlite3 bounce.db "
+DELETE FROM samples 
+WHERE datetime(created_at) < datetime('now', '-30 days');
+"
+```
+
+### Clear All Samples
+
+```bash
+sqlite3 bounce.db "DELETE FROM samples;"
+```
+
+## Feature Management
+
+### View Stored Features
+
+List all analysis features:
+
+```bash
+sqlite3 -column -header bounce.db "
+SELECT 
+  id,
+  substr(sample_hash, 1, 8) as sample,
+  feature_type,
+  length(feature_data) as data_length,
+  datetime(created_at) as created
+FROM features 
+ORDER BY created_at DESC;
+"
+```
+
+### View Feature Details
+
+See the actual slice positions for a feature:
+
+```bash
+sqlite3 bounce.db "
+SELECT 
+  id,
+  feature_type,
+  feature_data,
+  options
+FROM features 
+WHERE id = 1;
+"
+```
+
+### Get Most Recent Feature
+
+```bash
+sqlite3 -column -header bounce.db "
+SELECT 
+  id,
+  substr(sample_hash, 1, 8) as sample,
+  feature_type,
+  datetime(created_at) as created
+FROM features 
+ORDER BY id DESC 
+LIMIT 1;
+"
+```
+
+## Slice Management
+
+### View All Slices
+
+```bash
+sqlite3 -column -header bounce.db "
+SELECT 
+  id,
+  substr(sample_hash, 1, 8) as sample,
+  feature_id,
+  slice_index,
+  start_sample,
+  end_sample,
+  (end_sample - start_sample) as length
+FROM slices 
+ORDER BY id;
+"
+```
+
+### View Slices for a Feature
+
+```bash
+sqlite3 -column -header bounce.db "
+SELECT 
+  id,
+  slice_index,
+  start_sample,
+  end_sample,
+  (end_sample - start_sample) as length
+FROM slices 
+WHERE feature_id = 1 
+ORDER BY slice_index;
+"
+```
+
+### Count Slices by Feature
+
+```bash
+sqlite3 -column bounce.db "
+SELECT 
+  f.id as feature_id,
+  f.feature_type,
+  COUNT(s.id) as slice_count
+FROM features f
+LEFT JOIN slices s ON f.id = s.feature_id
+GROUP BY f.id;
 "
 ```

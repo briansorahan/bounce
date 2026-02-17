@@ -403,11 +403,27 @@ export class BounceApp {
         return true;
       
       case 'help':
-        this.handleHelpCommand();
+        this.handleHelpCommand(args);
         return true;
       
       case 'clear':
         this.terminal.clear();
+        return true;
+      
+      case 'analyze':
+        await this.handleAnalyzeCommand(args);
+        return true;
+      
+      case 'slice':
+        await this.handleSliceCommand(args);
+        return true;
+      
+      case 'list':
+        await this.handleListCommand(args);
+        return true;
+      
+      case 'play-slice':
+        await this.handlePlaySliceCommand(args);
         return true;
       
       default:
@@ -416,7 +432,7 @@ export class BounceApp {
   }
 
   private parseCommand(input: string): { name: string; args: string[] } | null {
-    const quotedArgsRegex = /^(\w+)\s+(.+)$/;
+    const quotedArgsRegex = /^([\w-]+)\s+(.+)$/;
     const match = input.match(quotedArgsRegex);
     
     if (!match) {
@@ -463,6 +479,7 @@ export class BounceApp {
         sampleRate: audioData.sampleRate,
         duration: audioData.duration,
         filePath: filePath,
+        hash: audioData.hash,
         visualize: () => 'Visualization updated',
         analyzeOnsetSlice: async (options?: any) => {
           const slices = await window.electron.analyzeOnsetSlice(audioData.channelData, options);
@@ -473,8 +490,10 @@ export class BounceApp {
       this.audioContext.setCurrentAudio(audio);
       this.updateWaveformVisualization();
 
+      const shortHash = audioData.hash.substring(0, 8);
       this.terminal.writeln(`\x1b[32mLoaded: ${filePath}\x1b[0m`);
       this.terminal.writeln(`Duration: ${audioData.duration.toFixed(2)}s, Sample Rate: ${audioData.sampleRate}Hz`);
+      this.terminal.writeln(`Hash: ${shortHash}`);
     } catch (error) {
       this.terminal.writeln(`\x1b[31mError loading file: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
     }
@@ -545,17 +564,406 @@ export class BounceApp {
     this.terminal.writeln('\x1b[32mDebug logs cleared\x1b[0m');
   }
 
-  private handleHelpCommand(): void {
+  private async handleAnalyzeCommand(args: string[]): Promise<void> {
+    if (args.length < 2) {
+      this.terminal.writeln('\x1b[31mError: analyze requires a subcommand and arguments\x1b[0m');
+      this.terminal.writeln('Usage: analyze onset-slice "path/to/audio/file" [options]');
+      return;
+    }
+
+    const subcommand = args[0];
+    const filePath = args[1];
+
+    switch (subcommand) {
+      case 'onset-slice':
+        await this.handleOnsetSliceCommand(filePath, args.slice(2));
+        break;
+      
+      default:
+        this.terminal.writeln(`\x1b[31mUnknown analysis type: ${subcommand}\x1b[0m`);
+        this.terminal.writeln('Available: onset-slice');
+    }
+  }
+
+  private async handleOnsetSliceCommand(filePath: string, optionArgs: string[]): Promise<void> {
+    try {
+      window.electron.debugLog('info', '[OnsetSlice] Starting analysis', { filePath });
+      
+      // Load audio if not already loaded
+      const currentAudio = this.audioContext.getCurrentAudio();
+      if (!currentAudio || currentAudio.filePath !== filePath) {
+        window.electron.debugLog('info', '[OnsetSlice] Loading audio file', { filePath });
+        await this.handleDisplayCommand([filePath]);
+      }
+
+      const audio = this.audioContext.getCurrentAudio();
+      if (!audio || !audio.hash) {
+        this.terminal.writeln('\x1b[31mFailed to load audio file\x1b[0m');
+        window.electron.debugLog('error', '[OnsetSlice] Failed to load audio', { filePath });
+        return;
+      }
+
+      window.electron.debugLog('info', '[OnsetSlice] Audio loaded, analyzing', { 
+        samples: audio.audioData.length,
+        sampleRate: audio.sampleRate,
+        hash: audio.hash
+      });
+      this.terminal.writeln('\x1b[36mAnalyzing onset slices...\x1b[0m');
+
+      // Parse options from command line if provided
+      const options = this.parseOnsetSliceOptions(optionArgs);
+      const slices = await window.electron.analyzeOnsetSlice(audio.audioData, options);
+
+      window.electron.debugLog('info', '[OnsetSlice] Analysis complete', { 
+        sliceCount: slices.length,
+        options 
+      });
+
+      // Store feature in database
+      const featureId = await window.electron.storeFeature(audio.hash, 'onset-slice', slices, options);
+      
+      window.electron.debugLog('info', '[OnsetSlice] Feature stored', { featureId });
+
+      // Store slices in audio context
+      this.audioContext.setCurrentSlices(slices);
+      
+      // Redraw waveform with onset markers
+      this.updateWaveformVisualization();
+
+      this.terminal.writeln(`\x1b[32mFound ${slices.length} onset slices\x1b[0m`);
+      this.terminal.writeln(`Feature ID: ${featureId}`);
+      
+      // Check if this was a duplicate
+      const feature = await window.electron.getMostRecentFeature(audio.hash, 'onset-slice');
+      if (feature && feature.id === featureId) {
+        const shortHash = feature.feature_hash.substring(0, 8);
+        this.terminal.writeln(`Feature Hash: ${shortHash}`);
+      }
+
+    } catch (error) {
+      window.electron.debugLog('error', '[OnsetSlice] Error in analysis', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      this.terminal.writeln(`\x1b[31mError analyzing onset slices: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private parseOnsetSliceOptions(args: string[]): any {
+    const options: any = {};
+    
+    for (let i = 0; i < args.length; i += 2) {
+      const key = args[i];
+      const value = args[i + 1];
+      
+      if (!value) continue;
+
+      switch (key) {
+        case '--threshold':
+          options.threshold = parseFloat(value);
+          break;
+        case '--min-slice-length':
+          options.minSliceLength = parseInt(value);
+          break;
+        case '--filter-size':
+          options.filterSize = parseInt(value);
+          break;
+        case '--window-size':
+          options.windowSize = parseInt(value);
+          break;
+        case '--fft-size':
+          options.fftSize = parseInt(value);
+          break;
+        case '--hop-size':
+          options.hopSize = parseInt(value);
+          break;
+        case '--function':
+          options.function = parseInt(value);
+          break;
+      }
+    }
+
+    return options;
+  }
+
+  private async handleSliceCommand(args: string[]): Promise<void> {
+    try {
+      window.electron.debugLog('info', '[Slice] Starting slice creation');
+
+      // Get most recent audio
+      const audio = this.audioContext.getCurrentAudio();
+      if (!audio || !audio.hash) {
+        this.terminal.writeln('\x1b[31mNo audio loaded. Use "play" or "display" first.\x1b[0m');
+        return;
+      }
+
+      // Get most recent feature for this sample
+      const feature = await window.electron.getMostRecentFeature(audio.hash, 'onset-slice');
+      if (!feature) {
+        this.terminal.writeln('\x1b[31mNo onset-slice analysis found. Use "analyze onset-slice" first.\x1b[0m');
+        return;
+      }
+
+      window.electron.debugLog('info', '[Slice] Found feature', { featureId: feature.id });
+
+      // Parse feature data
+      const slicePositions = JSON.parse(feature.feature_data) as number[];
+      
+      this.terminal.writeln(`\x1b[36mCreating ${slicePositions.length - 1} slices from feature ${feature.id}...\x1b[0m`);
+
+      // Create slices in database
+      const sliceIds = await window.electron.createSlices(audio.hash, feature.id, slicePositions);
+
+      window.electron.debugLog('info', '[Slice] Slices created', { 
+        count: sliceIds.length,
+        firstId: sliceIds[0],
+        lastId: sliceIds[sliceIds.length - 1]
+      });
+
+      this.terminal.writeln(`\x1b[32mCreated ${sliceIds.length} slices\x1b[0m`);
+      this.terminal.writeln(`Slice IDs: ${sliceIds[0]} - ${sliceIds[sliceIds.length - 1]}`);
+      this.terminal.writeln('');
+      this.terminal.writeln('\x1b[36mTip: Use "play-slice <id>" to play individual slices\x1b[0m');
+
+    } catch (error) {
+      window.electron.debugLog('error', '[Slice] Error creating slices', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      this.terminal.writeln(`\x1b[31mError creating slices: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private async handlePlaySliceCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      this.terminal.writeln('\x1b[31mUsage: play-slice <slice-id>\x1b[0m');
+      return;
+    }
+
+    const sliceId = parseInt(args[0]);
+    if (isNaN(sliceId)) {
+      this.terminal.writeln('\x1b[31mInvalid slice ID. Must be a number.\x1b[0m');
+      return;
+    }
+
+    try {
+      window.electron.debugLog('info', '[PlaySlice] Loading slice', { sliceId });
+
+      // Get slice from database
+      const slice = await window.electron.getSlice(sliceId);
+      if (!slice) {
+        this.terminal.writeln(`\x1b[31mSlice ${sliceId} not found\x1b[0m`);
+        return;
+      }
+
+      // Get the sample
+      const sample = await window.electron.getSampleByHash(slice.sample_hash);
+      if (!sample) {
+        this.terminal.writeln('\x1b[31mSample not found for slice\x1b[0m');
+        return;
+      }
+
+      window.electron.debugLog('info', '[PlaySlice] Sample loaded', {
+        sampleHash: slice.sample_hash.substring(0, 8),
+        startSample: slice.start_sample,
+        endSample: slice.end_sample
+      });
+
+      // Convert Buffer back to Float32Array
+      const fullAudioData = new Float32Array(
+        sample.audio_data.buffer,
+        sample.audio_data.byteOffset,
+        sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT
+      );
+      
+      // Extract slice segment
+      const startSample = slice.start_sample;
+      const endSample = slice.end_sample;
+      const lengthSamples = endSample - startSample;
+      const duration = lengthSamples / sample.sample_rate;
+
+      // Extract channel data for the slice
+      const sliceChannelData = fullAudioData.slice(startSample, endSample);
+
+      // Create audio object for playback (slices don't have onset markers)
+      const audio = {
+        audioData: sliceChannelData,
+        sampleRate: sample.sample_rate,
+        duration: duration,
+        filePath: `Slice ${sliceId} from ${sample.file_path}`,
+        hash: sample.hash,
+        visualize: () => 'Visualization not available for slices',
+        analyzeOnsetSlice: async () => ({ slices: [], visualize: () => 'Not available' })
+      };
+
+      // Set as current audio (this clears any previous onset slices)
+      this.audioContext.setCurrentAudio(audio);
+      
+      window.electron.debugLog('debug', '[PlaySlice] Before clearSlices', {
+        slicesPresent: !!this.audioContext.getCurrentSlices()
+      });
+      
+      this.audioContext.clearSlices(); // Explicitly clear slices
+      
+      window.electron.debugLog('debug', '[PlaySlice] After clearSlices', {
+        slicesPresent: !!this.audioContext.getCurrentSlices()
+      });
+      
+      await this.audioContext.playAudio(audio.audioData, audio.sampleRate);
+
+      // Update waveform visualization (without slice markers)
+      this.updateWaveformVisualization();
+
+      this.terminal.writeln(`\x1b[32mPlaying slice ${sliceId}\x1b[0m`);
+      this.terminal.writeln(`Slice ${slice.slice_index}: ${startSample} - ${endSample} (${duration.toFixed(3)}s)`);
+
+      window.electron.debugLog('info', '[PlaySlice] Playback started', { sliceId });
+
+    } catch (error) {
+      window.electron.debugLog('error', '[PlaySlice] Error playing slice', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      this.terminal.writeln(`\x1b[31mError playing slice: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private async handleListCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      this.terminal.writeln('\x1b[31mUsage: list <samples|features|slices>\x1b[0m');
+      return;
+    }
+
+    const what = args[0].toLowerCase();
+
+    try {
+      switch (what) {
+        case 'samples':
+          await this.listSamples();
+          break;
+        
+        case 'features':
+          await this.listFeatures();
+          break;
+        
+        case 'slices':
+          await this.listSlices();
+          break;
+        
+        default:
+          this.terminal.writeln(`\x1b[31mUnknown list target: ${what}\x1b[0m`);
+          this.terminal.writeln('Available: samples, features, slices');
+          break;
+      }
+    } catch (error) {
+      this.terminal.writeln(`\x1b[31mError listing ${what}: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private async listSamples(): Promise<void> {
+    const samples = await window.electron.listSamples();
+    
+    if (samples.length === 0) {
+      this.terminal.writeln('\x1b[33mNo samples in database\x1b[0m');
+      return;
+    }
+
+    this.terminal.writeln('\x1b[1;36mStored Samples:\x1b[0m');
+    this.terminal.writeln('');
+    
+    for (const sample of samples) {
+      const shortHash = sample.hash.substring(0, 8);
+      const sizeMB = (sample.data_size / 1024 / 1024).toFixed(2);
+      const fileName = sample.file_path.split('/').pop();
+      
+      this.terminal.writeln(`  \x1b[33m${sample.id}\x1b[0m: ${fileName}`);
+      this.terminal.writeln(`     Hash: ${shortHash}  Duration: ${sample.duration.toFixed(2)}s  Size: ${sizeMB} MB`);
+      this.terminal.writeln(`     ${sample.sample_rate}Hz, ${sample.channels} channel(s)`);
+    }
+    
+    this.terminal.writeln('');
+    this.terminal.writeln(`Total: ${samples.length} sample(s)`);
+  }
+
+  private async listFeatures(): Promise<void> {
+    const features = await window.electron.listFeatures();
+    
+    if (features.length === 0) {
+      this.terminal.writeln('\x1b[33mNo features in database\x1b[0m');
+      return;
+    }
+
+    this.terminal.writeln('\x1b[1;36mAnalysis Features:\x1b[0m');
+    this.terminal.writeln('');
+    
+    for (const feature of features) {
+      const shortSampleHash = feature.sample_hash.substring(0, 8);
+      const shortFeatureHash = feature.feature_hash.substring(0, 8);
+      const timestamp = new Date(feature.created_at).toLocaleString();
+      
+      this.terminal.writeln(`  \x1b[33m${feature.id}\x1b[0m: ${feature.feature_type}`);
+      this.terminal.writeln(`     Sample: ${shortSampleHash}  Feature Hash: ${shortFeatureHash}`);
+      this.terminal.writeln(`     Slices: ${feature.slice_count}  Created: ${timestamp}`);
+      if (feature.options) {
+        this.terminal.writeln(`     Options: ${feature.options}`);
+      }
+    }
+    
+    this.terminal.writeln('');
+    this.terminal.writeln(`Total: ${features.length} feature(s)`);
+  }
+
+  private async listSlices(): Promise<void> {
+    const slicesSummary = await window.electron.listSlicesSummary();
+    
+    if (slicesSummary.length === 0) {
+      this.terminal.writeln('\x1b[33mNo slices in database\x1b[0m');
+      return;
+    }
+
+    this.terminal.writeln('\x1b[1;36mSlices by Sample:\x1b[0m');
+    this.terminal.writeln('');
+    
+    let totalSlices = 0;
+    for (const summary of slicesSummary) {
+      const shortHash = summary.sample_hash.substring(0, 8);
+      const fileName = summary.file_path.split('/').pop();
+      
+      this.terminal.writeln(`  \x1b[33m${shortHash}\x1b[0m: ${fileName}`);
+      this.terminal.writeln(`     ${summary.slice_count} slices (IDs: ${summary.min_slice_id} - ${summary.max_slice_id})`);
+      this.terminal.writeln(`     Feature ID: ${summary.feature_id}`);
+      
+      totalSlices += summary.slice_count;
+    }
+    
+    this.terminal.writeln('');
+    this.terminal.writeln(`Total: ${totalSlices} slice(s) across ${slicesSummary.length} sample(s)`);
+  }
+
+  private handleHelpCommand(args: string[]): void {
+    // If a specific command is requested, show detailed help
+    if (args.length > 0) {
+      this.showCommandHelp(args[0].toLowerCase());
+      return;
+    }
+
+    // Otherwise show general help
     this.terminal.writeln('\x1b[1;36mAvailable Commands:\x1b[0m');
     this.terminal.writeln('');
     this.terminal.writeln('  \x1b[33mdisplay "path/to/audio/file"\x1b[0m - Load and visualize audio file');
     this.terminal.writeln('    Supports: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
     this.terminal.writeln('  \x1b[33mplay "path/to/audio/file"\x1b[0m - Play audio file with cursor visualization');
     this.terminal.writeln('  \x1b[33mstop\x1b[0m - Stop audio playback');
+    this.terminal.writeln('  \x1b[33manalyze onset-slice "path/to/audio/file"\x1b[0m - Analyze onset slices');
+    this.terminal.writeln('    Options: --threshold, --min-slice-length, --filter-size, etc.');
+    this.terminal.writeln('  \x1b[33mslice\x1b[0m - Create slices from most recent onset analysis');
+    this.terminal.writeln('  \x1b[33mplay-slice <id>\x1b[0m - Play an individual slice');
+    this.terminal.writeln('  \x1b[33mlist samples\x1b[0m - List all stored audio samples');
+    this.terminal.writeln('  \x1b[33mlist features\x1b[0m - List all analysis features');
+    this.terminal.writeln('  \x1b[33mlist slices\x1b[0m - List slice summary by sample');
     this.terminal.writeln('  \x1b[33mdebug [limit]\x1b[0m - Show debug logs (default: 20)');
     this.terminal.writeln('  \x1b[33mclear-debug\x1b[0m - Clear all debug logs');
-    this.terminal.writeln('  \x1b[33mhelp\x1b[0m - Show this help message');
+    this.terminal.writeln('  \x1b[33mhelp [command]\x1b[0m - Show this help message or help for a specific command');
     this.terminal.writeln('  \x1b[33mclear\x1b[0m - Clear terminal screen');
+    this.terminal.writeln('');
+    this.terminal.writeln('\x1b[36mFor detailed help on a command, type: help <command>\x1b[0m');
     this.terminal.writeln('');
     this.terminal.writeln('\x1b[1;36mKeyboard Shortcuts:\x1b[0m');
     this.terminal.writeln('  \x1b[33mCtrl+R\x1b[0m - Reverse search command history');
@@ -569,26 +977,190 @@ export class BounceApp {
     this.terminal.writeln('');
   }
 
+  private showCommandHelp(command: string): void {
+    switch (command) {
+      case 'play':
+        this.terminal.writeln('\x1b[1;36mCommand: play\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m play "path/to/audio/file"');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Loads and plays an audio file with real-time cursor visualization.');
+        this.terminal.writeln('  The waveform is displayed with a moving playback cursor.');
+        this.terminal.writeln('  Audio data is automatically stored in the database with a content hash.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mSupported formats:\x1b[0m WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mExample:\x1b[0m');
+        this.terminal.writeln('  play "/Users/username/Music/song.flac"');
+        break;
+
+      case 'display':
+        this.terminal.writeln('\x1b[1;36mCommand: display\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m display "path/to/audio/file"');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Loads and visualizes an audio file without playing it.');
+        this.terminal.writeln('  Use this to view the waveform or prepare for analysis.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mSupported formats:\x1b[0m WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
+        break;
+
+      case 'stop':
+        this.terminal.writeln('\x1b[1;36mCommand: stop\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m stop');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Stops the currently playing audio.');
+        break;
+
+      case 'analyze':
+        this.terminal.writeln('\x1b[1;36mCommand: analyze\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m analyze onset-slice "path/to/audio/file" [options]');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Analyzes onset positions in an audio file using FluidOnsetSlice.');
+        this.terminal.writeln('  Results are stored in the database as a feature with a unique hash.');
+        this.terminal.writeln('  Onset markers are displayed on the waveform visualization.');
+        this.terminal.writeln('  Running the same analysis twice returns the existing feature (deduplication).');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mOptions:\x1b[0m');
+        this.terminal.writeln('  --threshold <value>        Detection threshold (default: 0.5)');
+        this.terminal.writeln('  --min-slice-length <n>     Minimum samples between slices (default: 2)');
+        this.terminal.writeln('  --filter-size <n>          Smoothing filter size (default: 5)');
+        this.terminal.writeln('  --frame-size <n>           Analysis frame size (default: 512)');
+        this.terminal.writeln('  --hop-size <n>             Hop size between frames (default: 512)');
+        this.terminal.writeln('  --metric <0-9>             Detection metric (default: 0)');
+        this.terminal.writeln('  --function <0-16>          Detection function (default: 0)');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mExample:\x1b[0m');
+        this.terminal.writeln('  analyze onset-slice "audio.wav"');
+        this.terminal.writeln('  analyze onset-slice "audio.wav" --threshold 0.3 --min-slice-length 4410');
+        break;
+
+      case 'slice':
+        this.terminal.writeln('\x1b[1;36mCommand: slice\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m slice');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Creates slice records from the most recent onset-slice analysis.');
+        this.terminal.writeln('  Each slice has a start and end sample position.');
+        this.terminal.writeln('  Slices are stored in the database and can be exported or played.');
+        this.terminal.writeln('  Uses implicit context - operates on most recent audio and feature.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mWorkflow:\x1b[0m');
+        this.terminal.writeln('  1. play "audio.wav"                 # Load audio');
+        this.terminal.writeln('  2. analyze onset-slice "audio.wav"  # Find onsets');
+        this.terminal.writeln('  3. slice                            # Create slice records');
+        break;
+
+      case 'play-slice':
+        this.terminal.writeln('\x1b[1;36mCommand: play-slice\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m play-slice <slice-id>');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Plays back an individual slice by its ID.');
+        this.terminal.writeln('  The slice audio is extracted from the stored sample and played.');
+        this.terminal.writeln('  Useful for auditioning slices before exporting.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mArguments:\x1b[0m');
+        this.terminal.writeln('  slice-id    The numeric ID of the slice to play');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mExample:\x1b[0m');
+        this.terminal.writeln('  play-slice 1     # Play slice with ID 1');
+        this.terminal.writeln('  play-slice 42    # Play slice with ID 42');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mTip:\x1b[0m Use "slice" command first to create slices from analysis');
+        break;
+
+      case 'list':
+        this.terminal.writeln('\x1b[1;36mCommand: list\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m list <samples|features|slices>');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Lists items stored in the database.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mSubcommands:\x1b[0m');
+        this.terminal.writeln('  list samples    Show all stored audio samples with metadata');
+        this.terminal.writeln('  list features   Show all analysis features with slice counts');
+        this.terminal.writeln('  list slices     Show slice summary grouped by sample');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mExample:\x1b[0m');
+        this.terminal.writeln('  list samples');
+        this.terminal.writeln('  list features');
+        this.terminal.writeln('  list slices');
+        break;
+
+      case 'debug':
+        this.terminal.writeln('\x1b[1;36mCommand: debug\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m debug [limit]');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Shows recent debug logs from the database.');
+        this.terminal.writeln('  Logs include timestamps, levels (INFO, ERROR, etc.), and data.');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mArguments:\x1b[0m');
+        this.terminal.writeln('  limit    Number of log entries to show (default: 20)');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mExample:\x1b[0m');
+        this.terminal.writeln('  debug       # Show last 20 logs');
+        this.terminal.writeln('  debug 50    # Show last 50 logs');
+        break;
+
+      case 'clear-debug':
+        this.terminal.writeln('\x1b[1;36mCommand: clear-debug\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m clear-debug');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Deletes all debug logs from the database.');
+        break;
+
+      case 'clear':
+        this.terminal.writeln('\x1b[1;36mCommand: clear\x1b[0m');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mUsage:\x1b[0m clear');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mDescription:\x1b[0m');
+        this.terminal.writeln('  Clears the terminal screen.');
+        break;
+
+      default:
+        this.terminal.writeln(`\x1b[31mNo help available for command: ${command}\x1b[0m`);
+        this.terminal.writeln('Type \x1b[33mhelp\x1b[0m to see all available commands.');
+        break;
+    }
+  }
+
   private updateWaveformVisualization(): void {
     const audio = this.audioContext.getCurrentAudio();
     if (!audio) return;
 
+    const container = document.getElementById('waveform-container');
+    if (!container) return;
+
+    container.classList.add('active');
+
     if (!this.waveformVisualizer) {
-      const container = document.getElementById('waveform-container');
-      if (container) {
-        container.style.display = 'block';
-        this.waveformVisualizer = new WaveformVisualizer('waveform-canvas', 'analysis-canvas');
-      }
+      this.waveformVisualizer = new WaveformVisualizer('waveform-canvas');
     }
 
     if (this.waveformVisualizer) {
       this.waveformVisualizer.setAudioContext(this.audioContext);
-      this.waveformVisualizer.drawWaveform(audio.audioData, audio.sampleRate);
-      
       const slices = this.audioContext.getCurrentSlices();
-      if (slices) {
-        this.waveformVisualizer.drawSliceMarkers(slices, audio.audioData.length);
-      }
+      window.electron.debugLog('debug', '[App] updateWaveformVisualization', {
+        audioDataLength: audio.audioData.length,
+        slicesCount: slices?.length || 0,
+        slicesPresent: !!slices
+      });
+      this.waveformVisualizer.drawWaveform(audio.audioData, audio.sampleRate, slices || undefined);
     }
   }
 

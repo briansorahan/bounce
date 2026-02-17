@@ -1,49 +1,37 @@
 export class WaveformVisualizer {
   private waveformCanvas: HTMLCanvasElement;
-  private analysisCanvas: HTMLCanvasElement;
   private waveformCtx: CanvasRenderingContext2D;
-  private analysisCtx: CanvasRenderingContext2D;
   private playbackCursorPosition: number = 0;
   private currentAudioData: Float32Array | null = null;
   private currentSampleRate: number = 0;
   private currentSlices: number[] | null = null;
-  private currentTotalSamples: number = 0;
 
-  constructor(waveformCanvasId: string, analysisCanvasId: string) {
+  constructor(waveformCanvasId: string) {
     this.waveformCanvas = document.getElementById(waveformCanvasId) as HTMLCanvasElement;
-    this.analysisCanvas = document.getElementById(analysisCanvasId) as HTMLCanvasElement;
 
     const waveformCtx = this.waveformCanvas.getContext('2d');
-    const analysisCtx = this.analysisCanvas.getContext('2d');
 
-    if (!waveformCtx || !analysisCtx) {
-      throw new Error('Failed to get canvas contexts');
+    if (!waveformCtx) {
+      throw new Error('Failed to get canvas context');
     }
 
     this.waveformCtx = waveformCtx;
-    this.analysisCtx = analysisCtx;
 
-    this.setupCanvases();
+    this.setupCanvas();
   }
 
-  private setupCanvases(): void {
+  private setupCanvas(): void {
     const resize = () => {
       const container = this.waveformCanvas.parentElement;
       if (!container) return;
 
-      this.waveformCanvas.width = container.clientWidth;
-      this.waveformCanvas.height = container.clientHeight;
-      this.analysisCanvas.width = container.clientWidth;
-      this.analysisCanvas.height = container.clientHeight;
+      const rect = this.waveformCanvas.getBoundingClientRect();
+      this.waveformCanvas.width = rect.width;
+      this.waveformCanvas.height = rect.height;
 
       // Redraw waveform after resize if we have audio data
       if (this.currentAudioData && this.currentSampleRate) {
-        this.drawWaveform(this.currentAudioData, this.currentSampleRate);
-      }
-
-      // Redraw slice markers after resize if we have them
-      if (this.currentSlices && this.currentTotalSamples) {
-        this.drawSliceMarkers(this.currentSlices, this.currentTotalSamples);
+        this.drawWaveform(this.currentAudioData, this.currentSampleRate, this.currentSlices || undefined);
       }
     };
 
@@ -51,9 +39,19 @@ export class WaveformVisualizer {
     window.addEventListener('resize', resize);
   }
 
-  drawWaveform(audioData: Float32Array, sampleRate: number): void {
+  drawWaveform(audioData: Float32Array, sampleRate: number, slices?: number[]): void {
     this.currentAudioData = audioData;
     this.currentSampleRate = sampleRate;
+    this.currentSlices = slices || null;
+    
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawWaveform called', {
+        audioDataLength: audioData.length,
+        sampleRate,
+        slicesCount: this.currentSlices?.length || 0,
+        slicesPresent: !!this.currentSlices
+      });
+    }
     
     const width = this.waveformCanvas.width;
     const height = this.waveformCanvas.height;
@@ -74,6 +72,7 @@ export class WaveformVisualizer {
     for (let i = 0; i < width; i++) {
       let min = 1.0;
       let max = -1.0;
+      let hasData = false;
 
       for (let j = 0; j < step; j++) {
         const index = i * step + j;
@@ -81,14 +80,18 @@ export class WaveformVisualizer {
           const datum = audioData[index];
           if (datum < min) min = datum;
           if (datum > max) max = datum;
+          hasData = true;
         }
       }
 
-      const yMin = (1 + min) * amp;
-      const yMax = (1 + max) * amp;
+      // Only draw if we have actual audio data for this pixel
+      if (hasData) {
+        const yMin = (1 + min) * amp;
+        const yMax = (1 + max) * amp;
 
-      ctx.moveTo(i, yMin);
-      ctx.lineTo(i, yMax);
+        ctx.moveTo(i, yMin);
+        ctx.lineTo(i, yMax);
+      }
     }
 
     ctx.stroke();
@@ -100,25 +103,33 @@ export class WaveformVisualizer {
     ctx.lineTo(width, amp);
     ctx.stroke();
 
+    // Draw onset slice markers if present
+    if (this.currentSlices && this.currentSlices.length > 0) {
+      this.drawOnsetMarkers(this.currentSlices, audioData.length);
+    }
+
     ctx.fillStyle = '#666666';
     ctx.font = '12px monospace';
     const duration = audioData.length / sampleRate;
     ctx.fillText(`Duration: ${duration.toFixed(2)}s`, 10, 20);
     ctx.fillText(`Sample Rate: ${sampleRate}Hz`, 10, 35);
     ctx.fillText(`Samples: ${audioData.length}`, 10, 50);
+    
+    // Show slice info if present
+    if (this.currentSlices && this.currentSlices.length > 0) {
+      ctx.fillStyle = '#f14c4c';
+      ctx.fillText(`Onset Slices: ${this.currentSlices.length}`, 10, 65);
+      const avgInterval = duration / this.currentSlices.length;
+      ctx.fillText(`Avg Interval: ${avgInterval.toFixed(3)}s`, 10, 80);
+    }
 
     this.drawPlaybackCursor(audioData.length);
   }
 
-  drawSliceMarkers(slices: number[], totalSamples: number): void {
-    this.currentSlices = slices;
-    this.currentTotalSamples = totalSamples;
-
-    const width = this.analysisCanvas.width;
-    const height = this.analysisCanvas.height;
-    const ctx = this.analysisCtx;
-
-    ctx.clearRect(0, 0, width, height);
+  private drawOnsetMarkers(slices: number[], totalSamples: number): void {
+    const width = this.waveformCanvas.width;
+    const height = this.waveformCanvas.height;
+    const ctx = this.waveformCtx;
 
     ctx.strokeStyle = '#f14c4c';
     ctx.lineWidth = 2;
@@ -130,19 +141,13 @@ export class WaveformVisualizer {
       ctx.lineTo(x, height);
       ctx.stroke();
     }
-
-    ctx.fillStyle = '#f14c4c';
-    ctx.font = '12px monospace';
-    ctx.fillText(`Slices: ${slices.length}`, 10, 20);
-
-    this.drawPlaybackCursor(totalSamples);
   }
 
   updatePlaybackCursor(position: number, totalSamples: number): void {
     this.playbackCursorPosition = position;
     
     if (this.currentAudioData && this.currentSampleRate) {
-      this.drawWaveform(this.currentAudioData, this.currentSampleRate);
+      this.drawWaveform(this.currentAudioData, this.currentSampleRate, this.currentSlices || undefined);
     }
   }
 
@@ -156,13 +161,30 @@ export class WaveformVisualizer {
     const ctx = this.waveformCtx;
 
     const x = (this.playbackCursorPosition / totalSamples) * width;
+    
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawPlaybackCursor', {
+        position: this.playbackCursorPosition,
+        totalSamples,
+        x,
+        width,
+        ratio: this.playbackCursorPosition / totalSamples
+      });
+    }
+    
+    // Don't draw cursor if it's beyond the canvas
+    if (x < 0 || x > width) {
+      return;
+    }
 
+    ctx.save();
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
+    ctx.restore();
   }
 
   private audioContext: any = null;

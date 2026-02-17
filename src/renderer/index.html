@@ -44,20 +44,17 @@
       background: #252525;
     }
 
+    #waveform-container.active {
+      display: block;
+    }
+
     #waveform-canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
-      height: 60%;
-    }
-
-    #analysis-canvas {
-      position: absolute;
-      top: 60%;
-      left: 0;
-      width: 100%;
-      height: 40%;
+      height: 100%;
+      display: block;
     }
   </style>
 </head>
@@ -65,7 +62,6 @@
   <div id="terminal"></div>
   <div id="waveform-container">
     <canvas id="waveform-canvas"></canvas>
-    <canvas id="analysis-canvas"></canvas>
   </div>
 
   <script type="module" src="main.js"></script>

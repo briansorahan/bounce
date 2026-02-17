@@ -11,5 +11,17 @@ contextBridge.exposeInMainWorld('electron', {
   dedupeCommandHistory: () => ipcRenderer.invoke('dedupe-command-history'),
   debugLog: (level: string, message: string, data?: any) => ipcRenderer.invoke('debug-log', level, message, data),
   getDebugLogs: (limit?: number) => ipcRenderer.invoke('get-debug-logs', limit),
-  clearDebugLogs: () => ipcRenderer.invoke('clear-debug-logs')
+  clearDebugLogs: () => ipcRenderer.invoke('clear-debug-logs'),
+  storeFeature: (sampleHash: string, featureType: string, featureData: number[], options?: any) => 
+    ipcRenderer.invoke('store-feature', sampleHash, featureType, featureData, options),
+  getMostRecentFeature: (sampleHash?: string, featureType?: string) => 
+    ipcRenderer.invoke('get-most-recent-feature', sampleHash, featureType),
+  createSlices: (sampleHash: string, featureId: number, slicePositions: number[]) => 
+    ipcRenderer.invoke('create-slices', sampleHash, featureId, slicePositions),
+  getSlicesByFeature: (featureId: number) => ipcRenderer.invoke('get-slices-by-feature', featureId),
+  getSlice: (sliceId: number) => ipcRenderer.invoke('get-slice', sliceId),
+  listSamples: () => ipcRenderer.invoke('list-samples'),
+  listFeatures: () => ipcRenderer.invoke('list-features'),
+  getSampleByHash: (hash: string) => ipcRenderer.invoke('get-sample-by-hash', hash),
+  listSlicesSummary: () => ipcRenderer.invoke('list-slices-summary')
 });
