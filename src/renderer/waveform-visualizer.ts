@@ -44,6 +44,15 @@ export class WaveformVisualizer {
     this.currentSampleRate = sampleRate;
     this.currentSlices = slices || null;
     
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawWaveform called', {
+        audioDataLength: audioData.length,
+        sampleRate,
+        slicesCount: this.currentSlices?.length || 0,
+        slicesPresent: !!this.currentSlices
+      });
+    }
+    
     const width = this.waveformCanvas.width;
     const height = this.waveformCanvas.height;
     const ctx = this.waveformCtx;
@@ -63,6 +72,7 @@ export class WaveformVisualizer {
     for (let i = 0; i < width; i++) {
       let min = 1.0;
       let max = -1.0;
+      let hasData = false;
 
       for (let j = 0; j < step; j++) {
         const index = i * step + j;
@@ -70,14 +80,18 @@ export class WaveformVisualizer {
           const datum = audioData[index];
           if (datum < min) min = datum;
           if (datum > max) max = datum;
+          hasData = true;
         }
       }
 
-      const yMin = (1 + min) * amp;
-      const yMax = (1 + max) * amp;
+      // Only draw if we have actual audio data for this pixel
+      if (hasData) {
+        const yMin = (1 + min) * amp;
+        const yMax = (1 + max) * amp;
 
-      ctx.moveTo(i, yMin);
-      ctx.lineTo(i, yMax);
+        ctx.moveTo(i, yMin);
+        ctx.lineTo(i, yMax);
+      }
     }
 
     ctx.stroke();
@@ -147,13 +161,30 @@ export class WaveformVisualizer {
     const ctx = this.waveformCtx;
 
     const x = (this.playbackCursorPosition / totalSamples) * width;
+    
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawPlaybackCursor', {
+        position: this.playbackCursorPosition,
+        totalSamples,
+        x,
+        width,
+        ratio: this.playbackCursorPosition / totalSamples
+      });
+    }
+    
+    // Don't draw cursor if it's beyond the canvas
+    if (x < 0 || x > width) {
+      return;
+    }
 
+    ctx.save();
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
+    ctx.restore();
   }
 
   private audioContext: any = null;

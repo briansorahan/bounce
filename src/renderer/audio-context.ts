@@ -3,6 +3,7 @@ interface AudioData {
   sampleRate: number;
   duration: number;
   filePath?: string;
+  hash?: string;
   visualize: () => void;
   analyzeOnsetSlice: (options?: OnsetSliceOptions) => Promise<SliceResults>;
 }
@@ -167,6 +168,21 @@ export class AudioContext {
   }
 
   getCurrentSlices(): number[] | null {
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[AudioContext] getCurrentSlices called', {
+        slicesCount: this.currentSlices?.length || 0,
+        slicesPresent: !!this.currentSlices
+      });
+    }
     return this.currentSlices;
+  }
+
+  clearSlices(): void {
+    if ((window as any).electron?.debugLog) {
+      (window as any).electron.debugLog('debug', '[AudioContext] clearSlices called', {
+        previousSlicesCount: this.currentSlices?.length || 0
+      });
+    }
+    this.currentSlices = null;
   }
 }

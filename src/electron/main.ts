@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { OnsetSlice } from '../index';
 import decode from 'audio-decode';
 import { DatabaseManager } from './database';
@@ -47,11 +48,29 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
     const channelData = audioBuffer.getChannelData(0);
     const sampleRate = audioBuffer.sampleRate;
     const duration = audioBuffer.duration;
+    
+    // Compute hash of the audio data
+    const audioDataBuffer = Buffer.from(channelData.buffer);
+    const hash = crypto.createHash('sha256').update(audioDataBuffer).digest('hex');
+    
+    // Store in database
+    if (dbManager) {
+      dbManager.storeSample(
+        hash,
+        resolvedPath,
+        audioDataBuffer,
+        sampleRate,
+        audioBuffer.numberOfChannels,
+        duration
+      );
+    }
 
     return {
       channelData: Array.from(channelData),
       sampleRate,
-      duration
+      duration,
+      hash,
+      filePath: resolvedPath
     };
   } catch (error) {
     throw new Error(`Failed to read audio file: ${error instanceof Error ? error.message : String(error)}`);
@@ -135,6 +154,114 @@ ipcMain.handle('clear-debug-logs', async () => {
     }
   } catch (error) {
     console.error('Failed to clear debug logs:', error);
+  }
+});
+
+ipcMain.handle('store-feature', async (_event, sampleHash: string, featureType: string, featureData: number[], options?: any) => {
+  try {
+    if (!dbManager) {
+      throw new Error('Database not initialized');
+    }
+    const featureId = dbManager.storeFeature(sampleHash, featureType, featureData, options);
+    return featureId;
+  } catch (error) {
+    throw new Error(`Failed to store feature: ${error instanceof Error ? error.message : String(error)}`);
+  }
+});
+
+ipcMain.handle('get-most-recent-feature', async (_event, sampleHash?: string, featureType?: string) => {
+  try {
+    if (!dbManager) {
+      return null;
+    }
+    return dbManager.getMostRecentFeature(sampleHash, featureType);
+  } catch (error) {
+    console.error('Failed to get most recent feature:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('create-slices', async (_event, sampleHash: string, featureId: number, slicePositions: number[]) => {
+  try {
+    if (!dbManager) {
+      throw new Error('Database not initialized');
+    }
+    const sliceIds = dbManager.createSlices(sampleHash, featureId, slicePositions);
+    return sliceIds;
+  } catch (error) {
+    throw new Error(`Failed to create slices: ${error instanceof Error ? error.message : String(error)}`);
+  }
+});
+
+ipcMain.handle('get-slices-by-feature', async (_event, featureId: number) => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.getSlicesByFeature(featureId);
+  } catch (error) {
+    console.error('Failed to get slices:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('get-slice', async (_event, sliceId: number) => {
+  try {
+    if (!dbManager) {
+      return null;
+    }
+    return dbManager.getSlice(sliceId);
+  } catch (error) {
+    console.error('Failed to get slice:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('list-samples', async () => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.listSamples();
+  } catch (error) {
+    console.error('Failed to list samples:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('list-features', async () => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.listFeatures();
+  } catch (error) {
+    console.error('Failed to list features:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('get-sample-by-hash', async (_event, hash: string) => {
+  try {
+    if (!dbManager) {
+      return null;
+    }
+    return dbManager.getSampleByHash(hash);
+  } catch (error) {
+    console.error('Failed to get sample:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('list-slices-summary', async () => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.listSlicesSummary();
+  } catch (error) {
+    console.error('Failed to list slices summary:', error);
+    return [];
   }
 });
 
