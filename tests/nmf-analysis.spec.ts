@@ -2,12 +2,19 @@ import { test, expect, _electron as electron, ElectronApplication, Page } from '
 import path from 'path';
 import fs from 'fs';
 
+const electronPath = require('electron') as string;
+
 let electronApp: ElectronApplication;
 let window: Page;
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
-    args: [path.join(__dirname, '../dist/electron/main.js')],
+    executablePath: electronPath,
+    args: [path.join(__dirname, '../dist/electron/main.js'), '--no-sandbox', '--disable-setuid-sandbox'],
+    env: {
+      ...process.env,
+      ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+    },
   });
   window = await electronApp.firstWindow();
   await window.waitForLoadState('domcontentloaded');
@@ -15,7 +22,9 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await electronApp.close();
+  if (electronApp) {
+    await electronApp.close();
+  }
 });
 
 test.describe('NMF Analysis', () => {
