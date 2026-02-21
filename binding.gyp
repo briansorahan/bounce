@@ -8,6 +8,7 @@
         "native/src/addon.cpp",
         "native/src/onset_feature.cpp",
         "native/src/onset_slice.cpp",
+        "native/src/buf_nmf.cpp",
         "third_party/hisstools/HISSTools_FFT/HISSTools_FFT.cpp"
       ],
       "include_dirs": [

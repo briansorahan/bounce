@@ -14,6 +14,20 @@ export interface ElectronAPI {
     fftSize?: number;
     hopSize?: number;
   }) => Promise<number[]>;
+  analyzeBufNMF: (audioData: Float32Array, sampleRate: number, options?: {
+    components?: number;
+    iterations?: number;
+    fftSize?: number;
+    hopSize?: number;
+    windowSize?: number;
+    seed?: number;
+  }) => Promise<{
+    components: number;
+    iterations: number;
+    converged: boolean;
+    bases: number[][];
+    activations: number[][];
+  }>;
 }
 
 declare global {

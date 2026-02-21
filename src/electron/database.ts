@@ -3,6 +3,77 @@ import { app } from 'electron';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
+export interface DebugLogEntry {
+  level: string;
+  message: string;
+  data: string | null;
+  timestamp: number;
+  created_at: string;
+}
+
+export interface SampleRecord {
+  id: number;
+  hash: string;
+  file_path: string;
+  audio_data: Buffer;
+  sample_rate: number;
+  channels: number;
+  duration: number;
+}
+
+export interface FeatureRecord {
+  id: number;
+  sample_hash: string;
+  feature_hash: string;
+  feature_type: string;
+  feature_data: string;
+  options: string | null;
+}
+
+export interface SliceRecord {
+  id: number;
+  sample_hash: string;
+  feature_id: number;
+  slice_index: number;
+  start_sample: number;
+  end_sample: number;
+}
+
+export interface SampleListRecord {
+  id: number;
+  hash: string;
+  file_path: string;
+  sample_rate: number;
+  channels: number;
+  duration: number;
+  data_size: number;
+  created_at: string;
+}
+
+export interface FeatureListRecord {
+  id: number;
+  sample_hash: string;
+  feature_hash: string;
+  feature_type: string;
+  slice_count: number;
+  options: string | null;
+  created_at: string;
+}
+
+export interface SlicesSummaryRecord {
+  sample_hash: string;
+  file_path: string;
+  feature_id: number;
+  slice_count: number;
+  min_slice_id: number;
+  max_slice_id: number;
+}
+
+export interface FeatureOptions {
+  threshold?: number;
+  [key: string]: unknown;
+}
+
 export class DatabaseManager {
   private db: Database.Database;
 
@@ -96,7 +167,7 @@ export class DatabaseManager {
     `);
   }
 
-  addDebugLog(level: string, message: string, data?: any): void {
+  addDebugLog(level: string, message: string, data?: Record<string, unknown>): void {
     const stmt = this.db.prepare(`
       INSERT INTO debug_logs (level, message, data, timestamp) 
       VALUES (?, ?, ?, ?)
@@ -105,7 +176,7 @@ export class DatabaseManager {
     stmt.run(level, message, dataStr, Date.now());
   }
 
-  getDebugLogs(limit: number = 100): any[] {
+  getDebugLogs(limit: number = 100): DebugLogEntry[] {
     const stmt = this.db.prepare(`
       SELECT level, message, data, timestamp, created_at 
       FROM debug_logs 
@@ -113,7 +184,7 @@ export class DatabaseManager {
       LIMIT ?
     `);
     
-    return stmt.all(limit) as any[];
+    return stmt.all(limit) as DebugLogEntry[];
   }
 
   clearDebugLogs(): void {
@@ -186,17 +257,17 @@ export class DatabaseManager {
     stmt.run(hash, filePath, audioData, sampleRate, channels, duration);
   }
 
-  getSampleByHash(hash: string): { id: number; hash: string; file_path: string; audio_data: Buffer; sample_rate: number; channels: number; duration: number } | undefined {
+  getSampleByHash(hash: string): SampleRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
       FROM samples 
-      WHERE hash = ? 
+      WHERE hash LIKE ? || '%'
       LIMIT 1
     `);
-    return stmt.get(hash) as any;
+    return stmt.get(hash) as SampleRecord | undefined;
   }
 
-  getSampleByPath(filePath: string): { id: number; hash: string; file_path: string; audio_data: Buffer; sample_rate: number; channels: number; duration: number } | undefined {
+  getSampleByPath(filePath: string): SampleRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
       FROM samples 
@@ -204,10 +275,10 @@ export class DatabaseManager {
       ORDER BY id DESC 
       LIMIT 1
     `);
-    return stmt.get(filePath) as any;
+    return stmt.get(filePath) as SampleRecord | undefined;
   }
 
-  storeFeature(sampleHash: string, featureType: string, featureData: number[], options?: any): number {
+  storeFeature(sampleHash: string, featureType: string, featureData: number[], options?: FeatureOptions): number {
     // Compute hash of feature data and options
     const dataStr = JSON.stringify(featureData);
     const optionsStr = options ? JSON.stringify(options) : '';
@@ -233,10 +304,10 @@ export class DatabaseManager {
     return result.lastInsertRowid as number;
   }
 
-  getMostRecentFeature(sampleHash?: string, featureType?: string): { id: number; sample_hash: string; feature_hash: string; feature_type: string; feature_data: string; options: string | null } | undefined {
+  getMostRecentFeature(sampleHash?: string, featureType?: string): FeatureRecord | undefined {
     let sql = 'SELECT id, sample_hash, feature_hash, feature_type, feature_data, options FROM features';
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: string[] = [];
 
     if (sampleHash) {
       conditions.push('sample_hash = ?');
@@ -254,7 +325,7 @@ export class DatabaseManager {
     sql += ' ORDER BY id DESC LIMIT 1';
 
     const stmt = this.db.prepare(sql);
-    return stmt.get(...params) as any;
+    return stmt.get(...params) as FeatureRecord | undefined;
   }
 
   createSlices(sampleHash: string, featureId: number, slicePositions: number[]): number[] {
@@ -278,26 +349,26 @@ export class DatabaseManager {
     return sliceIds;
   }
 
-  getSlicesByFeature(featureId: number): Array<{ id: number; sample_hash: string; feature_id: number; slice_index: number; start_sample: number; end_sample: number }> {
+  getSlicesByFeature(featureId: number): SliceRecord[] {
     const stmt = this.db.prepare(`
       SELECT id, sample_hash, feature_id, slice_index, start_sample, end_sample 
       FROM slices 
       WHERE feature_id = ? 
       ORDER BY slice_index ASC
     `);
-    return stmt.all(featureId) as any;
+    return stmt.all(featureId) as SliceRecord[];
   }
 
-  getSlice(sliceId: number): { id: number; sample_hash: string; feature_id: number; slice_index: number; start_sample: number; end_sample: number } | undefined {
+  getSlice(sliceId: number): SliceRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT id, sample_hash, feature_id, slice_index, start_sample, end_sample 
       FROM slices 
       WHERE id = ?
     `);
-    return stmt.get(sliceId) as any;
+    return stmt.get(sliceId) as SliceRecord | undefined;
   }
 
-  listSamples(): Array<{ id: number; hash: string; file_path: string; sample_rate: number; channels: number; duration: number; data_size: number; created_at: string }> {
+  listSamples(): SampleListRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
         id, 
@@ -311,10 +382,10 @@ export class DatabaseManager {
       FROM samples 
       ORDER BY id DESC
     `);
-    return stmt.all() as any;
+    return stmt.all() as SampleListRecord[];
   }
 
-  listFeatures(): Array<{ id: number; sample_hash: string; feature_hash: string; feature_type: string; slice_count: number; options: string | null; created_at: string }> {
+  listFeatures(): FeatureListRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
         id,
@@ -327,10 +398,10 @@ export class DatabaseManager {
       FROM features 
       ORDER BY id DESC
     `);
-    return stmt.all() as any;
+    return stmt.all() as FeatureListRecord[];
   }
 
-  listSlicesSummary(): Array<{ sample_hash: string; file_path: string; feature_id: number; slice_count: number; min_slice_id: number; max_slice_id: number }> {
+  listSlicesSummary(): SlicesSummaryRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
         s.sample_hash,
@@ -344,6 +415,17 @@ export class DatabaseManager {
       GROUP BY s.sample_hash, s.feature_id
       ORDER BY s.sample_hash
     `);
-    return stmt.all() as any;
+    return stmt.all() as SlicesSummaryRecord[];
+  }
+
+  getFeature(sampleHash: string, featureType: string): { feature_type: string; feature_data: string; feature_hash: string } | undefined {
+    const stmt = this.db.prepare(`
+      SELECT feature_type, feature_data, feature_hash
+      FROM features
+      WHERE sample_hash = ? AND feature_type = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get(sampleHash, featureType) as { feature_type: string; feature_data: string; feature_hash: string } | undefined;
   }
 }

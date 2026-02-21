@@ -1,3 +1,8 @@
+// Browser compatibility types
+interface WebkitWindow extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 interface AudioData {
   audioData: Float32Array;
   sampleRate: number;
@@ -16,6 +21,7 @@ interface OnsetSliceOptions {
   windowSize?: number;
   fftSize?: number;
   hopSize?: number;
+  [key: string]: unknown;
 }
 
 interface SliceResults {
@@ -23,7 +29,7 @@ interface SliceResults {
   visualize: () => void;
 }
 
-export class AudioContext {
+export class AudioManager {
   private currentAudio: AudioData | null = null;
   private currentSlices: number[] | null = null;
   private audioContext: globalThis.AudioContext | null = null;
@@ -45,7 +51,15 @@ export class AudioContext {
     this.stopAudio();
 
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const win = window as WebkitWindow;
+      const AudioContextClass = window.AudioContext || win.webkitAudioContext;
+      if (AudioContextClass) {
+        this.audioContext = new AudioContextClass();
+      }
+    }
+
+    if (!this.audioContext) {
+      throw new Error('AudioContext not available');
     }
 
     const buffer = this.audioContext.createBuffer(1, audioData.length, sampleRate);
@@ -92,7 +106,7 @@ export class AudioContext {
     if (this.sourceNode) {
       try {
         this.sourceNode.stop();
-      } catch (e) {
+      } catch {
         // Already stopped
       }
       this.sourceNode = null;
@@ -114,7 +128,7 @@ export class AudioContext {
     return this.isPlaying;
   }
 
-  async evaluate(code: string): Promise<any> {
+  async evaluate(code: string): Promise<unknown> {
     const loadAudio = async (path: string): Promise<AudioData> => {
       const audioData = await this.loadAudioFile(path);
       
@@ -168,8 +182,8 @@ export class AudioContext {
   }
 
   getCurrentSlices(): number[] | null {
-    if ((window as any).electron?.debugLog) {
-      (window as any).electron.debugLog('debug', '[AudioContext] getCurrentSlices called', {
+    if (window.electron?.debugLog) {
+      window.electron.debugLog('debug', '[AudioContext] getCurrentSlices called', {
         slicesCount: this.currentSlices?.length || 0,
         slicesPresent: !!this.currentSlices
       });
@@ -178,8 +192,8 @@ export class AudioContext {
   }
 
   clearSlices(): void {
-    if ((window as any).electron?.debugLog) {
-      (window as any).electron.debugLog('debug', '[AudioContext] clearSlices called', {
+    if (window.electron?.debugLog) {
+      window.electron.debugLog('debug', '[AudioContext] clearSlices called', {
         previousSlicesCount: this.currentSlices?.length || 0
       });
     }

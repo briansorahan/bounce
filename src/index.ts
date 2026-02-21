@@ -72,4 +72,35 @@ export class OnsetSlice {
   }
 }
 
+/**
+ * BufNMF analyzer wrapper
+ */
+export class BufNMF {
+  private _native: any;
+
+  constructor(options?: {
+    components?: number;
+    iterations?: number;
+    fftSize?: number;
+    hopSize?: number;
+    windowSize?: number;
+    seed?: number;
+  }) {
+    this._native = new addon.BufNMF(options || {});
+  }
+
+  /**
+   * Process audio buffer and perform NMF decomposition
+   */
+  process(audioBuffer: Float32Array | Float64Array, sampleRate: number): {
+    components: number;
+    iterations: number;
+    converged: boolean;
+    bases: number[][];
+    activations: number[][];
+  } {
+    return this._native.process(audioBuffer, sampleRate);
+  }
+}
+
 export default OnsetFeature;
