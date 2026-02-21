@@ -1,13 +1,41 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { AudioContext } from './audio-context.js';
+import { AudioManager } from './audio-context.js';
 import { WaveformVisualizer } from './waveform-visualizer.js';
+import { NMFVisualizer } from './nmf-visualizer.js';
+import { VisualizationManager } from './visualization-manager.js';
+
+interface OnsetSliceOptions {
+  threshold?: number;
+  minSliceLength?: number;
+  filterSize?: number;
+  frameDelta?: number;
+  metric?: number;
+  [key: string]: unknown;
+}
+
+interface BufNMFOptions {
+  components?: number;
+  iterations?: number;
+  fftSize?: number;
+  hopSize?: number;
+  windowSize?: number;
+  seed?: number;
+}
+
+interface BufNMFResult {
+  components: number;
+  iterations: number;
+  converged: boolean;
+  bases: number[][];
+  activations: number[][];
+}
 
 export class BounceApp {
   private terminal: Terminal;
   private fitAddon: FitAddon;
-  private audioContext: AudioContext;
-  private waveformVisualizer: WaveformVisualizer | null = null;
+  private audioManager: AudioManager;
+  public waveformVisualizer: WaveformVisualizer | null = null;
   private commandBuffer: string = '';
   private cursorPosition: number = 0; // Position within commandBuffer
   private commandHistory: string[] = [];
@@ -50,16 +78,22 @@ export class BounceApp {
 
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
-    this.audioContext = new AudioContext();
+    this.audioManager = new AudioManager();
 
     this.setupEventHandlers();
     this.loadHistoryFromStorage().catch(err => {
       console.error('Failed to load history:', err);
     });
 
+    // Listen for NMF overlay events
+    window.electron.onOverlayNMF((data) => {
+      this.handleNMFOverlay(data);
+    });
+
     // Expose terminal and executeCommand for testing
-    (window as any).__bounceTerminal = this.terminal;
-    (window as any).__bounceExecuteCommand = (cmd: string) => {
+    const testWindow = window as Window & { __bounceTerminal?: Terminal; __bounceExecuteCommand?: (cmd: string) => void };
+    testWindow.__bounceTerminal = this.terminal;
+    testWindow.__bounceExecuteCommand = (cmd: string) => {
       this.commandBuffer = cmd;
       this.executeCommand(cmd);
     };
@@ -87,7 +121,7 @@ export class BounceApp {
       this.fitAddon.fit();
     });
 
-    this.audioContext.setPlaybackUpdateCallback((position) => {
+    this.audioManager.setPlaybackUpdateCallback((position) => {
       this.updatePlaybackCursor(position);
     });
   }
@@ -357,7 +391,7 @@ export class BounceApp {
         return;
       }
 
-      const result = await this.audioContext.evaluate(trimmed);
+      const result = await this.audioManager.evaluate(trimmed);
       
       if (result !== undefined) {
         if (typeof result === 'object' && result !== null) {
@@ -367,7 +401,7 @@ export class BounceApp {
         }
       }
 
-      if (this.audioContext.getCurrentAudio()) {
+      if (this.audioManager.getCurrentAudio()) {
         this.updateWaveformVisualization();
       }
     } catch (error) {
@@ -380,6 +414,7 @@ export class BounceApp {
     if (!parts) return false;
 
     const { name, args } = parts;
+    await window.electron.debugLog('info', '[App] handleBuiltInCommand processing', { name, args });
 
     switch (name) {
       case 'display':
@@ -407,11 +442,26 @@ export class BounceApp {
         return true;
       
       case 'clear':
+        window.electron.debugLog('info', '[App] Clear command executing', { hasVisualizer: !!this.waveformVisualizer });
         this.terminal.clear();
+        // Also clear waveform visualization
+        if (this.waveformVisualizer) {
+          window.electron.debugLog('info', '[App] Clearing waveform visualizer');
+          this.waveformVisualizer = null;
+          const container = document.getElementById('waveform-container');
+          if (container) {
+            container.style.display = 'none';
+          }
+        }
+        window.electron.debugLog('info', '[App] Clear command complete', { hasVisualizer: !!this.waveformVisualizer });
         return true;
       
       case 'analyze':
         await this.handleAnalyzeCommand(args);
+        return true;
+      
+      case 'analyze-nmf':
+        await this.handleAnalyzeNmfCommand(args);
         return true;
       
       case 'slice':
@@ -424,6 +474,10 @@ export class BounceApp {
       
       case 'play-slice':
         await this.handlePlaySliceCommand(args);
+        return true;
+      
+      case 'visualize-nmf':
+        await this.handleVisualizeNmfCommand(args);
         return true;
       
       default:
@@ -455,43 +509,49 @@ export class BounceApp {
 
   private async handleDisplayCommand(args: string[]): Promise<void> {
     if (args.length === 0) {
-      this.terminal.writeln('\x1b[31mError: display requires a file path\x1b[0m');
-      this.terminal.writeln('Usage: display "path/to/audio/file"');
+      this.terminal.writeln('\x1b[31mError: display requires a file path or hash\x1b[0m');
+      this.terminal.writeln('Usage: display "path/to/audio/file" or display <hash>');
       return;
     }
 
-    const filePath = args[0];
+    const filePathOrHash = args[0];
 
-    const supportedExtensions = ['.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.opus'];
-    const ext = filePath.toLowerCase().substring(filePath.lastIndexOf('.'));
+    // Check if it's a hash (8+ hex characters without path separators)
+    const isHash = /^[0-9a-f]{8,}$/i.test(filePathOrHash) && !filePathOrHash.includes('/') && !filePathOrHash.includes('\\');
     
-    if (!supportedExtensions.includes(ext)) {
-      this.terminal.writeln('\x1b[31mError: unsupported file format\x1b[0m');
-      this.terminal.writeln('Supported formats: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
-      return;
+    if (!isHash) {
+      // It's a file path, validate extension
+      const supportedExtensions = ['.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.opus'];
+      const ext = filePathOrHash.toLowerCase().substring(filePathOrHash.lastIndexOf('.'));
+      
+      if (!supportedExtensions.includes(ext)) {
+        this.terminal.writeln('\x1b[31mError: unsupported file format\x1b[0m');
+        this.terminal.writeln('Supported formats: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS');
+        return;
+      }
     }
 
     try {
-      const audioData = await window.electron.readAudioFile(filePath);
+      const audioData = await window.electron.readAudioFile(filePathOrHash);
       
       const audio = {
         audioData: audioData.channelData,
         sampleRate: audioData.sampleRate,
         duration: audioData.duration,
-        filePath: filePath,
+        filePath: filePathOrHash,
         hash: audioData.hash,
         visualize: () => 'Visualization updated',
-        analyzeOnsetSlice: async (options?: any) => {
+        analyzeOnsetSlice: async (options?: OnsetSliceOptions) => {
           const slices = await window.electron.analyzeOnsetSlice(audioData.channelData, options);
           return { slices, visualize: () => 'Slice markers updated' };
         }
       };
 
-      this.audioContext.setCurrentAudio(audio);
+      this.audioManager.setCurrentAudio(audio);
       this.updateWaveformVisualization();
 
       const shortHash = audioData.hash.substring(0, 8);
-      this.terminal.writeln(`\x1b[32mLoaded: ${filePath}\x1b[0m`);
+      this.terminal.writeln(`\x1b[32mLoaded: ${audioData.filePath}\x1b[0m`);
       this.terminal.writeln(`Duration: ${audioData.duration.toFixed(2)}s, Sample Rate: ${audioData.sampleRate}Hz`);
       this.terminal.writeln(`Hash: ${shortHash}`);
     } catch (error) {
@@ -501,38 +561,41 @@ export class BounceApp {
 
   private async handlePlayCommand(args: string[]): Promise<void> {
     if (args.length === 0) {
-      this.terminal.writeln('\x1b[31mError: play requires a file path\x1b[0m');
-      this.terminal.writeln('Usage: play "path/to/audio/file"');
+      this.terminal.writeln('\x1b[31mError: play requires a file path or hash\x1b[0m');
+      this.terminal.writeln('Usage: play "path/to/audio/file" or play <hash>');
       return;
     }
 
-    const filePath = args[0];
-    const currentAudio = this.audioContext.getCurrentAudio();
+    const filePathOrHash = args[0];
+    const currentAudio = this.audioManager.getCurrentAudio();
 
-    if (currentAudio && currentAudio.filePath === filePath) {
+    // If already loaded, just play it
+    if (currentAudio && (currentAudio.filePath === filePathOrHash || currentAudio.hash?.startsWith(filePathOrHash))) {
       try {
-        await this.audioContext.playAudio(currentAudio.audioData, currentAudio.sampleRate);
-        this.terminal.writeln(`\x1b[32mPlaying: ${filePath}\x1b[0m`);
+        await this.audioManager.playAudio(currentAudio.audioData, currentAudio.sampleRate);
+        this.terminal.writeln(`\x1b[32mPlaying: ${currentAudio.hash?.substring(0, 8) || filePathOrHash}\x1b[0m`);
       } catch (error) {
         this.terminal.writeln(`\x1b[31mError playing audio: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
       }
-    } else {
-      await this.handleDisplayCommand(args);
-      
-      const audio = this.audioContext.getCurrentAudio();
-      if (audio) {
-        try {
-          await this.audioContext.playAudio(audio.audioData, audio.sampleRate);
-          this.terminal.writeln(`\x1b[32mPlaying: ${filePath}\x1b[0m`);
-        } catch (error) {
-          this.terminal.writeln(`\x1b[31mError playing audio: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
-        }
+      return;
+    }
+
+    // Otherwise load and play
+    await this.handleDisplayCommand(args);
+    
+    const audio = this.audioManager.getCurrentAudio();
+    if (audio) {
+      try {
+        await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
+        this.terminal.writeln(`\x1b[32mPlaying: ${audio.hash?.substring(0, 8) || filePathOrHash}\x1b[0m`);
+      } catch (error) {
+        this.terminal.writeln(`\x1b[31mError playing audio: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
       }
     }
   }
 
   private handleStopCommand(): void {
-    this.audioContext.stopAudio();
+    this.audioManager.stopAudio();
     this.terminal.writeln('\x1b[32mPlayback stopped\x1b[0m');
   }
 
@@ -579,9 +642,48 @@ export class BounceApp {
         await this.handleOnsetSliceCommand(filePath, args.slice(2));
         break;
       
+      case 'nmf':
+        await this.handleNMFCommandNew(filePath, args.slice(2));
+        break;
+      
       default:
         this.terminal.writeln(`\x1b[31mUnknown analysis type: ${subcommand}\x1b[0m`);
-        this.terminal.writeln('Available: onset-slice');
+        this.terminal.writeln('Available: onset-slice, nmf');
+    }
+  }
+
+  private async handleAnalyzeNmfCommand(args: string[]): Promise<void> {
+    if (args.length < 1) {
+      this.terminal.writeln('\x1b[31mError: analyze-nmf requires an argument\x1b[0m');
+      this.terminal.writeln('Usage: analyze-nmf <sample-hash> [options]');
+      this.terminal.writeln('Options:');
+      this.terminal.writeln('  --components <N>  Number of components (default: 10)');
+      this.terminal.writeln('  --iterations <N>  Number of iterations (default: 100)');
+      this.terminal.writeln('  --fft-size <N>    FFT size (default: 2048)');
+      return;
+    }
+
+    const sampleHash = args[0];
+    window.electron.debugLog('info', '[AnalyzeNMF] Starting analysis', { sampleHash, args });
+
+    try {
+      // Call the main process analyze-nmf command (stores feature in database)
+      const result = await window.electron.analyzeNMF(args);
+
+      if (result.success) {
+        this.terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+
+        // Trigger visualization overlay on the waveform
+        window.electron.debugLog('info', '[AnalyzeNMF] Triggering visualization', { sampleHash });
+        await window.electron.visualizeNMF(sampleHash);
+      } else {
+        this.terminal.writeln(`\x1b[31m${result.message}\x1b[0m`);
+      }
+    } catch (error) {
+      window.electron.debugLog('error', '[AnalyzeNMF] Error', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      this.terminal.writeln(`\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
     }
   }
 
@@ -590,13 +692,13 @@ export class BounceApp {
       window.electron.debugLog('info', '[OnsetSlice] Starting analysis', { filePath });
       
       // Load audio if not already loaded
-      const currentAudio = this.audioContext.getCurrentAudio();
+      const currentAudio = this.audioManager.getCurrentAudio();
       if (!currentAudio || currentAudio.filePath !== filePath) {
         window.electron.debugLog('info', '[OnsetSlice] Loading audio file', { filePath });
         await this.handleDisplayCommand([filePath]);
       }
 
-      const audio = this.audioContext.getCurrentAudio();
+      const audio = this.audioManager.getCurrentAudio();
       if (!audio || !audio.hash) {
         this.terminal.writeln('\x1b[31mFailed to load audio file\x1b[0m');
         window.electron.debugLog('error', '[OnsetSlice] Failed to load audio', { filePath });
@@ -625,7 +727,7 @@ export class BounceApp {
       window.electron.debugLog('info', '[OnsetSlice] Feature stored', { featureId });
 
       // Store slices in audio context
-      this.audioContext.setCurrentSlices(slices);
+      this.audioManager.setCurrentSlices(slices);
       
       // Redraw waveform with onset markers
       this.updateWaveformVisualization();
@@ -648,8 +750,8 @@ export class BounceApp {
     }
   }
 
-  private parseOnsetSliceOptions(args: string[]): any {
-    const options: any = {};
+  private parseOnsetSliceOptions(args: string[]): OnsetSliceOptions {
+    const options: OnsetSliceOptions = {};
     
     for (let i = 0; i < args.length; i += 2) {
       const key = args[i];
@@ -667,8 +769,124 @@ export class BounceApp {
         case '--filter-size':
           options.filterSize = parseInt(value);
           break;
-        case '--window-size':
-          options.windowSize = parseInt(value);
+      }
+    }
+
+    return options;
+  }
+
+  private async handleNMFCommandNew(sampleHashOrPath: string, optionArgs: string[]): Promise<void> {
+    try {
+      window.electron.debugLog('info', '[NMF] Starting analysis', { input: sampleHashOrPath });
+      
+      // Build args array: [sampleHash, ...options]
+      const args = [sampleHashOrPath, ...optionArgs];
+      
+      // Call main process analyze-nmf command
+      const result = await window.electron.analyzeNMF(args);
+      
+      if (result.success) {
+        this.terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+      } else {
+        this.terminal.writeln(`\x1b[31m${result.message}\x1b[0m`);
+      }
+      
+    } catch (error) {
+      window.electron.debugLog('error', '[NMF] Error in analysis', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      this.terminal.writeln(`\x1b[31mError performing NMF: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private async handleNMFCommand(filePath: string, optionArgs: string[]): Promise<void> {
+    try {
+      window.electron.debugLog('info', '[NMF] Starting analysis', { filePath });
+      
+      // Load audio if not already loaded
+      const currentAudio = this.audioManager.getCurrentAudio();
+      if (!currentAudio || currentAudio.filePath !== filePath) {
+        window.electron.debugLog('info', '[NMF] Loading audio file', { filePath });
+        await this.handleDisplayCommand([filePath]);
+      }
+
+      const audio = this.audioManager.getCurrentAudio();
+      if (!audio || !audio.hash) {
+        this.terminal.writeln('\x1b[31mFailed to load audio file\x1b[0m');
+        window.electron.debugLog('error', '[NMF] Failed to load audio', { filePath });
+        return;
+      }
+
+      window.electron.debugLog('info', '[NMF] Audio loaded, analyzing', { 
+        samples: audio.audioData.length,
+        sampleRate: audio.sampleRate,
+        hash: audio.hash
+      });
+      this.terminal.writeln('\x1b[36mPerforming NMF decomposition...\x1b[0m');
+
+      // Parse options from command line if provided
+      const options = this.parseNMFOptions(optionArgs);
+      const result = await window.electron.analyzeBufNMF(audio.audioData, audio.sampleRate, options);
+
+      window.electron.debugLog('info', '[NMF] Analysis complete', { 
+        components: result.components,
+        iterations: result.iterations,
+        converged: result.converged,
+        options 
+      });
+
+      // Store feature in database - pass as array of numbers (flattened)
+      const flattenedData = [
+        result.components,
+        result.iterations,
+        result.converged ? 1 : 0,
+        ...result.bases.flat(),
+        ...result.activations.flat()
+      ];
+      const featureId = await window.electron.storeFeature(audio.hash, 'nmf', flattenedData, { ...options, components: result.components });
+      
+      window.electron.debugLog('info', '[NMF] Feature stored', { featureId });
+
+      this.terminal.writeln(`\x1b[32mNMF decomposition complete\x1b[0m`);
+      this.terminal.writeln(`Components: ${result.components}`);
+      this.terminal.writeln(`Iterations: ${result.iterations}`);
+      this.terminal.writeln(`Converged: ${result.converged ? 'Yes' : 'No'}`);
+      this.terminal.writeln(`Feature ID: ${featureId}`);
+      
+      // Check if this was a duplicate
+      const feature = await window.electron.getMostRecentFeature(audio.hash, 'nmf');
+      if (feature && feature.id === featureId) {
+        const shortHash = feature.feature_hash.substring(0, 8);
+        this.terminal.writeln(`Feature Hash: ${shortHash}`);
+      }
+
+      // Create visualization
+      window.electron.debugLog('info', '[NMF] Creating visualization');
+      await this.visualizeNMF(result, audio.sampleRate);
+
+    } catch (error) {
+      window.electron.debugLog('error', '[NMF] Error in analysis', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      this.terminal.writeln(`\x1b[31mError performing NMF: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private parseNMFOptions(args: string[]): BufNMFOptions {
+    const options: BufNMFOptions = {};
+    
+    for (let i = 0; i < args.length; i += 2) {
+      const key = args[i];
+      const value = args[i + 1];
+      
+      if (!value) continue;
+
+      switch (key) {
+        case '--components':
+          options.components = parseInt(value);
+          break;
+        case '--iterations':
+          options.iterations = parseInt(value);
           break;
         case '--fft-size':
           options.fftSize = parseInt(value);
@@ -676,8 +894,11 @@ export class BounceApp {
         case '--hop-size':
           options.hopSize = parseInt(value);
           break;
-        case '--function':
-          options.function = parseInt(value);
+        case '--window-size':
+          options.windowSize = parseInt(value);
+          break;
+        case '--seed':
+          options.seed = parseInt(value);
           break;
       }
     }
@@ -685,12 +906,56 @@ export class BounceApp {
     return options;
   }
 
-  private async handleSliceCommand(args: string[]): Promise<void> {
+  private async visualizeNMF(result: BufNMFResult, sampleRate: number): Promise<void> {
+    try {
+      // Get or create visualization manager
+      const vizContainer = document.getElementById('visualizations-container');
+      if (!vizContainer) {
+        window.electron.debugLog('error', '[NMF] Visualization container not found');
+        return;
+      }
+
+      const vizManager = new VisualizationManager('visualizations-container');
+      
+      window.electron.debugLog('info', '[NMF] Adding visualization panel');
+      
+      const viz = vizManager.addVisualization('NMF Decomposition', 400);
+      const canvas = viz.canvas;
+      
+      if (!canvas) {
+        window.electron.debugLog('error', '[NMF] Failed to get canvas', { vizId: viz.id });
+        return;
+      }
+
+      window.electron.debugLog('info', '[NMF] Creating NMF visualizer', { 
+        vizId: viz.id,
+        components: result.components,
+        basesCount: result.bases.length,
+        activationsCount: result.activations.length
+      });
+
+      // Create visualizer
+      new NMFVisualizer(canvas, {
+        bases: result.bases,
+        activations: result.activations,
+        sampleRate: sampleRate,
+        components: result.components,
+      });
+
+      window.electron.debugLog('info', '[NMF] Visualization complete');
+    } catch (error) {
+      window.electron.debugLog('error', '[NMF] Visualization error', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  private async handleSliceCommand(_args: string[]): Promise<void> {
     try {
       window.electron.debugLog('info', '[Slice] Starting slice creation');
 
       // Get most recent audio
-      const audio = this.audioContext.getCurrentAudio();
+      const audio = this.audioManager.getCurrentAudio();
       if (!audio || !audio.hash) {
         this.terminal.writeln('\x1b[31mNo audio loaded. Use "play" or "display" first.\x1b[0m');
         return;
@@ -795,19 +1060,19 @@ export class BounceApp {
       };
 
       // Set as current audio (this clears any previous onset slices)
-      this.audioContext.setCurrentAudio(audio);
+      this.audioManager.setCurrentAudio(audio);
       
       window.electron.debugLog('debug', '[PlaySlice] Before clearSlices', {
-        slicesPresent: !!this.audioContext.getCurrentSlices()
+        slicesPresent: !!this.audioManager.getCurrentSlices()
       });
       
-      this.audioContext.clearSlices(); // Explicitly clear slices
+      this.audioManager.clearSlices(); // Explicitly clear slices
       
       window.electron.debugLog('debug', '[PlaySlice] After clearSlices', {
-        slicesPresent: !!this.audioContext.getCurrentSlices()
+        slicesPresent: !!this.audioManager.getCurrentSlices()
       });
       
-      await this.audioContext.playAudio(audio.audioData, audio.sampleRate);
+      await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
 
       // Update waveform visualization (without slice markers)
       this.updateWaveformVisualization();
@@ -823,6 +1088,58 @@ export class BounceApp {
       });
       this.terminal.writeln(`\x1b[31mError playing slice: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
     }
+  }
+
+  private async handleVisualizeNmfCommand(args: string[]): Promise<void> {
+    await window.electron.debugLog('info', '[App] visualize-nmf command called', { args });
+    if (args.length === 0) {
+      this.terminal.writeln('\x1b[31mUsage: visualize-nmf <sample-hash>\x1b[0m');
+      return;
+    }
+
+    const hash = args[0];
+    
+    window.electron.debugLog('info', '[Renderer] handleVisualizeNmfCommand called', { hash });
+
+    try {
+      window.electron.debugLog('info', '[Renderer] Calling visualizeNMF IPC', { hash });
+      await window.electron.visualizeNMF(hash);
+      window.electron.debugLog('info', '[Renderer] visualizeNMF IPC completed', { hash });
+      this.terminal.writeln(`\x1b[32mNMF visualization overlaid for sample ${hash}\x1b[0m`);
+    } catch (error) {
+      window.electron.debugLog('error', '[Renderer] visualizeNMF IPC failed', { hash, error: String(error) });
+      this.terminal.writeln(`\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`);
+    }
+  }
+
+  private handleNMFOverlay(data: { sampleHash: string; nmfData: { components: number; basis: number[][]; activations: number[][] }; featureHash?: string }): void {
+    window.electron.debugLog('info', '[NMFOverlay] handleNMFOverlay called', { 
+      hasVisualizer: !!this.waveformVisualizer,
+      sampleHash: data.sampleHash.substring(0, 8) 
+    });
+    
+    if (!this.waveformVisualizer) {
+      window.electron.debugLog('warn', '[NMFOverlay] No waveform currently displayed');
+      this.terminal.writeln('\x1b[31mNo waveform currently displayed. Play a sample first.\x1b[0m');
+      this.printPrompt();
+      return;
+    }
+
+    window.electron.debugLog('info', '[NMFOverlay] Overlaying NMF visualization', {
+      sampleHash: data.sampleHash.substring(0, 8),
+      components: data.nmfData.components
+    });
+
+    // Set NMF data on waveform visualizer - it will draw both waveform and overlay
+    this.waveformVisualizer.setNMFOverlay({
+      components: data.nmfData.components,
+      bases: data.nmfData.basis,
+      activations: data.nmfData.activations
+    });
+    
+    const featureHashShort = data.featureHash ? data.featureHash.substring(0, 8) : 'unknown';
+    this.terminal.writeln(`\x1b[32mNMF visualization overlaid (${data.nmfData.components} components, feature: ${featureHashShort})\x1b[0m`);
+    this.printPrompt();
   }
 
   private async handleListCommand(args: string[]): Promise<void> {
@@ -1039,6 +1356,17 @@ export class BounceApp {
         this.terminal.writeln('\x1b[33mExample:\x1b[0m');
         this.terminal.writeln('  analyze onset-slice "audio.wav"');
         this.terminal.writeln('  analyze onset-slice "audio.wav" --threshold 0.3 --min-slice-length 4410');
+        this.terminal.writeln('');
+        this.terminal.writeln('  analyze nmf "audio.wav"');
+        this.terminal.writeln('  analyze nmf "audio.wav" --components 5 --iterations 200');
+        this.terminal.writeln('');
+        this.terminal.writeln('\x1b[33mNMF Options:\x1b[0m');
+        this.terminal.writeln('  --components <n>           Number of NMF components (default: 1)');
+        this.terminal.writeln('  --iterations <n>           Number of iterations (default: 100)');
+        this.terminal.writeln('  --fft-size <n>             FFT size (default: 1024)');
+        this.terminal.writeln('  --hop-size <n>             Hop size (default: -1, auto)');
+        this.terminal.writeln('  --window-size <n>          Window size (default: -1, auto)');
+        this.terminal.writeln('  --seed <n>                 Random seed (default: -1, random)');
         break;
 
       case 'slice':
@@ -1140,7 +1468,7 @@ export class BounceApp {
   }
 
   private updateWaveformVisualization(): void {
-    const audio = this.audioContext.getCurrentAudio();
+    const audio = this.audioManager.getCurrentAudio();
     if (!audio) return;
 
     const container = document.getElementById('waveform-container');
@@ -1153,8 +1481,8 @@ export class BounceApp {
     }
 
     if (this.waveformVisualizer) {
-      this.waveformVisualizer.setAudioContext(this.audioContext);
-      const slices = this.audioContext.getCurrentSlices();
+      this.waveformVisualizer.setAudioContext(this.audioManager);
+      const slices = this.audioManager.getCurrentSlices();
       window.electron.debugLog('debug', '[App] updateWaveformVisualization', {
         audioDataLength: audio.audioData.length,
         slicesCount: slices?.length || 0,
@@ -1165,7 +1493,7 @@ export class BounceApp {
   }
 
   private updatePlaybackCursor(position: number): void {
-    const audio = this.audioContext.getCurrentAudio();
+    const audio = this.audioManager.getCurrentAudio();
     if (!audio || !this.waveformVisualizer) return;
 
     this.waveformVisualizer.updatePlaybackCursor(position, audio.audioData.length);

@@ -1,3 +1,4 @@
+https://marginalunit.sentry.io/issues/7277025580/
 # Bounce
 
 Audio editor built with Electron and FluCoMa.
@@ -23,6 +24,19 @@ npm run build:electron
 
 # Run the Electron app
 npm run dev:electron
+```
+
+## Testing
+
+```bash
+# Run unit tests
+npm test
+
+# Run Playwright e2e tests
+npm run test:e2e
+
+# Run full GitHub workflow locally (all tests)
+npm run test:workflow
 ```
 
 ## Prerequisites

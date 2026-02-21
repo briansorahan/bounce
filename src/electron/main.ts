@@ -2,11 +2,12 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { OnsetSlice } from '../index';
+import { OnsetSlice, BufNMF } from '../index';
 import decode from 'audio-decode';
 import { DatabaseManager } from './database';
+import { debugLog, setDatabaseManager } from './logger';
 
-let dbManager: DatabaseManager | null = null;
+let dbManager: DatabaseManager | undefined = undefined;
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -23,11 +24,33 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
 
-ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
+ipcMain.handle('read-audio-file', async (_event, filePathOrHash: string) => {
   try {
-    let resolvedPath = filePath;
+    // Check if it's a hash (8+ hex characters without path separators)
+    const isHash = /^[0-9a-f]{8,}$/i.test(filePathOrHash) && !filePathOrHash.includes('/') && !filePathOrHash.includes('\\');
+    
+    if (isHash && dbManager) {
+      // Look up in database by hash prefix
+      debugLog('info', '[AudioLoader] Looking up sample by hash', { hash: filePathOrHash });
+      const sample = dbManager.getSampleByHash(filePathOrHash);
+      debugLog('info', '[AudioLoader] Sample lookup result', { found: !!sample });
+      if (sample) {
+        const audioData = new Float32Array(sample.audio_data.buffer);
+        return {
+          channelData: Array.from(audioData),
+          sampleRate: sample.sample_rate,
+          duration: sample.duration,
+          hash: sample.hash,
+          filePath: sample.file_path
+        };
+      }
+      // If not found, fall through to treat as file path
+      debugLog('info', '[AudioLoader] Hash not found, treating as file path', { input: filePathOrHash });
+    }
 
-    if (!path.isAbsolute(filePath)) {
+    let resolvedPath = filePathOrHash;
+
+    if (!path.isAbsolute(filePathOrHash)) {
       const result = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
@@ -77,7 +100,29 @@ ipcMain.handle('read-audio-file', async (_event, filePath: string) => {
   }
 });
 
-ipcMain.handle('analyze-onset-slice', async (_event, audioDataArray: number[], options?: any) => {
+interface OnsetSliceOptions {
+  threshold?: number;
+  minSliceLength?: number;
+  filterSize?: number;
+  frameDelta?: number;
+  metric?: number;
+}
+
+interface BufNMFOptions {
+  components?: number;
+  iterations?: number;
+  fftSize?: number;
+  hopSize?: number;
+  windowSize?: number;
+  seed?: number;
+}
+
+interface FeatureOptions {
+  threshold?: number;
+  [key: string]: unknown;
+}
+
+ipcMain.handle('analyze-onset-slice', async (_event, audioDataArray: number[], options?: OnsetSliceOptions) => {
   try {
     const audioData = new Float32Array(audioDataArray);
     
@@ -87,6 +132,19 @@ ipcMain.handle('analyze-onset-slice', async (_event, audioDataArray: number[], o
     return Array.from(slices);
   } catch (error) {
     throw new Error(`Failed to analyze onset slices: ${error instanceof Error ? error.message : String(error)}`);
+  }
+});
+
+ipcMain.handle('analyze-buf-nmf', async (_event, audioDataArray: number[], sampleRate: number, options?: BufNMFOptions) => {
+  try {
+    const audioData = new Float32Array(audioDataArray);
+    
+    const nmf = new BufNMF(options || {});
+    const result = nmf.process(audioData, sampleRate);
+
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to perform NMF: ${error instanceof Error ? error.message : String(error)}`);
   }
 });
 
@@ -128,7 +186,7 @@ ipcMain.handle('dedupe-command-history', async () => {
   }
 });
 
-ipcMain.handle('debug-log', async (_event, level: string, message: string, data?: any) => {
+ipcMain.handle('debug-log', async (_event, level: string, message: string, data?: Record<string, unknown>) => {
   try {
     if (dbManager) {
       dbManager.addDebugLog(level, message, data);
@@ -157,7 +215,7 @@ ipcMain.handle('clear-debug-logs', async () => {
   }
 });
 
-ipcMain.handle('store-feature', async (_event, sampleHash: string, featureType: string, featureData: number[], options?: any) => {
+ipcMain.handle('store-feature', async (_event, sampleHash: string, featureType: string, featureData: number[], options?: FeatureOptions) => {
   try {
     if (!dbManager) {
       throw new Error('Database not initialized');
@@ -265,8 +323,55 @@ ipcMain.handle('list-slices-summary', async () => {
   }
 });
 
+ipcMain.handle('analyze-nmf', async (_event, args: string[]) => {
+  try {
+    const { analyzeNmfCommand } = await import('./commands/analyze-nmf.js');
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return await analyzeNmfCommand.execute(args, mainWindow, dbManager);
+  } catch (error) {
+    console.error('Failed to execute analyze-nmf:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('visualize-nmf', async (_event, sampleHash: string) => {
+  try {
+    const visualizeNmfModule = await import('./commands/visualize-nmf.js');
+    const visualizeNmfCommand = visualizeNmfModule.visualizeNmfCommand;
+    
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return await visualizeNmfCommand.execute([sampleHash], mainWindow, dbManager);
+  } catch (error) {
+    console.error('Failed to execute visualize-nmf:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('send-command', async (_event, commandName: string, args: string[]) => {
+  try {
+    const visualizeNmfModule = await import('./commands/visualize-nmf.js');
+    const visualizeNmfCommand = visualizeNmfModule.visualizeNmfCommand;
+    
+    const commands: Record<string, typeof visualizeNmfCommand> = {
+      'visualize-nmf': visualizeNmfCommand
+    };
+    
+    const command = commands[commandName];
+    if (!command) {
+      return `Unknown command: ${commandName}`;
+    }
+    
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return await command.execute(args, mainWindow, dbManager);
+  } catch (error) {
+    console.error(`Failed to execute command ${commandName}:`, error);
+    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+  }
+});
+
 app.whenReady().then(() => {
   dbManager = new DatabaseManager();
+  setDatabaseManager(dbManager);
   createWindow();
 
   app.on('activate', () => {

@@ -1,3 +1,9 @@
+export interface NMFOverlayData {
+  components: number;
+  bases: Float32Array[] | number[][];
+  activations: Float32Array[] | number[][];
+}
+
 export class WaveformVisualizer {
   private waveformCanvas: HTMLCanvasElement;
   private waveformCtx: CanvasRenderingContext2D;
@@ -5,6 +11,7 @@ export class WaveformVisualizer {
   private currentAudioData: Float32Array | null = null;
   private currentSampleRate: number = 0;
   private currentSlices: number[] | null = null;
+  private currentNMFData: NMFOverlayData | null = null;
 
   constructor(waveformCanvasId: string) {
     this.waveformCanvas = document.getElementById(waveformCanvasId) as HTMLCanvasElement;
@@ -18,6 +25,12 @@ export class WaveformVisualizer {
     this.waveformCtx = waveformCtx;
 
     this.setupCanvas();
+  }
+
+  private debugLog(level: string, message: string, data?: Record<string, unknown>): void {
+    if (window.electron?.debugLog) {
+      window.electron.debugLog(level, message, data);
+    }
   }
 
   private setupCanvas(): void {
@@ -39,19 +52,25 @@ export class WaveformVisualizer {
     window.addEventListener('resize', resize);
   }
 
+  setNMFOverlay(nmfData: NMFOverlayData | null): void {
+    this.currentNMFData = nmfData;
+    // Redraw to show the overlay
+    if (this.currentAudioData && this.currentSampleRate) {
+      this.drawWaveform(this.currentAudioData, this.currentSampleRate, this.currentSlices || undefined);
+    }
+  }
+
   drawWaveform(audioData: Float32Array, sampleRate: number, slices?: number[]): void {
     this.currentAudioData = audioData;
     this.currentSampleRate = sampleRate;
     this.currentSlices = slices || null;
     
-    if ((window as any).electron?.debugLog) {
-      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawWaveform called', {
-        audioDataLength: audioData.length,
-        sampleRate,
-        slicesCount: this.currentSlices?.length || 0,
-        slicesPresent: !!this.currentSlices
-      });
-    }
+    this.debugLog('debug', '[WaveformVisualizer] drawWaveform called', {
+      audioDataLength: audioData.length,
+      sampleRate,
+      slicesCount: this.currentSlices?.length || 0,
+      slicesPresent: !!this.currentSlices
+    });
     
     const width = this.waveformCanvas.width;
     const height = this.waveformCanvas.height;
@@ -123,7 +142,88 @@ export class WaveformVisualizer {
       ctx.fillText(`Avg Interval: ${avgInterval.toFixed(3)}s`, 10, 80);
     }
 
+    // Draw NMF overlay if present
+    if (this.currentNMFData) {
+      this.drawNMFOverlay();
+    }
+
     this.drawPlaybackCursor(audioData.length);
+  }
+
+  private drawNMFOverlay(): void {
+    if (!this.currentNMFData) return;
+
+    const width = this.waveformCanvas.width;
+    const height = this.waveformCanvas.height;
+    const ctx = this.waveformCtx;
+    const { activations, components } = this.currentNMFData;
+
+    if (!activations || activations.length === 0) return;
+
+    this.debugLog('debug', '[WaveformVisualizer] Drawing NMF overlay', {
+      components,
+      activationsLength: activations.length
+    });
+
+    // Draw each component's activation as a colored line overlay
+    const colors = [
+      'rgba(255, 99, 132, 0.7)',   // red
+      'rgba(54, 162, 235, 0.7)',   // blue
+      'rgba(255, 206, 86, 0.7)',   // yellow
+      'rgba(75, 192, 192, 0.7)',   // teal
+      'rgba(153, 102, 255, 0.7)',  // purple
+      'rgba(255, 159, 64, 0.7)',   // orange
+      'rgba(199, 199, 199, 0.7)',  // gray
+      'rgba(83, 102, 255, 0.7)',   // indigo
+      'rgba(255, 99, 255, 0.7)',   // pink
+      'rgba(99, 255, 132, 0.7)',   // green
+    ];
+
+    for (let c = 0; c < activations.length; c++) {
+      const activation = activations[c];
+      if (!activation || activation.length === 0) continue;
+
+      // Find max for normalization
+      let maxVal = 0;
+      for (let i = 0; i < activation.length; i++) {
+        const val = activation[i];
+        if (val > maxVal) maxVal = val;
+      }
+
+      if (maxVal === 0) continue;
+
+      ctx.strokeStyle = colors[c % colors.length];
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      const stepX = width / activation.length;
+      const baseY = height * 0.5; // Center line
+      const amplitude = height * 0.4; // Max amplitude
+
+      for (let i = 0; i < activation.length; i++) {
+        const x = i * stepX;
+        const normalized = activation[i] / maxVal;
+        const y = baseY - (normalized * amplitude);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+
+      ctx.stroke();
+    }
+
+    // Draw legend
+    ctx.font = '10px monospace';
+    const legendY = height - 10;
+    for (let c = 0; c < Math.min(activations.length, 10); c++) {
+      ctx.fillStyle = colors[c % colors.length];
+      ctx.fillRect(10 + c * 25, legendY - 8, 10, 10);
+      ctx.fillStyle = '#888888';
+      ctx.fillText(`${c + 1}`, 22 + c * 25, legendY);
+    }
   }
 
   private drawOnsetMarkers(slices: number[], totalSamples: number): void {
@@ -143,7 +243,7 @@ export class WaveformVisualizer {
     }
   }
 
-  updatePlaybackCursor(position: number, totalSamples: number): void {
+  updatePlaybackCursor(position: number, _totalSamples: number): void {
     this.playbackCursorPosition = position;
     
     if (this.currentAudioData && this.currentSampleRate) {
@@ -162,15 +262,13 @@ export class WaveformVisualizer {
 
     const x = (this.playbackCursorPosition / totalSamples) * width;
     
-    if ((window as any).electron?.debugLog) {
-      (window as any).electron.debugLog('debug', '[WaveformVisualizer] drawPlaybackCursor', {
-        position: this.playbackCursorPosition,
-        totalSamples,
-        x,
-        width,
-        ratio: this.playbackCursorPosition / totalSamples
-      });
-    }
+    this.debugLog('debug', '[WaveformVisualizer] drawPlaybackCursor', {
+      position: this.playbackCursorPosition,
+      totalSamples,
+      x,
+      width,
+      ratio: this.playbackCursorPosition / totalSamples
+    });
     
     // Don't draw cursor if it's beyond the canvas
     if (x < 0 || x > width) {
@@ -187,9 +285,13 @@ export class WaveformVisualizer {
     ctx.restore();
   }
 
-  private audioContext: any = null;
+  private storedAudioManager: unknown = null;
 
-  setAudioContext(audioContext: any): void {
-    this.audioContext = audioContext;
+  setAudioContext(audioManager: unknown): void {
+    this.storedAudioManager = audioManager;
+  }
+
+  getCanvas(): HTMLCanvasElement {
+    return this.waveformCanvas;
   }
 }
