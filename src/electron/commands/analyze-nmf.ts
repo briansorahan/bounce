@@ -117,8 +117,8 @@ Example:
 
       return {
         success: true,
-        message: `NMF analysis complete for sample ${sample.hash.substring(0, 8)}\n` +
-                `Components: ${components}, Iterations: ${iterations}\n` +
+        message: `NMF analysis complete for sample ${sample.hash.substring(0, 8)}\r\n` +
+                `Components: ${components}, Iterations: ${iterations}\r\n` +
                 `Feature hash: ${featureHash.substring(0, 8)}`
       };
 
