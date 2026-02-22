@@ -1,4 +1,3 @@
-https://marginalunit.sentry.io/issues/7277025580/
 # Bounce
 
 Audio editor built with Electron and FluCoMa.
