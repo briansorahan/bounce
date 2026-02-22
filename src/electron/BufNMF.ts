@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const flucoma = require('../../build/Release/flucoma_native.node');
+const flucoma = require("../../build/Release/flucoma_native.node");
 
 export interface BufNMFOptions {
   components?: number;

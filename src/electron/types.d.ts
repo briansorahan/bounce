@@ -5,23 +5,30 @@ export interface ElectronAPI {
     sampleRate: number;
     duration: number;
   }>;
-  analyzeOnsetSlice: (audioData: Float32Array, options?: {
-    function?: number;
-    threshold?: number;
-    minSliceLength?: number;
-    filterSize?: number;
-    windowSize?: number;
-    fftSize?: number;
-    hopSize?: number;
-  }) => Promise<number[]>;
-  analyzeBufNMF: (audioData: Float32Array, sampleRate: number, options?: {
-    components?: number;
-    iterations?: number;
-    fftSize?: number;
-    hopSize?: number;
-    windowSize?: number;
-    seed?: number;
-  }) => Promise<{
+  analyzeOnsetSlice: (
+    audioData: Float32Array,
+    options?: {
+      function?: number;
+      threshold?: number;
+      minSliceLength?: number;
+      filterSize?: number;
+      windowSize?: number;
+      fftSize?: number;
+      hopSize?: number;
+    },
+  ) => Promise<number[]>;
+  analyzeBufNMF: (
+    audioData: Float32Array,
+    sampleRate: number,
+    options?: {
+      components?: number;
+      iterations?: number;
+      fftSize?: number;
+      hopSize?: number;
+      windowSize?: number;
+      seed?: number;
+    },
+  ) => Promise<{
     components: number;
     iterations: number;
     converged: boolean;
