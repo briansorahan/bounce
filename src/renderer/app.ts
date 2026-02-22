@@ -486,12 +486,20 @@ export class BounceApp {
         await this.handleSliceCommand(args);
         return true;
 
+      case "sep":
+        await this.handleSepCommand(args);
+        return true;
+
       case "list":
         await this.handleListCommand(args);
         return true;
 
       case "play-slice":
         await this.handlePlaySliceCommand(args);
+        return true;
+
+      case "play-component":
+        await this.handlePlayComponentCommand(args);
         return true;
 
       case "visualize-nmf":
@@ -569,7 +577,18 @@ export class BounceApp {
     }
 
     try {
+      window.electron.debugLog("debug", "[Display] Calling readAudioFile", {
+        filePathOrHash,
+        isHash,
+      });
+
       const audioData = await window.electron.readAudioFile(filePathOrHash);
+
+      window.electron.debugLog("debug", "[Display] readAudioFile returned", {
+        hash: audioData.hash.substring(0, 8),
+        duration: audioData.duration,
+        dataLength: audioData.channelData.length,
+      });
 
       const audio = {
         audioData: audioData.channelData,
@@ -589,6 +608,11 @@ export class BounceApp {
 
       this.audioManager.setCurrentAudio(audio);
       this.updateWaveformVisualization();
+
+      window.electron.debugLog("debug", "[Display] Audio set and waveform updated", {
+        hash: audioData.hash.substring(0, 8),
+        audioDataLength: audio.audioData.length,
+      });
 
       const shortHash = audioData.hash.substring(0, 8);
       this.terminal.writeln(`\x1b[32mLoaded: ${audioData.filePath}\x1b[0m`);
@@ -616,11 +640,24 @@ export class BounceApp {
     const currentAudio = this.audioManager.getCurrentAudio();
 
     // If already loaded, just play it
-    if (
+    // Note: Check for exact hash match or file path, but exclude derivative hashes
+    // (components/slices have hashes like "hash-component-0" or "hash-slice-1")
+    const isExactMatch =
       currentAudio &&
       (currentAudio.filePath === filePathOrHash ||
-        currentAudio.hash?.startsWith(filePathOrHash))
-    ) {
+        (currentAudio.hash === filePathOrHash ||
+          (currentAudio.hash?.startsWith(filePathOrHash) &&
+            !currentAudio.hash.includes("-component-") &&
+            !currentAudio.hash.includes("-slice-"))));
+
+    window.electron.debugLog("debug", "[Play] Checking if audio is cached", {
+      filePathOrHash,
+      currentHash: currentAudio?.hash,
+      currentFilePath: currentAudio?.filePath,
+      isExactMatch,
+    });
+
+    if (isExactMatch) {
       try {
         await this.audioManager.playAudio(
           currentAudio.audioData,
@@ -638,9 +675,19 @@ export class BounceApp {
     }
 
     // Otherwise load and play
+    window.electron.debugLog("debug", "[Play] Loading audio via display command", {
+      filePathOrHash,
+    });
+
     await this.handleDisplayCommand(args);
 
     const audio = this.audioManager.getCurrentAudio();
+    window.electron.debugLog("debug", "[Play] Got audio from manager after display", {
+      hasAudio: !!audio,
+      hash: audio?.hash?.substring(0, 12),
+      dataLength: audio?.audioData.length,
+    });
+
     if (audio) {
       try {
         await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
@@ -755,6 +802,49 @@ export class BounceApp {
 
       if (result.success) {
         this.terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+
+        // Load the original sample before visualizing
+        window.electron.debugLog(
+          "info",
+          "[AnalyzeNMF] Loading original sample for visualization",
+          { sampleHash },
+        );
+
+        const sample = await window.electron.getSampleByHash(sampleHash);
+        if (sample) {
+          // Load the original sample audio into the audio manager
+          const audioData = new Float32Array(
+            sample.audio_data.buffer,
+            sample.audio_data.byteOffset,
+            sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+          );
+
+          const audio = {
+            audioData: audioData,
+            sampleRate: sample.sample_rate,
+            duration: sample.duration,
+            filePath: sample.file_path,
+            hash: sample.hash,
+            visualize: () => "Visualization available",
+            analyzeOnsetSlice: async () => ({
+              slices: [],
+              visualize: () => "Available",
+            }),
+          };
+
+          // Set as current audio (without playing)
+          this.audioManager.setCurrentAudio(audio);
+          this.audioManager.clearSlices();
+
+          // Update waveform visualization with original audio
+          this.updateWaveformVisualization();
+
+          window.electron.debugLog(
+            "info",
+            "[AnalyzeNMF] Original sample loaded for visualization",
+            { sampleHash: sample.hash.substring(0, 8) },
+          );
+        }
 
         // Trigger visualization overlay on the waveform
         window.electron.debugLog(
@@ -1226,7 +1316,7 @@ export class BounceApp {
         sampleRate: sample.sample_rate,
         duration: duration,
         filePath: `Slice ${sliceId} from ${sample.file_path}`,
-        hash: sample.hash,
+        hash: `${sample.hash}-slice-${sliceId}`,
         visualize: () => "Visualization not available for slices",
         analyzeOnsetSlice: async () => ({
           slices: [],
@@ -1270,6 +1360,201 @@ export class BounceApp {
     }
   }
 
+  private async handleSepCommand(args: string[]): Promise<void> {
+    await window.electron.debugLog(
+      "info",
+      "[App] sep command called",
+      { args },
+    );
+    if (args.length === 0) {
+      this.terminal.writeln(
+        "\x1b[31mUsage: sep <sample-hash> [options]\x1b[0m",
+      );
+      this.terminal.writeln(
+        "\x1b[33mRun 'analyze-nmf <sample-hash>' first\x1b[0m",
+      );
+      return;
+    }
+
+    try {
+      const result = await window.electron.sep(args);
+
+      if (result.success) {
+        this.terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+      } else {
+        this.terminal.writeln(`\x1b[31m${result.message}\x1b[0m`);
+      }
+    } catch (error) {
+      this.terminal.writeln(
+        `\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`,
+      );
+    }
+  }
+
+  private async handlePlayComponentCommand(args: string[]): Promise<void> {
+    if (args.length < 2) {
+      this.terminal.writeln(
+        "\x1b[31mUsage: play-component <sample-hash> <component-index>\x1b[0m",
+      );
+      return;
+    }
+
+    const sampleHash = args[0];
+    const componentIndex = parseInt(args[1]);
+    
+    if (isNaN(componentIndex)) {
+      this.terminal.writeln(
+        "\x1b[31mInvalid component index. Must be a number.\x1b[0m",
+      );
+      return;
+    }
+
+    try {
+      window.electron.debugLog("info", "[PlayComponent] Loading component", {
+        sampleHash,
+        componentIndex,
+      });
+
+      // Get sample
+      const sample = await window.electron.getSampleByHash(sampleHash);
+      if (!sample) {
+        this.terminal.writeln(`\x1b[31mSample ${sampleHash} not found\x1b[0m`);
+        return;
+      }
+
+      // Get NMF feature
+      const feature = await window.electron.getMostRecentFeature(
+        sample.hash,
+        "nmf",
+      );
+      if (!feature) {
+        this.terminal.writeln(
+          `\x1b[31mNo NMF analysis found for sample ${sampleHash}\x1b[0m`,
+        );
+        return;
+      }
+
+      // Parse NMF data to check component range
+      const nmfData = JSON.parse(feature.feature_data);
+      const numComponents = nmfData.bases.length;
+
+      if (componentIndex < 0 || componentIndex >= numComponents) {
+        this.terminal.writeln(
+          `\x1b[31mComponent index ${componentIndex} out of range (0-${numComponents - 1})\x1b[0m`,
+        );
+        return;
+      }
+
+      // Get feature ID
+      const featureRecord = await window.electron.getMostRecentFeature(
+        sample.hash,
+        "nmf",
+      );
+      
+      if (!featureRecord) {
+        this.terminal.writeln(
+          `\x1b[31mFeature record not found\x1b[0m`,
+        );
+        return;
+      }
+
+      // Get feature ID from the full record (need to query features table)
+      const features = await window.electron.listFeatures();
+      const matchingFeature = features.find(
+        (f) => f.feature_hash === featureRecord.feature_hash,
+      );
+
+      if (!matchingFeature) {
+        this.terminal.writeln(
+          `\x1b[31mCould not find feature ID\x1b[0m`,
+        );
+        return;
+      }
+
+      // Get component from database
+      const component = await window.electron.getComponentByIndex(
+        sample.hash,
+        matchingFeature.id,
+        componentIndex,
+      );
+
+      if (!component) {
+        this.terminal.writeln(
+          `\x1b[31mComponent ${componentIndex} not found. Run 'sep ${sampleHash}' first.\x1b[0m`,
+        );
+        return;
+      }
+
+      const componentAudioBuffer = component.audio_data as Buffer;
+      
+      if (!componentAudioBuffer || componentAudioBuffer.length === 0) {
+        this.terminal.writeln(
+          `\x1b[31mNo audio data for component ${componentIndex}. Run 'sep ${sampleHash}' to resynthesize.\x1b[0m`,
+        );
+        return;
+      }
+
+      window.electron.debugLog("info", "[PlayComponent] Component audio loaded", {
+        sampleHash: sample.hash.substring(0, 8),
+        componentIndex,
+        audioDataLength: componentAudioBuffer.length,
+      });
+
+      // Convert buffer to Float32Array
+      const componentAudio = new Float32Array(
+        componentAudioBuffer.buffer,
+        componentAudioBuffer.byteOffset,
+        componentAudioBuffer.byteLength / Float32Array.BYTES_PER_ELEMENT,
+      );
+
+      const duration = componentAudio.length / sample.sample_rate;
+
+      // Create audio object for playback
+      const audio = {
+        audioData: componentAudio,
+        sampleRate: sample.sample_rate,
+        duration: duration,
+        filePath: `Component ${componentIndex} from ${sample.file_path}`,
+        hash: `${sample.hash}-component-${componentIndex}`,
+        visualize: () => "Visualization not available for components",
+        analyzeOnsetSlice: async () => ({
+          slices: [],
+          visualize: () => "Not available",
+        }),
+      };
+
+      // Set as current audio
+      this.audioManager.setCurrentAudio(audio);
+      this.audioManager.clearSlices();
+
+      await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
+
+      // Update waveform visualization
+      this.updateWaveformVisualization();
+
+      this.terminal.writeln(
+        `\x1b[32mPlaying component ${componentIndex} from ${sampleHash.substring(0, 8)}\x1b[0m`,
+      );
+      this.terminal.writeln(`Duration: ${duration.toFixed(3)}s`);
+
+      window.electron.debugLog("info", "[PlayComponent] Playback started", {
+        componentIndex,
+        sampleHash: sample.hash.substring(0, 8),
+      });
+    } catch (error) {
+      window.electron.debugLog(
+        "error",
+        "[PlayComponent] Error playing component",
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+      this.terminal.writeln(
+        `\x1b[31mError playing component: ${error instanceof Error ? error.message : String(error)}\x1b[0m`,
+      );
+    }
+  }
+
   private async handleVisualizeNmfCommand(args: string[]): Promise<void> {
     await window.electron.debugLog(
       "info",
@@ -1292,6 +1577,54 @@ export class BounceApp {
     );
 
     try {
+      // Load the original sample before visualizing
+      window.electron.debugLog(
+        "info",
+        "[VisualizeNMF] Loading original sample for visualization",
+        { hash },
+      );
+
+      const sample = await window.electron.getSampleByHash(hash);
+      if (sample) {
+        // Load the original sample audio into the audio manager
+        const audioData = new Float32Array(
+          sample.audio_data.buffer,
+          sample.audio_data.byteOffset,
+          sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+        );
+
+        const audio = {
+          audioData: audioData,
+          sampleRate: sample.sample_rate,
+          duration: sample.duration,
+          filePath: sample.file_path,
+          hash: sample.hash,
+          visualize: () => "Visualization available",
+          analyzeOnsetSlice: async () => ({
+            slices: [],
+            visualize: () => "Available",
+          }),
+        };
+
+        // Set as current audio (without playing)
+        this.audioManager.setCurrentAudio(audio);
+        this.audioManager.clearSlices();
+
+        // Update waveform visualization with original audio
+        this.updateWaveformVisualization();
+
+        window.electron.debugLog(
+          "info",
+          "[VisualizeNMF] Original sample loaded for visualization",
+          { sampleHash: sample.hash.substring(0, 8) },
+        );
+      } else {
+        this.terminal.writeln(
+          `\x1b[31mSample ${hash} not found in database\x1b[0m`,
+        );
+        return;
+      }
+
       window.electron.debugLog("info", "[Renderer] Calling visualizeNMF IPC", {
         hash,
       });
@@ -1386,9 +1719,13 @@ export class BounceApp {
           await this.listSlices();
           break;
 
+        case "components":
+          await this.listComponents();
+          break;
+
         default:
           this.terminal.writeln(`\x1b[31mUnknown list target: ${what}\x1b[0m`);
-          this.terminal.writeln("Available: samples, features, slices");
+          this.terminal.writeln("Available: samples, features, slices, components");
           break;
       }
     } catch (error) {
@@ -1492,6 +1829,44 @@ export class BounceApp {
     );
   }
 
+  private async listComponents(): Promise<void> {
+    const componentsSummary = await window.electron.listComponentsSummary();
+
+    if (componentsSummary.length === 0) {
+      this.terminal.writeln("\x1b[33mNo components in database\x1b[0m");
+      this.terminal.writeln(
+        "\x1b[36mTip: Use 'sep <sample-hash>' to mark NMF components\x1b[0m",
+      );
+      return;
+    }
+
+    this.terminal.writeln("\x1b[1;36mComponents by Sample:\x1b[0m");
+    this.terminal.writeln("");
+
+    let totalComponents = 0;
+    for (const summary of componentsSummary) {
+      const shortHash = summary.sample_hash.substring(0, 8);
+      const fileName = summary.file_path.split("/").pop();
+
+      this.terminal.writeln(`  \x1b[33m${shortHash}\x1b[0m: ${fileName}`);
+      this.terminal.writeln(
+        `     ${summary.component_count} components (indices: 0-${summary.component_count - 1})`,
+      );
+      this.terminal.writeln(`     Feature ID: ${summary.feature_id}`);
+
+      totalComponents += summary.component_count;
+    }
+
+    this.terminal.writeln("");
+    this.terminal.writeln(
+      `Total: ${totalComponents} component(s) across ${componentsSummary.length} sample(s)`,
+    );
+    this.terminal.writeln("");
+    this.terminal.writeln(
+      '\x1b[36mTip: Use "play-component <hash> <index>" to play components\x1b[0m',
+    );
+  }
+
   private handleHelpCommand(args: string[]): void {
     // If a specific command is requested, show detailed help
     if (args.length > 0) {
@@ -1523,6 +1898,15 @@ export class BounceApp {
       "  \x1b[33mplay-slice <id>\x1b[0m - Play an individual slice",
     );
     this.terminal.writeln(
+      "  \x1b[33manalyze-nmf <sample-hash>\x1b[0m - Analyze audio using NMF",
+    );
+    this.terminal.writeln(
+      "  \x1b[33msep <sample-hash>\x1b[0m - Separate audio into NMF components",
+    );
+    this.terminal.writeln(
+      "  \x1b[33mplay-component <hash> <index>\x1b[0m - Play an NMF component",
+    );
+    this.terminal.writeln(
       "  \x1b[33mlist samples\x1b[0m - List all stored audio samples",
     );
     this.terminal.writeln(
@@ -1530,6 +1914,9 @@ export class BounceApp {
     );
     this.terminal.writeln(
       "  \x1b[33mlist slices\x1b[0m - List slice summary by sample",
+    );
+    this.terminal.writeln(
+      "  \x1b[33mlist components\x1b[0m - List NMF components by sample",
     );
     this.terminal.writeln(
       "  \x1b[33mdebug [limit]\x1b[0m - Show debug logs (default: 20)",
@@ -1756,11 +2143,96 @@ export class BounceApp {
         );
         break;
 
+      case "play-component":
+        this.terminal.writeln("\x1b[1;36mCommand: play-component\x1b[0m");
+        this.terminal.writeln("");
+        this.terminal.writeln(
+          "\x1b[33mUsage:\x1b[0m play-component <sample-hash> <component-index>",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
+        this.terminal.writeln(
+          "  Plays back an individual NMF component by sample hash and index.",
+        );
+        this.terminal.writeln(
+          "  The component is synthesized from the NMF bases and activations.",
+        );
+        this.terminal.writeln(
+          "  Currently uses simple temporal amplitude modulation.",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mArguments:\x1b[0m");
+        this.terminal.writeln("  sample-hash       The hash of the sample");
+        this.terminal.writeln("  component-index   The component index (0-based)");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mExample:\x1b[0m");
+        this.terminal.writeln("  play-component 82a4b173 0    # Play component 0");
+        this.terminal.writeln("  play-component 82a4b173 2    # Play component 2");
+        this.terminal.writeln("");
+        this.terminal.writeln(
+          '\x1b[33mTip:\x1b[0m Use "sep <sample-hash>" command first to prepare components',
+        );
+        break;
+
+      case "sep":
+        this.terminal.writeln("\x1b[1;36mCommand: sep\x1b[0m");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mUsage:\x1b[0m sep <sample-hash>");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
+        this.terminal.writeln(
+          "  Marks NMF components for individual playback.",
+        );
+        this.terminal.writeln(
+          "  Each component represents a distinct spectral/temporal pattern.",
+        );
+        this.terminal.writeln(
+          "  Components can be played back individually by index.",
+        );
+        this.terminal.writeln(
+          "  Requires that 'analyze-nmf' has been run on the sample first.",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mWorkflow:\x1b[0m");
+        this.terminal.writeln("  1. play <hash>                  # Load sample");
+        this.terminal.writeln("  2. analyze-nmf <hash>           # Analyze with NMF");
+        this.terminal.writeln("  3. sep <hash>                   # Mark components");
+        this.terminal.writeln("  4. play-component <hash> <idx>  # Play a component");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mExample:\x1b[0m");
+        this.terminal.writeln("  analyze-nmf 82a4b173 --components 5");
+        this.terminal.writeln("  sep 82a4b173");
+        this.terminal.writeln("  play-component 82a4b173 0");
+        break;
+
+      case "analyze-nmf":
+        this.terminal.writeln("\x1b[1;36mCommand: analyze-nmf\x1b[0m");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mUsage:\x1b[0m analyze-nmf <sample-hash> [options]");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
+        this.terminal.writeln(
+          "  Performs Non-negative Matrix Factorization on an audio sample.",
+        );
+        this.terminal.writeln(
+          "  Decomposes audio into spectral bases and temporal activations.",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mOptions:\x1b[0m");
+        this.terminal.writeln("  --components <n>   Number of components (default: 10)");
+        this.terminal.writeln("  --iterations <n>   Number of iterations (default: 100)");
+        this.terminal.writeln("  --fft-size <n>     FFT size (default: 2048)");
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mExample:\x1b[0m");
+        this.terminal.writeln("  analyze-nmf 82a4b173");
+        this.terminal.writeln("  analyze-nmf 82a4b173 --components 5");
+        break;
+
       case "list":
         this.terminal.writeln("\x1b[1;36mCommand: list\x1b[0m");
         this.terminal.writeln("");
         this.terminal.writeln(
-          "\x1b[33mUsage:\x1b[0m list <samples|features|slices>",
+          "\x1b[33mUsage:\x1b[0m list <samples|features|slices|components>",
         );
         this.terminal.writeln("");
         this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
@@ -1776,11 +2248,15 @@ export class BounceApp {
         this.terminal.writeln(
           "  list slices     Show slice summary grouped by sample",
         );
+        this.terminal.writeln(
+          "  list components Show NMF component summary grouped by sample",
+        );
         this.terminal.writeln("");
         this.terminal.writeln("\x1b[33mExample:\x1b[0m");
         this.terminal.writeln("  list samples");
         this.terminal.writeln("  list features");
         this.terminal.writeln("  list slices");
+        this.terminal.writeln("  list components");
         break;
 
       case "debug":

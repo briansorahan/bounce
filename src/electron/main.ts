@@ -348,6 +348,66 @@ ipcMain.handle("get-slice", async (_event, sliceId: number) => {
   }
 });
 
+ipcMain.handle("get-components-by-feature", async (_event, featureId: number) => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.getComponentsByFeature(featureId);
+  } catch (error) {
+    console.error("Failed to get components by feature:", error);
+    return [];
+  }
+});
+
+ipcMain.handle("get-component", async (_event, componentId: number) => {
+  try {
+    if (!dbManager) {
+      return null;
+    }
+    return dbManager.getComponent(componentId);
+  } catch (error) {
+    console.error("Failed to get component:", error);
+    return null;
+  }
+});
+
+ipcMain.handle(
+  "get-component-by-index",
+  async (
+    _event,
+    sampleHash: string,
+    featureId: number,
+    componentIndex: number,
+  ) => {
+    try {
+      if (!dbManager) {
+        return null;
+      }
+      return dbManager.getComponentByIndex(
+        sampleHash,
+        featureId,
+        componentIndex,
+      );
+    } catch (error) {
+      console.error("Failed to get component by index:", error);
+      return null;
+    }
+  },
+);
+
+ipcMain.handle("list-components-summary", async () => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.listComponentsSummary();
+  } catch (error) {
+    console.error("Failed to list components summary:", error);
+    return [];
+  }
+});
+
 ipcMain.handle("list-samples", async () => {
   try {
     if (!dbManager) {
@@ -424,15 +484,28 @@ ipcMain.handle("visualize-nmf", async (_event, sampleHash: string) => {
   }
 });
 
+ipcMain.handle("sep", async (_event, args: string[]) => {
+  try {
+    const { sepCommand } = await import("./commands/sep.js");
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return await sepCommand.execute(args, mainWindow, dbManager);
+  } catch (error) {
+    console.error("Failed to execute sep:", error);
+    throw error;
+  }
+});
+
 ipcMain.handle(
   "send-command",
   async (_event, commandName: string, args: string[]) => {
     try {
       const visualizeNmfModule = await import("./commands/visualize-nmf.js");
       const visualizeNmfCommand = visualizeNmfModule.visualizeNmfCommand;
+      const { sepCommand } = await import("./commands/sep.js");
 
       const commands: Record<string, typeof visualizeNmfCommand> = {
         "visualize-nmf": visualizeNmfCommand,
+        "sep": sepCommand,
       };
 
       const command = commands[commandName];

@@ -20,6 +20,13 @@ export interface BufNMFResult {
 
 interface NativeBufNMF {
   process(audioData: Float32Array, sampleRate: number): BufNMFResult;
+  resynthesize(
+    audioData: Float32Array,
+    sampleRate: number,
+    bases: number[][],
+    activations: number[][],
+    componentIndex: number,
+  ): Float32Array;
 }
 
 export class BufNMF {
@@ -31,5 +38,21 @@ export class BufNMF {
 
   process(audioData: Float32Array, sampleRate: number): BufNMFResult {
     return this.native.process(audioData, sampleRate);
+  }
+
+  resynthesize(
+    audioData: Float32Array,
+    sampleRate: number,
+    bases: number[][],
+    activations: number[][],
+    componentIndex: number,
+  ): Float32Array {
+    return this.native.resynthesize(
+      audioData,
+      sampleRate,
+      bases,
+      activations,
+      componentIndex,
+    );
   }
 }

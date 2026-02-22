@@ -75,16 +75,33 @@ contextBridge.exposeInMainWorld("electron", {
   getSlicesByFeature: (featureId: number) =>
     ipcRenderer.invoke("get-slices-by-feature", featureId),
   getSlice: (sliceId: number) => ipcRenderer.invoke("get-slice", sliceId),
+  getComponentsByFeature: (featureId: number) =>
+    ipcRenderer.invoke("get-components-by-feature", featureId),
+  getComponent: (componentId: number) =>
+    ipcRenderer.invoke("get-component", componentId),
+  getComponentByIndex: (
+    sampleHash: string,
+    featureId: number,
+    componentIndex: number,
+  ) =>
+    ipcRenderer.invoke(
+      "get-component-by-index",
+      sampleHash,
+      featureId,
+      componentIndex,
+    ),
   listSamples: () => ipcRenderer.invoke("list-samples"),
   listFeatures: () => ipcRenderer.invoke("list-features"),
   getSampleByHash: (hash: string) =>
     ipcRenderer.invoke("get-sample-by-hash", hash),
   listSlicesSummary: () => ipcRenderer.invoke("list-slices-summary"),
+  listComponentsSummary: () => ipcRenderer.invoke("list-components-summary"),
   sendCommand: (command: string, args: string[]) =>
     ipcRenderer.invoke("send-command", command, args),
   analyzeNMF: (args: string[]) => ipcRenderer.invoke("analyze-nmf", args),
   visualizeNMF: (sampleHash: string) =>
     ipcRenderer.invoke("visualize-nmf", sampleHash),
+  sep: (args: string[]) => ipcRenderer.invoke("sep", args),
   onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => {
     ipcRenderer.on("overlay-nmf-visualization", (_event, data) =>
       callback(data),
