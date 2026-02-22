@@ -39,6 +39,14 @@ export interface SliceRecord {
   end_sample: number;
 }
 
+export interface ComponentRecord {
+  id: number;
+  sample_hash: string;
+  feature_id: number;
+  component_index: number;
+  audio_data: Buffer;
+}
+
 export interface SampleListRecord {
   id: number;
   hash: string;
@@ -69,13 +77,22 @@ export interface SlicesSummaryRecord {
   max_slice_id: number;
 }
 
+export interface ComponentsSummaryRecord {
+  sample_hash: string;
+  file_path: string;
+  feature_id: number;
+  component_count: number;
+  min_component_id: number;
+  max_component_id: number;
+}
+
 export interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;
 }
 
 export class DatabaseManager {
-  private db: Database.Database;
+  public db: Database.Database;
 
   constructor() {
     const userDataPath = app.getPath("userData");
@@ -164,6 +181,23 @@ export class DatabaseManager {
 
       CREATE INDEX IF NOT EXISTS idx_slices_feature 
       ON slices(feature_id);
+
+      CREATE TABLE IF NOT EXISTS components (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sample_hash TEXT NOT NULL,
+        feature_id INTEGER NOT NULL,
+        component_index INTEGER NOT NULL,
+        audio_data BLOB NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sample_hash) REFERENCES samples(hash),
+        FOREIGN KEY (feature_id) REFERENCES features(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_components_sample 
+      ON components(sample_hash);
+
+      CREATE INDEX IF NOT EXISTS idx_components_feature 
+      ON components(feature_id);
     `);
   }
 
@@ -470,17 +504,125 @@ export class DatabaseManager {
     sampleHash: string,
     featureType: string,
   ):
-    | { feature_type: string; feature_data: string; feature_hash: string }
+    | {
+        feature_type: string;
+        feature_data: string;
+        feature_hash: string;
+        options: string;
+      }
     | undefined {
     const stmt = this.db.prepare(`
-      SELECT feature_type, feature_data, feature_hash
-      FROM features
-      WHERE sample_hash = ? AND feature_type = ?
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
+SELECT feature_type, feature_data, feature_hash, options
+FROM features
+WHERE sample_hash = ? AND feature_type = ?
+ORDER BY created_at DESC
+LIMIT 1
+`);
     return stmt.get(sampleHash, featureType) as
-      | { feature_type: string; feature_data: string; feature_hash: string }
+      | {
+          feature_type: string;
+          feature_data: string;
+          feature_hash: string;
+          options: string;
+        }
       | undefined;
+  }
+
+  getFeatureByHash(
+    sampleHash: string,
+    featureHashPrefix: string,
+  ):
+    | {
+        feature_type: string;
+        feature_data: string;
+        feature_hash: string;
+        options: string;
+      }
+    | undefined {
+    const stmt = this.db.prepare(`
+SELECT feature_type, feature_data, feature_hash, options
+FROM features
+WHERE sample_hash = ? AND feature_hash LIKE ?
+LIMIT 1
+`);
+    return stmt.get(sampleHash, `${featureHashPrefix}%`) as
+      | {
+          feature_type: string;
+          feature_data: string;
+          feature_hash: string;
+          options: string;
+        }
+      | undefined;
+  }
+
+  createComponents(
+    sampleHash: string,
+    featureId: number,
+    componentAudioData: Buffer[],
+  ): number[] {
+    const stmt = this.db.prepare(`
+      INSERT INTO components (sample_hash, feature_id, component_index, audio_data) 
+      VALUES (?, ?, ?, ?)
+    `);
+
+    const componentIds: number[] = [];
+
+    for (let i = 0; i < componentAudioData.length; i++) {
+      const result = stmt.run(sampleHash, featureId, i, componentAudioData[i]);
+      componentIds.push(result.lastInsertRowid as number);
+    }
+
+    return componentIds;
+  }
+
+  getComponentsByFeature(featureId: number): ComponentRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT id, sample_hash, feature_id, component_index, audio_data 
+      FROM components 
+      WHERE feature_id = ? 
+      ORDER BY component_index ASC
+    `);
+    return stmt.all(featureId) as ComponentRecord[];
+  }
+
+  getComponent(componentId: number): ComponentRecord | undefined {
+    const stmt = this.db.prepare(`
+      SELECT id, sample_hash, feature_id, component_index, audio_data 
+      FROM components 
+      WHERE id = ?
+    `);
+    return stmt.get(componentId) as ComponentRecord | undefined;
+  }
+
+  getComponentByIndex(
+    sampleHash: string,
+    featureId: number,
+    componentIndex: number,
+  ): ComponentRecord | undefined {
+    const stmt = this.db.prepare(`
+      SELECT id, sample_hash, feature_id, component_index, audio_data 
+      FROM components 
+      WHERE sample_hash = ? AND feature_id = ? AND component_index = ?
+    `);
+    return stmt.get(sampleHash, featureId, componentIndex) as
+      | ComponentRecord
+      | undefined;
+  }
+
+  listComponentsSummary(): ComponentsSummaryRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT 
+        c.sample_hash,
+        sa.file_path,
+        c.feature_id,
+        COUNT(*) as component_count,
+        MIN(c.id) as min_component_id,
+        MAX(c.id) as max_component_id
+      FROM components c
+      JOIN samples sa ON c.sample_hash = sa.hash
+      GROUP BY c.sample_hash, c.feature_id
+      ORDER BY c.sample_hash
+    `);
+    return stmt.all() as ComponentsSummaryRecord[];
   }
 }

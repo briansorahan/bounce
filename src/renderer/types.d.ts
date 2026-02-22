@@ -64,6 +64,23 @@ interface SlicesSummary {
   max_slice_id: number;
 }
 
+interface ComponentData {
+  id: number;
+  sample_hash: string;
+  feature_id: number;
+  component_index: number;
+  audio_data: Buffer;
+}
+
+interface ComponentsSummary {
+  sample_hash: string;
+  file_path: string;
+  feature_id: number;
+  component_count: number;
+  min_component_id: number;
+  max_component_id: number;
+}
+
 interface OnsetSliceOptions {
   threshold?: number;
   minSliceLength?: number;
@@ -152,14 +169,23 @@ interface Window {
     ) => Promise<number[]>;
     getSlicesByFeature: (featureId: number) => Promise<SliceData[]>;
     getSlice: (sliceId: number) => Promise<SliceData | null>;
+    getComponentsByFeature: (featureId: number) => Promise<ComponentData[]>;
+    getComponent: (componentId: number) => Promise<ComponentData | null>;
+    getComponentByIndex: (
+      sampleHash: string,
+      featureId: number,
+      componentIndex: number,
+    ) => Promise<ComponentData | null>;
     listSamples: () => Promise<SampleListData[]>;
     listFeatures: () => Promise<FeatureListData[]>;
     getSampleByHash: (hash: string) => Promise<SampleData | null>;
     listSlicesSummary: () => Promise<SlicesSummary[]>;
+    listComponentsSummary: () => Promise<ComponentsSummary[]>;
     analyzeNMF: (
       args: string[],
     ) => Promise<{ success: boolean; message: string }>;
     visualizeNMF: (sampleHash: string) => Promise<string>;
+    sep: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
   };
 }
