@@ -142,6 +142,7 @@ interface Window {
       activations: number[][];
     }>;
     saveCommand: (command: string) => Promise<void>;
+    sendCommand: (command: string, args: string[]) => Promise<void>;
     getCommandHistory: (limit?: number) => Promise<string[]>;
     clearCommandHistory: () => Promise<void>;
     dedupeCommandHistory: () => Promise<{ removed: number }>;
@@ -186,6 +187,7 @@ interface Window {
     ) => Promise<{ success: boolean; message: string }>;
     visualizeNMF: (sampleHash: string) => Promise<string>;
     sep: (args: string[]) => Promise<{ success: boolean; message: string }>;
+    nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
   };
 }

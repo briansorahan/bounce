@@ -495,17 +495,33 @@ ipcMain.handle("sep", async (_event, args: string[]) => {
   }
 });
 
+ipcMain.handle("nx", async (_event, args: string[]) => {
+  try {
+    const { nxCommand } = await import("./commands/nx.js");
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return await nxCommand.execute(args, mainWindow, dbManager);
+  } catch (error) {
+    console.error("Failed to execute nx:", error);
+    throw error;
+  }
+});
+
 ipcMain.handle(
   "send-command",
   async (_event, commandName: string, args: string[]) => {
     try {
       const visualizeNmfModule = await import("./commands/visualize-nmf.js");
       const visualizeNmfCommand = visualizeNmfModule.visualizeNmfCommand;
+      const visualizeNxModule = await import("./commands/visualize-nx.js");
+      const visualizeNxCommand = visualizeNxModule.visualizeNxCommand;
       const { sepCommand } = await import("./commands/sep.js");
+      const { nxCommand } = await import("./commands/nx.js");
 
       const commands: Record<string, typeof visualizeNmfCommand> = {
         "visualize-nmf": visualizeNmfCommand,
+        "visualize-nx": visualizeNxCommand,
         "sep": sepCommand,
+        "nx": nxCommand,
       };
 
       const command = commands[commandName];
