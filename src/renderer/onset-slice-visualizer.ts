@@ -1,4 +1,4 @@
-import { Visualization } from './visualization-manager.js';
+import { Visualization } from "./visualization-manager.js";
 
 export class OnsetSliceVisualizer {
   private visualization: Visualization;
@@ -10,23 +10,23 @@ export class OnsetSliceVisualizer {
     visualization: Visualization,
     slices: number[],
     audioData: Float32Array,
-    sampleRate: number
+    sampleRate: number,
   ) {
     this.visualization = visualization;
     this.slices = slices;
     this.audioData = audioData;
     this.sampleRate = sampleRate;
 
-    window.electron.debugLog('info', '[OnsetSliceViz] Constructor called', {
+    window.electron.debugLog("info", "[OnsetSliceViz] Constructor called", {
       vizId: visualization.id,
       sliceCount: slices.length,
       samples: audioData.length,
-      sampleRate
+      sampleRate,
     });
 
     // Set the draw function
     this.visualization.draw = () => this.draw();
-    
+
     // Initial draw
     this.draw();
   }
@@ -37,14 +37,14 @@ export class OnsetSliceVisualizer {
     const width = canvas.width;
     const height = canvas.height;
 
-    window.electron.debugLog('info', '[OnsetSliceViz] Drawing', {
+    window.electron.debugLog("info", "[OnsetSliceViz] Drawing", {
       vizId: this.visualization.id,
       canvasSize: `${width}x${height}`,
-      sliceCount: this.slices.length
+      sliceCount: this.slices.length,
     });
 
     // Clear with a distinct background
-    ctx.fillStyle = '#252525';
+    ctx.fillStyle = "#252525";
     ctx.fillRect(0, 0, width, height);
 
     if (this.slices.length === 0) {
@@ -60,24 +60,32 @@ export class OnsetSliceVisualizer {
 
     // Draw legend
     this.drawLegend(ctx);
-    
-    window.electron.debugLog('info', '[OnsetSliceViz] Drawing complete', {
-      vizId: this.visualization.id
+
+    window.electron.debugLog("info", "[OnsetSliceViz] Drawing complete", {
+      vizId: this.visualization.id,
     });
   }
 
-  private drawNoData(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    ctx.fillStyle = '#666';
-    ctx.font = '14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('No onset slices detected', width / 2, height / 2);
+  private drawNoData(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
+    ctx.fillStyle = "#666";
+    ctx.font = "14px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("No onset slices detected", width / 2, height / 2);
   }
 
-  private drawWaveform(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawWaveform(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
     const step = Math.ceil(this.audioData.length / width);
     const amp = height / 2;
 
-    ctx.strokeStyle = '#4ec9b0';
+    ctx.strokeStyle = "#4ec9b0";
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -106,15 +114,19 @@ export class OnsetSliceVisualizer {
     ctx.globalAlpha = 1.0;
 
     // Center line
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = "#333";
     ctx.beginPath();
     ctx.moveTo(0, amp);
     ctx.lineTo(width, amp);
     ctx.stroke();
   }
 
-  private drawSliceMarkers(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    ctx.strokeStyle = '#f14c4c';
+  private drawSliceMarkers(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
+    ctx.strokeStyle = "#f14c4c";
     ctx.lineWidth = 2;
 
     const totalSamples = this.audioData.length;
@@ -129,16 +141,16 @@ export class OnsetSliceVisualizer {
   }
 
   private drawLegend(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = '#f14c4c';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'left';
-    
+    ctx.fillStyle = "#f14c4c";
+    ctx.font = "12px monospace";
+    ctx.textAlign = "left";
+
     const duration = this.audioData.length / this.sampleRate;
     const avgInterval = duration / this.slices.length;
-    
+
     ctx.fillText(`Slices: ${this.slices.length}`, 10, 20);
     ctx.fillText(`Avg Interval: ${avgInterval.toFixed(3)}s`, 10, 35);
-    
+
     if (this.slices.length > 1) {
       const firstSlice = this.slices[0];
       const lastSlice = this.slices[this.slices.length - 1];

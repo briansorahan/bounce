@@ -1,4 +1,4 @@
-import { BounceApp } from './app.js';
+import { BounceApp } from "./app.js";
 
 // Expose app for testing/debugging
 declare global {
@@ -7,8 +7,8 @@ declare global {
   }
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
+window.addEventListener("DOMContentLoaded", async () => {
   const app = new BounceApp();
-  window.app = app;  // Expose for testing
-  await app.mount('terminal');
+  window.app = app; // Expose for testing
+  await app.mount("terminal");
 });

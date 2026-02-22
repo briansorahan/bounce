@@ -1,10 +1,13 @@
-import { OnsetFeature as NativeOnsetFeature, OnsetSlice as NativeOnsetSlice } from './native';
+import {
+  OnsetFeature as NativeOnsetFeature,
+  OnsetSlice as NativeOnsetSlice,
+} from "./native";
 
 // Re-export types
-export type { OnsetFeatureOptions, OnsetSliceOptions } from './native';
+export type { OnsetFeatureOptions, OnsetSliceOptions } from "./native";
 
 // Load the native addon
-const addon = require('../build/Release/flucoma_native.node');
+const addon = require("../build/Release/flucoma_native.node");
 
 /**
  * OnsetFeature analyzer wrapper
@@ -92,7 +95,10 @@ export class BufNMF {
   /**
    * Process audio buffer and perform NMF decomposition
    */
-  process(audioBuffer: Float32Array | Float64Array, sampleRate: number): {
+  process(
+    audioBuffer: Float32Array | Float64Array,
+    sampleRate: number,
+  ): {
     components: number;
     iterations: number;
     converged: boolean;

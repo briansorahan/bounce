@@ -1,5 +1,5 @@
-import { BrowserWindow } from 'electron';
-import { DatabaseManager } from '../database';
+import { BrowserWindow } from "electron";
+import { DatabaseManager } from "../database";
 
 export interface CommandResult {
   success: boolean;
@@ -11,5 +11,9 @@ export interface Command {
   description: string;
   usage: string;
   help?: string;
-  execute: (args: string[], mainWindow: BrowserWindow, dbManager?: DatabaseManager) => Promise<CommandResult>;
+  execute: (
+    args: string[],
+    mainWindow: BrowserWindow,
+    dbManager?: DatabaseManager,
+  ) => Promise<CommandResult>;
 }

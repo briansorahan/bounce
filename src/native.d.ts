@@ -13,31 +13,31 @@ export interface OnsetFeatureOptions {
    * 9: Rectified Complex Domain
    */
   function?: number;
-  
+
   /**
    * Median filter size (1-101, must be odd)
    * Default: 5
    */
   filterSize?: number;
-  
+
   /**
    * Frame delta for spectral difference (0-8192)
    * Default: 0
    */
   frameDelta?: number;
-  
+
   /**
    * Analysis window size in samples
    * Default: 1024
    */
   windowSize?: number;
-  
+
   /**
    * FFT size in samples
    * Default: 1024
    */
   fftSize?: number;
-  
+
   /**
    * Hop size for frame-by-frame processing
    * Default: 512
@@ -51,7 +51,7 @@ export interface OnsetSliceOptions extends OnsetFeatureOptions {
    * Default: 0.5
    */
   threshold?: number;
-  
+
   /**
    * Minimum length between slices in frames
    * Default: 2
@@ -69,14 +69,14 @@ export class OnsetFeature {
    * @param options - Configuration options
    */
   constructor(options?: OnsetFeatureOptions);
-  
+
   /**
    * Process audio buffer and extract onset features
    * @param audioBuffer - Float32Array or Float64Array containing audio samples
    * @returns Array of onset feature values, one per frame
    */
   process(audioBuffer: Float32Array | Float64Array): number[];
-  
+
   /**
    * Reset the internal state of the analyzer
    */
@@ -93,14 +93,14 @@ export class OnsetSlice {
    * @param options - Configuration options
    */
   constructor(options?: OnsetSliceOptions);
-  
+
   /**
    * Process audio buffer and detect onset slice points
    * @param audioBuffer - Float32Array or Float64Array containing audio samples
    * @returns Array of sample indices where onsets were detected
    */
   process(audioBuffer: Float32Array | Float64Array): number[];
-  
+
   /**
    * Reset the internal state of the analyzer
    */

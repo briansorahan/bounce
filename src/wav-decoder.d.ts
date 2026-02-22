@@ -1,4 +1,4 @@
-declare module 'wav-decoder' {
+declare module "wav-decoder" {
   export interface AudioData {
     sampleRate: number;
     length: number;

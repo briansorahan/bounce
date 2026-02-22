@@ -13,14 +13,11 @@ export class NMFVisualizer {
   private sampleRate: number;
   private components: number;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    options: NMFVisualizerOptions
-  ) {
+  constructor(canvas: HTMLCanvasElement, options: NMFVisualizerOptions) {
     this.canvas = canvas;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) {
-      throw new Error('Failed to get canvas context');
+      throw new Error("Failed to get canvas context");
     }
     this.ctx = ctx;
     this.bases = options.bases;
@@ -28,7 +25,7 @@ export class NMFVisualizer {
     this.sampleRate = options.sampleRate;
     this.components = options.components;
 
-    window.electron.debugLog('debug', '[NMFVisualizer] Constructor called', {
+    window.electron.debugLog("debug", "[NMFVisualizer] Constructor called", {
       components: this.components,
       basesCount: this.bases.length,
       activationsCount: this.activations.length,
@@ -41,13 +38,17 @@ export class NMFVisualizer {
     const width = this.canvas.width;
     const height = this.canvas.height;
 
-    window.electron.debugLog('debug', '[NMFVisualizer] Drawing NMF visualization', {
-      canvasSize: `${width}x${height}`,
-      components: this.components,
-    });
+    window.electron.debugLog(
+      "debug",
+      "[NMFVisualizer] Drawing NMF visualization",
+      {
+        canvasSize: `${width}x${height}`,
+        components: this.components,
+      },
+    );
 
     // Clear canvas
-    this.ctx.fillStyle = '#1a1a1a';
+    this.ctx.fillStyle = "#1a1a1a";
     this.ctx.fillRect(0, 0, width, height);
 
     // Calculate layout: split canvas vertically into two sections
@@ -56,10 +57,10 @@ export class NMFVisualizer {
     const activationsY = basesHeight;
 
     // Draw section labels
-    this.ctx.fillStyle = '#888888';
-    this.ctx.font = '12px monospace';
-    this.ctx.fillText('Spectral Bases', 10, 15);
-    this.ctx.fillText('Temporal Activations', 10, activationsY + 15);
+    this.ctx.fillStyle = "#888888";
+    this.ctx.font = "12px monospace";
+    this.ctx.fillText("Spectral Bases", 10, 15);
+    this.ctx.fillText("Temporal Activations", 10, activationsY + 15);
 
     // Draw bases (spectral templates) - stacked horizontally
     const baseWidth = width / this.components;
@@ -72,10 +73,17 @@ export class NMFVisualizer {
     const activationHeight = (activationsHeight - 30) / this.components;
     for (let i = 0; i < this.components; i++) {
       const y = activationsY + 25 + i * activationHeight;
-      this.drawActivation(this.activations[i], 0, y, width, activationHeight, i);
+      this.drawActivation(
+        this.activations[i],
+        0,
+        y,
+        width,
+        activationHeight,
+        i,
+      );
     }
 
-    window.electron.debugLog('debug', '[NMFVisualizer] Drawing complete');
+    window.electron.debugLog("debug", "[NMFVisualizer] Drawing complete");
   }
 
   private drawBasis(
@@ -84,12 +92,12 @@ export class NMFVisualizer {
     y: number,
     width: number,
     height: number,
-    componentIndex: number
+    componentIndex: number,
   ) {
     // Draw spectral basis as a bar graph
     const barWidth = width / basis.length;
     const hue = (componentIndex * 137.5) % 360; // Golden angle for color distribution
-    
+
     // Find max for normalization
     let max = 0;
     for (let i = 0; i < basis.length; i++) {
@@ -97,7 +105,7 @@ export class NMFVisualizer {
     }
 
     this.ctx.save();
-    
+
     for (let i = 0; i < basis.length; i++) {
       const normalized = max > 0 ? basis[i] / max : 0;
       const barHeight = normalized * height;
@@ -109,8 +117,8 @@ export class NMFVisualizer {
     }
 
     // Draw component label
-    this.ctx.fillStyle = '#888888';
-    this.ctx.font = '10px monospace';
+    this.ctx.fillStyle = "#888888";
+    this.ctx.font = "10px monospace";
     this.ctx.fillText(`C${componentIndex + 1}`, x + 5, y + 12);
 
     this.ctx.restore();
@@ -122,11 +130,11 @@ export class NMFVisualizer {
     y: number,
     width: number,
     height: number,
-    componentIndex: number
+    componentIndex: number,
   ) {
     // Draw temporal activation as a line graph
     const hue = (componentIndex * 137.5) % 360;
-    
+
     // Find max for normalization
     let max = 0;
     for (let i = 0; i < activation.length; i++) {
@@ -134,26 +142,26 @@ export class NMFVisualizer {
     }
 
     this.ctx.save();
-    
+
     // Draw filled area under the curve
     this.ctx.beginPath();
     this.ctx.moveTo(x, y + height);
-    
+
     for (let i = 0; i < activation.length; i++) {
       const normalized = max > 0 ? activation[i] / max : 0;
       const plotX = x + (i / activation.length) * width;
       const plotY = y + height - normalized * height;
-      
+
       if (i === 0) {
         this.ctx.lineTo(plotX, plotY);
       } else {
         this.ctx.lineTo(plotX, plotY);
       }
     }
-    
+
     this.ctx.lineTo(x + width, y + height);
     this.ctx.closePath();
-    
+
     this.ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.3)`;
     this.ctx.fill();
 
@@ -163,21 +171,21 @@ export class NMFVisualizer {
       const normalized = max > 0 ? activation[i] / max : 0;
       const plotX = x + (i / activation.length) * width;
       const plotY = y + height - normalized * height;
-      
+
       if (i === 0) {
         this.ctx.moveTo(plotX, plotY);
       } else {
         this.ctx.lineTo(plotX, plotY);
       }
     }
-    
+
     this.ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.9)`;
     this.ctx.lineWidth = 1.5;
     this.ctx.stroke();
 
     // Draw component label
-    this.ctx.fillStyle = '#888888';
-    this.ctx.font = '10px monospace';
+    this.ctx.fillStyle = "#888888";
+    this.ctx.font = "10px monospace";
     this.ctx.fillText(`C${componentIndex + 1}`, x + 5, y + height - 5);
 
     this.ctx.restore();

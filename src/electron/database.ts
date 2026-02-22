@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
-import { app } from 'electron';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import Database from "better-sqlite3";
+import { app } from "electron";
+import * as path from "path";
+import * as crypto from "crypto";
 
 export interface DebugLogEntry {
   level: string;
@@ -78,9 +78,9 @@ export class DatabaseManager {
   private db: Database.Database;
 
   constructor() {
-    const userDataPath = app.getPath('userData');
-    const dbPath = path.join(userDataPath, 'bounce.db');
-    
+    const userDataPath = app.getPath("userData");
+    const dbPath = path.join(userDataPath, "bounce.db");
+
     this.db = new Database(dbPath);
     this.initializeTables();
   }
@@ -167,7 +167,11 @@ export class DatabaseManager {
     `);
   }
 
-  addDebugLog(level: string, message: string, data?: Record<string, unknown>): void {
+  addDebugLog(
+    level: string,
+    message: string,
+    data?: Record<string, unknown>,
+  ): void {
     const stmt = this.db.prepare(`
       INSERT INTO debug_logs (level, message, data, timestamp) 
       VALUES (?, ?, ?, ?)
@@ -183,20 +187,24 @@ export class DatabaseManager {
       ORDER BY timestamp DESC 
       LIMIT ?
     `);
-    
+
     return stmt.all(limit) as DebugLogEntry[];
   }
 
   clearDebugLogs(): void {
-    this.db.prepare('DELETE FROM debug_logs').run();
+    this.db.prepare("DELETE FROM debug_logs").run();
   }
 
   addCommand(command: string): void {
-    const lastCommand = this.db.prepare(`
+    const lastCommand = this.db
+      .prepare(
+        `
       SELECT command FROM command_history 
       ORDER BY timestamp DESC 
       LIMIT 1
-    `).get() as { command: string } | undefined;
+    `,
+      )
+      .get() as { command: string } | undefined;
 
     if (lastCommand?.command === command) {
       return;
@@ -216,13 +224,13 @@ export class DatabaseManager {
       ORDER BY timestamp DESC 
       LIMIT ?
     `);
-    
+
     const rows = stmt.all(limit) as { command: string }[];
-    return rows.map(row => row.command).reverse();
+    return rows.map((row) => row.command).reverse();
   }
 
   clearCommandHistory(): void {
-    this.db.prepare('DELETE FROM command_history').run();
+    this.db.prepare("DELETE FROM command_history").run();
   }
 
   dedupeCommandHistory(): { removed: number } {
@@ -249,7 +257,14 @@ export class DatabaseManager {
     this.db.close();
   }
 
-  storeSample(hash: string, filePath: string, audioData: Buffer, sampleRate: number, channels: number, duration: number): void {
+  storeSample(
+    hash: string,
+    filePath: string,
+    audioData: Buffer,
+    sampleRate: number,
+    channels: number,
+    duration: number,
+  ): void {
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO samples (hash, file_path, audio_data, sample_rate, channels, duration) 
       VALUES (?, ?, ?, ?, ?, ?)
@@ -278,70 +293,103 @@ export class DatabaseManager {
     return stmt.get(filePath) as SampleRecord | undefined;
   }
 
-  storeFeature(sampleHash: string, featureType: string, featureData: number[], options?: FeatureOptions): number {
+  storeFeature(
+    sampleHash: string,
+    featureType: string,
+    featureData: number[],
+    options?: FeatureOptions,
+  ): number {
     // Compute hash of feature data and options
     const dataStr = JSON.stringify(featureData);
-    const optionsStr = options ? JSON.stringify(options) : '';
+    const optionsStr = options ? JSON.stringify(options) : "";
     const featureContent = `${featureType}:${dataStr}:${optionsStr}`;
-    const featureHash = crypto.createHash('sha256').update(featureContent).digest('hex');
-    
+    const featureHash = crypto
+      .createHash("sha256")
+      .update(featureContent)
+      .digest("hex");
+
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO features (sample_hash, feature_hash, feature_type, feature_data, options) 
       VALUES (?, ?, ?, ?, ?)
     `);
     const optionsStrOrNull = options ? JSON.stringify(options) : null;
-    const result = stmt.run(sampleHash, featureHash, featureType, dataStr, optionsStrOrNull);
-    
+    const result = stmt.run(
+      sampleHash,
+      featureHash,
+      featureType,
+      dataStr,
+      optionsStrOrNull,
+    );
+
     // If no rows were inserted (duplicate), get the existing ID
     if (result.changes === 0) {
-      const existing = this.db.prepare(`
+      const existing = this.db
+        .prepare(
+          `
         SELECT id FROM features WHERE sample_hash = ? AND feature_hash = ?
-      `).get(sampleHash, featureHash) as { id: number } | undefined;
-      
+      `,
+        )
+        .get(sampleHash, featureHash) as { id: number } | undefined;
+
       return existing ? existing.id : 0;
     }
-    
+
     return result.lastInsertRowid as number;
   }
 
-  getMostRecentFeature(sampleHash?: string, featureType?: string): FeatureRecord | undefined {
-    let sql = 'SELECT id, sample_hash, feature_hash, feature_type, feature_data, options FROM features';
+  getMostRecentFeature(
+    sampleHash?: string,
+    featureType?: string,
+  ): FeatureRecord | undefined {
+    let sql =
+      "SELECT id, sample_hash, feature_hash, feature_type, feature_data, options FROM features";
     const conditions: string[] = [];
     const params: string[] = [];
 
     if (sampleHash) {
-      conditions.push('sample_hash = ?');
+      conditions.push("sample_hash = ?");
       params.push(sampleHash);
     }
     if (featureType) {
-      conditions.push('feature_type = ?');
+      conditions.push("feature_type = ?");
       params.push(featureType);
     }
 
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
+      sql += " WHERE " + conditions.join(" AND ");
     }
 
-    sql += ' ORDER BY id DESC LIMIT 1';
+    sql += " ORDER BY id DESC LIMIT 1";
 
     const stmt = this.db.prepare(sql);
     return stmt.get(...params) as FeatureRecord | undefined;
   }
 
-  createSlices(sampleHash: string, featureId: number, slicePositions: number[]): number[] {
+  createSlices(
+    sampleHash: string,
+    featureId: number,
+    slicePositions: number[],
+  ): number[] {
     const stmt = this.db.prepare(`
       INSERT INTO slices (sample_hash, feature_id, slice_index, start_sample, end_sample) 
       VALUES (?, ?, ?, ?, ?)
     `);
 
     const sliceIds: number[] = [];
-    
+
     for (let i = 0; i < slicePositions.length; i++) {
       const startSample = slicePositions[i];
-      const endSample = i < slicePositions.length - 1 ? slicePositions[i + 1] : null;
-      
+      const endSample =
+        i < slicePositions.length - 1 ? slicePositions[i + 1] : null;
+
       if (endSample !== null) {
-        const result = stmt.run(sampleHash, featureId, i, startSample, endSample);
+        const result = stmt.run(
+          sampleHash,
+          featureId,
+          i,
+          startSample,
+          endSample,
+        );
         sliceIds.push(result.lastInsertRowid as number);
       }
     }
@@ -418,7 +466,12 @@ export class DatabaseManager {
     return stmt.all() as SlicesSummaryRecord[];
   }
 
-  getFeature(sampleHash: string, featureType: string): { feature_type: string; feature_data: string; feature_hash: string } | undefined {
+  getFeature(
+    sampleHash: string,
+    featureType: string,
+  ):
+    | { feature_type: string; feature_data: string; feature_hash: string }
+    | undefined {
     const stmt = this.db.prepare(`
       SELECT feature_type, feature_data, feature_hash
       FROM features
@@ -426,6 +479,8 @@ export class DatabaseManager {
       ORDER BY created_at DESC
       LIMIT 1
     `);
-    return stmt.get(sampleHash, featureType) as { feature_type: string; feature_data: string; feature_hash: string } | undefined;
+    return stmt.get(sampleHash, featureType) as
+      | { feature_type: string; feature_data: string; feature_hash: string }
+      | undefined;
   }
 }
