@@ -102,15 +102,17 @@ Example:
 
       debugLog('info', '[AnalyzeNMF] Computed feature hash', { featureHash: featureHash.substring(0, 8) });
 
-      // Store in features table
+      // Store in features table with the parameters used
+      const options = JSON.stringify({ components, iterations, fftSize });
       dbManager.db.prepare(`
-        INSERT OR REPLACE INTO features (sample_hash, feature_type, feature_hash, feature_data, created_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
+        INSERT OR REPLACE INTO features (sample_hash, feature_type, feature_hash, feature_data, options, created_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
       `).run(
         sample.hash,
         'nmf',
         featureHash,
-        featureData
+        featureData,
+        options
       );
 
       debugLog('info', '[AnalyzeNMF] Feature stored in database');
