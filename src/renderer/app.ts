@@ -4,6 +4,25 @@ import { WaveformVisualizer } from "./waveform-visualizer.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
 
+enum ControlCode {
+  CTRL_A = 1,
+  CTRL_B = 2,
+  CTRL_C = 3,
+  CTRL_E = 5,
+  CTRL_F = 6,
+  CTRL_G = 7,
+  CTRL_K = 11,
+  ENTER = 13,
+  CTRL_N = 14,
+  CTRL_P = 16,
+  CTRL_R = 18,
+  ESC = 27,
+  BACKSPACE = 127,
+  SPACE = 32,
+  OPTION_F = 402,
+  OPTION_B = 8747,
+}
+
 interface OnsetSliceOptions {
   threshold?: number;
   minSliceLength?: number;
@@ -106,34 +125,29 @@ export class BounceApp {
   private handleInput(data: string): void {
     const code = data.charCodeAt(0);
 
-    // Check for Ctrl+R (ASCII 18)
-    if (code === 18) {
+    if (code === ControlCode.CTRL_R) {
       this.handleReverseSearch();
       return;
     }
 
     // Handle macOS Option key combinations (these come as Unicode characters)
-    // Option+b produces ∫ (integral sign, code 8747)
-    // Option+f produces ƒ (function sign, code 402)
-    if (code === 8747) {
-      // Option+b - Move backward one word
+    // Option+b produces ∫ (integral sign)
+    // Option+f produces ƒ (function sign)
+    if (code === ControlCode.OPTION_B) {
       this.moveToPreviousWord();
       return;
-    } else if (code === 402) {
-      // Option+f - Move forward one word
+    } else if (code === ControlCode.OPTION_F) {
       this.moveToNextWord();
       return;
     }
 
-    // If in search mode, handle search input differently
     if (this.isReverseSearchMode) {
       this.handleSearchInput(data);
       return;
     }
 
     // Normal mode input handling
-    if (code === 13) {
-      // Enter
+    if (code === ControlCode.ENTER) {
       this.terminal.write("\r\n");
       this.executeCommand(this.commandBuffer)
         .then(() => {
@@ -146,8 +160,7 @@ export class BounceApp {
       this.commandBuffer = "";
       this.cursorPosition = 0;
       this.historyIndex = -1;
-    } else if (code === 127) {
-      // Backspace
+    } else if (code === ControlCode.BACKSPACE) {
       if (this.cursorPosition > 0) {
         this.commandBuffer =
           this.commandBuffer.slice(0, this.cursorPosition - 1) +
@@ -155,39 +168,32 @@ export class BounceApp {
         this.cursorPosition--;
         this.redrawCommandLine();
       }
-    } else if (code === 1) {
-      // Ctrl+A - Move to beginning
+    } else if (code === ControlCode.CTRL_A) {
       this.cursorPosition = 0;
       this.updateCursorPosition();
-    } else if (code === 5) {
-      // Ctrl+E - Move to end
+    } else if (code === ControlCode.CTRL_E) {
       this.cursorPosition = this.commandBuffer.length;
       this.updateCursorPosition();
-    } else if (code === 6) {
-      // Ctrl+F - Move forward one character
+    } else if (code === ControlCode.CTRL_F) {
       if (this.cursorPosition < this.commandBuffer.length) {
         this.cursorPosition++;
         this.updateCursorPosition();
       }
-    } else if (code === 2) {
-      // Ctrl+B - Move backward one character
+    } else if (code === ControlCode.CTRL_B) {
       if (this.cursorPosition > 0) {
         this.cursorPosition--;
         this.updateCursorPosition();
       }
-    } else if (code === 11) {
-      // Ctrl+K - Kill (delete) from cursor to end of line
+    } else if (code === ControlCode.CTRL_K) {
       if (this.cursorPosition < this.commandBuffer.length) {
         this.commandBuffer = this.commandBuffer.slice(0, this.cursorPosition);
         this.redrawCommandLine();
       }
-    } else if (code === 16) {
-      // Ctrl+P - Previous command (like up arrow)
+    } else if (code === ControlCode.CTRL_P) {
       this.navigateHistory(1);
-    } else if (code === 14) {
-      // Ctrl+N - Next command (like down arrow)
+    } else if (code === ControlCode.CTRL_N) {
       this.navigateHistory(-1);
-    } else if (code === 27) {
+    } else if (code === ControlCode.ESC) {
       // ESC sequences (arrows, Alt+f, Alt+b)
       if (data === "\x1b[A") {
         // Up arrow
@@ -219,8 +225,7 @@ export class BounceApp {
       } else {
         // Unknown escape sequence - ignore it
       }
-    } else if (code >= 32) {
-      // Regular character
+    } else if (code >= ControlCode.SPACE) {
       this.commandBuffer =
         this.commandBuffer.slice(0, this.cursorPosition) +
         data +
@@ -1887,28 +1892,22 @@ export class BounceApp {
   private handleSearchInput(data: string): void {
     const code = data.charCodeAt(0);
 
-    if (code === 27) {
-      // Esc - exit search mode without executing
+    if (code === ControlCode.ESC) {
       this.exitSearchMode(false);
-    } else if (code === 3) {
-      // Ctrl+C - cancel search
+    } else if (code === ControlCode.CTRL_C) {
       this.exitSearchMode(false);
-    } else if (code === 7) {
-      // Ctrl+G - cancel search (bash-style)
+    } else if (code === ControlCode.CTRL_G) {
       this.exitSearchMode(false);
-    } else if (code === 13) {
-      // Enter - execute matched command
+    } else if (code === ControlCode.ENTER) {
       this.exitSearchMode(true).catch((error) => {
         console.error("Error executing command from search:", error);
       });
-    } else if (code === 127) {
-      // Backspace - remove character from search
+    } else if (code === ControlCode.BACKSPACE) {
       if (this.searchQuery.length > 0) {
         this.searchQuery = this.searchQuery.slice(0, -1);
         this.performSearch();
       }
-    } else if (code >= 32) {
-      // Regular character - add to search query
+    } else if (code >= ControlCode.SPACE) {
       this.searchQuery += data;
       this.performSearch();
     }
