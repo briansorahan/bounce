@@ -230,7 +230,7 @@ export class BounceApp {
         this.commandBuffer.slice(0, this.cursorPosition) +
         data +
         this.commandBuffer.slice(this.cursorPosition);
-      this.cursorPosition++;
+      this.cursorPosition += data.length;
       this.redrawCommandLine();
     }
   }
