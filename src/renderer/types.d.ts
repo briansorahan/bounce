@@ -46,13 +46,11 @@ interface SampleData {
 }
 
 interface FeatureListData {
-  id: number;
   sample_hash: string;
-  feature_hash: string;
   feature_type: string;
-  slice_count: number;
+  file_path: string;
   options: string | null;
-  created_at: string;
+  feature_count: number;
 }
 
 interface SlicesSummary {

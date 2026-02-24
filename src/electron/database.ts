@@ -59,13 +59,12 @@ export interface SampleListRecord {
 }
 
 export interface FeatureListRecord {
-  id: number;
   sample_hash: string;
-  feature_hash: string;
   feature_type: string;
-  slice_count: number;
+  file_path: string;
   options: string | null;
-  created_at: string;
+  feature_count: number;
+  feature_hash: string;
 }
 
 export interface SlicesSummaryRecord {
@@ -470,15 +469,15 @@ export class DatabaseManager {
   listFeatures(): FeatureListRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
-        id,
-        sample_hash,
-        feature_hash,
-        feature_type,
-        json_array_length(feature_data) as slice_count,
-        options,
-        created_at
-      FROM features 
-      ORDER BY id DESC
+        f.sample_hash,
+        f.feature_type,
+        s.file_path,
+        f.options,
+        COUNT(*) as feature_count
+      FROM features f
+      JOIN samples s ON f.sample_hash = s.hash
+      GROUP BY f.sample_hash, f.feature_type, f.options
+      ORDER BY MAX(f.id) DESC
     `);
     return stmt.all() as FeatureListRecord[];
   }

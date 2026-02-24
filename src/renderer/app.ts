@@ -1490,23 +1490,10 @@ export class BounceApp {
         return;
       }
 
-      // Get feature ID from the full record (need to query features table)
-      const features = await window.electron.listFeatures();
-      const matchingFeature = features.find(
-        (f) => f.feature_hash === featureRecord.feature_hash,
-      );
-
-      if (!matchingFeature) {
-        this.terminal.writeln(
-          `\x1b[31mCould not find feature ID\x1b[0m`,
-        );
-        return;
-      }
-
       // Get component from database
       const component = await window.electron.getComponentByIndex(
         sample.hash,
-        matchingFeature.id,
+        featureRecord.id,
         componentIndex,
       );
 
@@ -1835,15 +1822,12 @@ export class BounceApp {
 
     for (const sample of samples) {
       const shortHash = sample.hash.substring(0, 8);
-      const sizeMB = (sample.data_size / 1024 / 1024).toFixed(2);
-      const fileName = sample.file_path.split("/").pop();
+      const basename = sample.file_path.split("/").pop() || sample.file_path;
+      const durationStr = `${sample.duration.toFixed(2)}s`;
+      const channelsStr = sample.channels === 1 ? "mono" : "stereo";
 
-      this.terminal.writeln(`  \x1b[33m${sample.id}\x1b[0m: ${fileName}`);
       this.terminal.writeln(
-        `     Hash: ${shortHash}  Duration: ${sample.duration.toFixed(2)}s  Size: ${sizeMB} MB`,
-      );
-      this.terminal.writeln(
-        `     ${sample.sample_rate}Hz, ${sample.channels} channel(s)`,
+        `  \x1b[33m${shortHash}\x1b[0m ${basename.padEnd(25)} ${sample.sample_rate}Hz ${channelsStr.padEnd(6)} ${durationStr}`,
       );
     }
 
@@ -1864,25 +1848,17 @@ export class BounceApp {
 
     for (const feature of features) {
       const shortSampleHash = feature.sample_hash.substring(0, 8);
-      const shortFeatureHash = feature.feature_hash.substring(0, 8);
-      const timestamp = new Date(feature.created_at).toLocaleString();
+      const basename = feature.file_path.split("/").pop() || feature.file_path;
+      const optionsDisplay = feature.options || "{}";
+      const hashDisplay = feature.feature_count > 1 ? `GROUP(${feature.feature_count})` : shortSampleHash;
 
       this.terminal.writeln(
-        `  \x1b[33m${feature.id}\x1b[0m: ${feature.feature_type}`,
+        `  \x1b[33m${hashDisplay.padEnd(12)}\x1b[0m ${feature.feature_type.padEnd(12)} ${shortSampleHash} ${basename.padEnd(25)} ${optionsDisplay}`,
       );
-      this.terminal.writeln(
-        `     Sample: ${shortSampleHash}  Feature Hash: ${shortFeatureHash}`,
-      );
-      this.terminal.writeln(
-        `     Slices: ${feature.slice_count}  Created: ${timestamp}`,
-      );
-      if (feature.options) {
-        this.terminal.writeln(`     Options: ${feature.options}`);
-      }
     }
 
     this.terminal.writeln("");
-    this.terminal.writeln(`Total: ${features.length} feature(s)`);
+    this.terminal.writeln(`Total: ${features.length} feature group(s)`);
   }
 
   private async listSlices(): Promise<void> {
