@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld("electron", {
   visualizeNMF: (sampleHash: string) =>
     ipcRenderer.invoke("visualize-nmf", sampleHash),
   sep: (args: string[]) => ipcRenderer.invoke("sep", args),
+  nx: (args: string[]) => ipcRenderer.invoke("nx", args),
   onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => {
     ipcRenderer.on("overlay-nmf-visualization", (_event, data) =>
       callback(data),

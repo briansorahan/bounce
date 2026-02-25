@@ -230,7 +230,7 @@ export class BounceApp {
         this.commandBuffer.slice(0, this.cursorPosition) +
         data +
         this.commandBuffer.slice(this.cursorPosition);
-      this.cursorPosition++;
+      this.cursorPosition += data.length;
       this.redrawCommandLine();
     }
   }
@@ -490,6 +490,10 @@ export class BounceApp {
         await this.handleSepCommand(args);
         return true;
 
+      case "nx":
+        await this.handleNxCommand(args);
+        return true;
+
       case "list":
         await this.handleListCommand(args);
         return true;
@@ -504,6 +508,10 @@ export class BounceApp {
 
       case "visualize-nmf":
         await this.handleVisualizeNmfCommand(args);
+        return true;
+
+      case "visualize-nx":
+        await this.handleVisualizeNxCommand(args);
         return true;
 
       default:
@@ -1391,6 +1399,30 @@ export class BounceApp {
     }
   }
 
+  private async handleNxCommand(args: string[]): Promise<void> {
+    await window.electron.debugLog("info", "[App] nx command called", { args });
+    if (args.length < 2) {
+      this.terminal.writeln(
+        "\x1b[31mUsage: nx <target-hash> <source-hash> [source-feature-hash]\x1b[0m",
+      );
+      return;
+    }
+
+    try {
+      const result = await window.electron.nx(args);
+
+      if (result.success) {
+        this.terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+      } else {
+        this.terminal.writeln(`\x1b[31m${result.message}\x1b[0m`);
+      }
+    } catch (error) {
+      this.terminal.writeln(
+        `\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`,
+      );
+    }
+  }
+
   private async handlePlayComponentCommand(args: string[]): Promise<void> {
     if (args.length < 2) {
       this.terminal.writeln(
@@ -1458,23 +1490,10 @@ export class BounceApp {
         return;
       }
 
-      // Get feature ID from the full record (need to query features table)
-      const features = await window.electron.listFeatures();
-      const matchingFeature = features.find(
-        (f) => f.feature_hash === featureRecord.feature_hash,
-      );
-
-      if (!matchingFeature) {
-        this.terminal.writeln(
-          `\x1b[31mCould not find feature ID\x1b[0m`,
-        );
-        return;
-      }
-
       // Get component from database
       const component = await window.electron.getComponentByIndex(
         sample.hash,
-        matchingFeature.id,
+        featureRecord.id,
         componentIndex,
       );
 
@@ -1648,6 +1667,61 @@ export class BounceApp {
     }
   }
 
+  private async handleVisualizeNxCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      this.terminal.writeln(
+        "\x1b[31mUsage: visualize-nx <target-hash>\x1b[0m",
+      );
+      return;
+    }
+
+    const targetHash = args[0];
+
+    try {
+      const sample = await window.electron.getSampleByHash(targetHash);
+      if (!sample) {
+        this.terminal.writeln(
+          `\x1b[31mSample ${targetHash} not found\x1b[0m`,
+        );
+        return;
+      }
+
+      // Load original target sample
+      const audioData = new Float32Array(
+        sample.audio_data.buffer,
+        sample.audio_data.byteOffset,
+        sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+      );
+
+      const audio = {
+        audioData: audioData,
+        sampleRate: sample.sample_rate,
+        duration: sample.duration,
+        filePath: sample.file_path,
+        hash: sample.hash,
+        visualize: () => "NX Visualization",
+        analyzeOnsetSlice: async () => ({
+          slices: [],
+          visualize: () => "Not available",
+        }),
+      };
+
+      this.audioManager.setCurrentAudio(audio);
+      this.updateWaveformVisualization();
+
+      // Trigger visualization overlay
+      await window.electron.sendCommand("visualize-nx", [targetHash]);
+      
+      this.terminal.writeln(
+        `\x1b[32mNMF cross-synthesis visualization overlaid for ${targetHash.substring(0, 8)}\x1b[0m`,
+      );
+    } catch (error) {
+      this.terminal.writeln(
+        `\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`,
+      );
+    }
+  }
+
   private handleNMFOverlay(data: {
     sampleHash: string;
     nmfData: { components: number; basis: number[][]; activations: number[][] };
@@ -1748,15 +1822,12 @@ export class BounceApp {
 
     for (const sample of samples) {
       const shortHash = sample.hash.substring(0, 8);
-      const sizeMB = (sample.data_size / 1024 / 1024).toFixed(2);
-      const fileName = sample.file_path.split("/").pop();
+      const basename = sample.file_path.split("/").pop() || sample.file_path;
+      const durationStr = `${sample.duration.toFixed(2)}s`;
+      const channelsStr = sample.channels === 1 ? "mono" : "stereo";
 
-      this.terminal.writeln(`  \x1b[33m${sample.id}\x1b[0m: ${fileName}`);
       this.terminal.writeln(
-        `     Hash: ${shortHash}  Duration: ${sample.duration.toFixed(2)}s  Size: ${sizeMB} MB`,
-      );
-      this.terminal.writeln(
-        `     ${sample.sample_rate}Hz, ${sample.channels} channel(s)`,
+        `  \x1b[33m${shortHash}\x1b[0m ${basename.padEnd(25)} ${sample.sample_rate}Hz ${channelsStr.padEnd(6)} ${durationStr}`,
       );
     }
 
@@ -1777,25 +1848,17 @@ export class BounceApp {
 
     for (const feature of features) {
       const shortSampleHash = feature.sample_hash.substring(0, 8);
-      const shortFeatureHash = feature.feature_hash.substring(0, 8);
-      const timestamp = new Date(feature.created_at).toLocaleString();
+      const basename = feature.file_path.split("/").pop() || feature.file_path;
+      const optionsDisplay = feature.options || "{}";
+      const hashDisplay = feature.feature_count > 1 ? `GROUP(${feature.feature_count})` : shortSampleHash;
 
       this.terminal.writeln(
-        `  \x1b[33m${feature.id}\x1b[0m: ${feature.feature_type}`,
+        `  \x1b[33m${hashDisplay.padEnd(12)}\x1b[0m ${feature.feature_type.padEnd(12)} ${shortSampleHash} ${basename.padEnd(25)} ${optionsDisplay}`,
       );
-      this.terminal.writeln(
-        `     Sample: ${shortSampleHash}  Feature Hash: ${shortFeatureHash}`,
-      );
-      this.terminal.writeln(
-        `     Slices: ${feature.slice_count}  Created: ${timestamp}`,
-      );
-      if (feature.options) {
-        this.terminal.writeln(`     Options: ${feature.options}`);
-      }
     }
 
     this.terminal.writeln("");
-    this.terminal.writeln(`Total: ${features.length} feature(s)`);
+    this.terminal.writeln(`Total: ${features.length} feature group(s)`);
   }
 
   private async listSlices(): Promise<void> {
@@ -2177,17 +2240,19 @@ export class BounceApp {
       case "sep":
         this.terminal.writeln("\x1b[1;36mCommand: sep\x1b[0m");
         this.terminal.writeln("");
-        this.terminal.writeln("\x1b[33mUsage:\x1b[0m sep <sample-hash>");
+        this.terminal.writeln(
+          "\x1b[33mUsage:\x1b[0m sep <sample-hash> [feature-hash]",
+        );
         this.terminal.writeln("");
         this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
         this.terminal.writeln(
-          "  Marks NMF components for individual playback.",
+          "  Resynthesizes NMF components for individual playback.",
         );
         this.terminal.writeln(
           "  Each component represents a distinct spectral/temporal pattern.",
         );
         this.terminal.writeln(
-          "  Components can be played back individually by index.",
+          "  Components are stored as audio and can be played back by index.",
         );
         this.terminal.writeln(
           "  Requires that 'analyze-nmf' has been run on the sample first.",
@@ -2196,13 +2261,57 @@ export class BounceApp {
         this.terminal.writeln("\x1b[33mWorkflow:\x1b[0m");
         this.terminal.writeln("  1. play <hash>                  # Load sample");
         this.terminal.writeln("  2. analyze-nmf <hash>           # Analyze with NMF");
-        this.terminal.writeln("  3. sep <hash>                   # Mark components");
+        this.terminal.writeln("  3. sep <hash>                   # Resynthesize components");
         this.terminal.writeln("  4. play-component <hash> <idx>  # Play a component");
         this.terminal.writeln("");
         this.terminal.writeln("\x1b[33mExample:\x1b[0m");
         this.terminal.writeln("  analyze-nmf 82a4b173 --components 5");
         this.terminal.writeln("  sep 82a4b173");
         this.terminal.writeln("  play-component 82a4b173 0");
+        break;
+
+      case "nx":
+        this.terminal.writeln("\x1b[1;36mCommand: nx\x1b[0m");
+        this.terminal.writeln("");
+        this.terminal.writeln(
+          "\x1b[33mUsage:\x1b[0m nx <target-hash> <source-hash> [source-feature-hash]",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
+        this.terminal.writeln(
+          "  Cross-synthesis: applies NMF bases from source to target sample.",
+        );
+        this.terminal.writeln(
+          "  Uses the spectral dictionary learned from one sample to decompose another.",
+        );
+        this.terminal.writeln(
+          "  Great for transferring learned patterns (e.g., drum templates) across recordings.",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mExample:\x1b[0m");
+        this.terminal.writeln("  analyze-nmf drums.wav --components 10");
+        this.terminal.writeln("  nx song.wav drums.wav");
+        this.terminal.writeln("  play-component song.wav 0");
+        break;
+
+      case "visualize-nx":
+        this.terminal.writeln("\x1b[1;36mCommand: visualize-nx\x1b[0m");
+        this.terminal.writeln("");
+        this.terminal.writeln(
+          "\x1b[33mUsage:\x1b[0m visualize-nx <target-hash>",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mDescription:\x1b[0m");
+        this.terminal.writeln(
+          "  Visualizes NMF cross-synthesis showing source bases vs target activations.",
+        );
+        this.terminal.writeln(
+          "  Overlays the visualization on the current waveform display.",
+        );
+        this.terminal.writeln("");
+        this.terminal.writeln("\x1b[33mExample:\x1b[0m");
+        this.terminal.writeln("  nx target.wav source.wav");
+        this.terminal.writeln("  visualize-nx target.wav");
         break;
 
       case "analyze-nmf":
