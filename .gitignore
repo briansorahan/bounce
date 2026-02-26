@@ -14,4 +14,4 @@ third_party/memory/install/
 !README.md
 !.github/copilot-instructions.md
 !.github/agents/*.md
-!.github/skills/*.md
+!.github/skills/**/*.md
