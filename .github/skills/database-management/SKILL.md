@@ -1,3 +1,12 @@
+---
+name: database-management
+description: SQLite commands for managing the Bounce application database
+version: 1.0.0
+created: 2026-02-27
+updated: 2026-02-27
+tags: [sqlite, database, samples, features, slices, command-history, debug-logs]
+---
+
 # Database Management Skills
 
 SQLite commands for managing the Bounce application database.
