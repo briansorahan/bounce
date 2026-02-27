@@ -15,19 +15,20 @@ interface FeatureData {
   options: string | null;
 }
 
-interface SliceData {
+interface SampleData {
   id: number;
-  sample_hash: string;
-  feature_id: number;
-  slice_index: number;
-  start_sample: number;
-  end_sample: number;
+  hash: string;
+  file_path: string | null;
+  audio_data: Buffer;
+  sample_rate: number;
+  channels: number;
+  duration: number;
 }
 
 interface SampleListData {
   id: number;
   hash: string;
-  file_path: string;
+  file_path: string | null;
   sample_rate: number;
   channels: number;
   duration: number;
@@ -35,14 +36,19 @@ interface SampleListData {
   created_at: string;
 }
 
-interface SampleData {
-  id: number;
-  hash: string;
-  file_path: string;
-  audio_data: Buffer;
-  sample_rate: number;
-  channels: number;
-  duration: number;
+interface SampleFeatureLinkData {
+  sample_hash: string;
+  source_hash: string;
+  feature_hash: string;
+  index_order: number;
+}
+
+interface DerivedSampleSummaryData {
+  source_hash: string;
+  source_file_path: string | null;
+  feature_hash: string;
+  feature_type: string;
+  derived_count: number;
 }
 
 interface FeatureListData {
@@ -51,32 +57,6 @@ interface FeatureListData {
   file_path: string;
   options: string | null;
   feature_count: number;
-}
-
-interface SlicesSummary {
-  sample_hash: string;
-  file_path: string;
-  feature_id: number;
-  slice_count: number;
-  min_slice_id: number;
-  max_slice_id: number;
-}
-
-interface ComponentData {
-  id: number;
-  sample_hash: string;
-  feature_id: number;
-  component_index: number;
-  audio_data: Buffer;
-}
-
-interface ComponentsSummary {
-  sample_hash: string;
-  file_path: string;
-  feature_id: number;
-  component_count: number;
-  min_component_id: number;
-  max_component_id: number;
 }
 
 interface OnsetSliceOptions {
@@ -161,25 +141,23 @@ interface Window {
       sampleHash?: string,
       featureType?: string,
     ) => Promise<FeatureData | null>;
-    createSlices: (
+    createSliceSamples: (
       sampleHash: string,
-      featureId: number,
-      slicePositions: number[],
-    ) => Promise<number[]>;
-    getSlicesByFeature: (featureId: number) => Promise<SliceData[]>;
-    getSlice: (sliceId: number) => Promise<SliceData | null>;
-    getComponentsByFeature: (featureId: number) => Promise<ComponentData[]>;
-    getComponent: (componentId: number) => Promise<ComponentData | null>;
-    getComponentByIndex: (
-      sampleHash: string,
-      featureId: number,
-      componentIndex: number,
-    ) => Promise<ComponentData | null>;
+      featureHash: string,
+    ) => Promise<{ hash: string; index: number }[]>;
+    getDerivedSamples: (
+      sourceHash: string,
+      featureHash: string,
+    ) => Promise<SampleFeatureLinkData[]>;
+    getDerivedSampleByIndex: (
+      sourceHash: string,
+      featureHash: string,
+      index: number,
+    ) => Promise<SampleData | null>;
+    listDerivedSamplesSummary: () => Promise<DerivedSampleSummaryData[]>;
     listSamples: () => Promise<SampleListData[]>;
     listFeatures: () => Promise<FeatureListData[]>;
     getSampleByHash: (hash: string) => Promise<SampleData | null>;
-    listSlicesSummary: () => Promise<SlicesSummary[]>;
-    listComponentsSummary: () => Promise<ComponentsSummary[]>;
     analyzeNMF: (
       args: string[],
     ) => Promise<{ success: boolean; message: string }>;

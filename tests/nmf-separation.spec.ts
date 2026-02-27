@@ -77,10 +77,11 @@ test.describe("NMF Separation", () => {
 
     // Verify components were created
     const componentsSummary = await window.evaluate(async () => {
-      return await window.electron.listComponentsSummary();
+      const summary = await window.electron.listDerivedSamplesSummary();
+      return summary.filter((s) => s.feature_type === "nmf");
     });
 
     expect(componentsSummary.length).toBeGreaterThan(0);
-    expect(componentsSummary[0].component_count).toBe(3);
+    expect(componentsSummary[0].derived_count).toBe(3);
   });
 });

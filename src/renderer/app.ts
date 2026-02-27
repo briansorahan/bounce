@@ -831,7 +831,7 @@ export class BounceApp {
             audioData: audioData,
             sampleRate: sample.sample_rate,
             duration: sample.duration,
-            filePath: sample.file_path,
+            filePath: sample.file_path ?? undefined,
             hash: sample.hash,
             visualize: () => "Visualization available",
             analyzeOnsetSlice: async () => ({
@@ -1200,7 +1200,6 @@ export class BounceApp {
     try {
       window.electron.debugLog("info", "[Slice] Starting slice creation");
 
-      // Get most recent audio
       const audio = this.audioManager.getCurrentAudio();
       if (!audio || !audio.hash) {
         this.terminal.writeln(
@@ -1209,7 +1208,6 @@ export class BounceApp {
         return;
       }
 
-      // Get most recent feature for this sample
       const feature = await window.electron.getMostRecentFeature(
         audio.hash,
         "onset-slice",
@@ -1222,36 +1220,26 @@ export class BounceApp {
       }
 
       window.electron.debugLog("info", "[Slice] Found feature", {
-        featureId: feature.id,
+        featureHash: feature.feature_hash,
       });
 
-      // Parse feature data
-      const slicePositions = JSON.parse(feature.feature_data) as number[];
-
       this.terminal.writeln(
-        `\x1b[36mCreating ${slicePositions.length - 1} slices from feature ${feature.id}...\x1b[0m`,
+        `\x1b[36mCreating slices from feature ${feature.feature_hash.substring(0, 8)}...\x1b[0m`,
       );
 
-      // Create slices in database
-      const sliceIds = await window.electron.createSlices(
+      const slices = await window.electron.createSliceSamples(
         audio.hash,
-        feature.id,
-        slicePositions,
+        feature.feature_hash,
       );
 
       window.electron.debugLog("info", "[Slice] Slices created", {
-        count: sliceIds.length,
-        firstId: sliceIds[0],
-        lastId: sliceIds[sliceIds.length - 1],
+        count: slices.length,
       });
 
-      this.terminal.writeln(`\x1b[32mCreated ${sliceIds.length} slices\x1b[0m`);
-      this.terminal.writeln(
-        `Slice IDs: ${sliceIds[0]} - ${sliceIds[sliceIds.length - 1]}`,
-      );
+      this.terminal.writeln(`\x1b[32mCreated ${slices.length} slices\x1b[0m`);
       this.terminal.writeln("");
       this.terminal.writeln(
-        '\x1b[36mTip: Use "play-slice <id>" to play individual slices\x1b[0m',
+        `\x1b[36mTip: Use "play-slice ${audio.hash.substring(0, 8)} <index>" to play individual slices\x1b[0m`,
       );
     } catch (error) {
       window.electron.debugLog("error", "[Slice] Error creating slices", {
@@ -1264,67 +1252,66 @@ export class BounceApp {
   }
 
   private async handlePlaySliceCommand(args: string[]): Promise<void> {
-    if (args.length === 0) {
-      this.terminal.writeln("\x1b[31mUsage: play-slice <slice-id>\x1b[0m");
+    if (args.length < 2) {
+      this.terminal.writeln(
+        "\x1b[31mUsage: play-slice <sample-hash> <index>\x1b[0m",
+      );
       return;
     }
 
-    const sliceId = parseInt(args[0]);
-    if (isNaN(sliceId)) {
+    const sourceHash = args[0];
+    const sliceIndex = parseInt(args[1]);
+    if (isNaN(sliceIndex)) {
       this.terminal.writeln(
-        "\x1b[31mInvalid slice ID. Must be a number.\x1b[0m",
+        "\x1b[31mInvalid slice index. Must be a number.\x1b[0m",
       );
       return;
     }
 
     try {
       window.electron.debugLog("info", "[PlaySlice] Loading slice", {
-        sliceId,
+        sourceHash,
+        sliceIndex,
       });
 
-      // Get slice from database
-      const slice = await window.electron.getSlice(sliceId);
-      if (!slice) {
-        this.terminal.writeln(`\x1b[31mSlice ${sliceId} not found\x1b[0m`);
+      const feature = await window.electron.getMostRecentFeature(
+        sourceHash,
+        "onset-slice",
+      );
+      if (!feature) {
+        this.terminal.writeln(
+          `\x1b[31mNo onset-slice analysis found for sample ${sourceHash}\x1b[0m`,
+        );
         return;
       }
 
-      // Get the sample
-      const sample = await window.electron.getSampleByHash(slice.sample_hash);
-      if (!sample) {
-        this.terminal.writeln("\x1b[31mSample not found for slice\x1b[0m");
+      const derivedSample = await window.electron.getDerivedSampleByIndex(
+        sourceHash,
+        feature.feature_hash,
+        sliceIndex,
+      );
+      if (!derivedSample) {
+        this.terminal.writeln(
+          `\x1b[31mSlice ${sliceIndex} not found. Run 'slice' first.\x1b[0m`,
+        );
         return;
       }
 
-      window.electron.debugLog("info", "[PlaySlice] Sample loaded", {
-        sampleHash: slice.sample_hash.substring(0, 8),
-        startSample: slice.start_sample,
-        endSample: slice.end_sample,
-      });
-
-      // Convert Buffer back to Float32Array
-      const fullAudioData = new Float32Array(
-        sample.audio_data.buffer,
-        sample.audio_data.byteOffset,
-        sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+      const audioBuffer = derivedSample.audio_data as Buffer;
+      const audioData = new Float32Array(
+        audioBuffer.buffer,
+        audioBuffer.byteOffset,
+        audioBuffer.byteLength / Float32Array.BYTES_PER_ELEMENT,
       );
 
-      // Extract slice segment
-      const startSample = slice.start_sample;
-      const endSample = slice.end_sample;
-      const lengthSamples = endSample - startSample;
-      const duration = lengthSamples / sample.sample_rate;
+      const duration = audioData.length / derivedSample.sample_rate;
 
-      // Extract channel data for the slice
-      const sliceChannelData = fullAudioData.slice(startSample, endSample);
-
-      // Create audio object for playback (slices don't have onset markers)
       const audio = {
-        audioData: sliceChannelData,
-        sampleRate: sample.sample_rate,
+        audioData: audioData,
+        sampleRate: derivedSample.sample_rate,
         duration: duration,
-        filePath: `Slice ${sliceId} from ${sample.file_path}`,
-        hash: `${sample.hash}-slice-${sliceId}`,
+        filePath: `Slice ${sliceIndex} from ${sourceHash.substring(0, 8)}`,
+        hash: derivedSample.hash,
         visualize: () => "Visualization not available for slices",
         analyzeOnsetSlice: async () => ({
           slices: [],
@@ -1332,31 +1319,19 @@ export class BounceApp {
         }),
       };
 
-      // Set as current audio (this clears any previous onset slices)
       this.audioManager.setCurrentAudio(audio);
-
-      window.electron.debugLog("debug", "[PlaySlice] Before clearSlices", {
-        slicesPresent: !!this.audioManager.getCurrentSlices(),
-      });
-
-      this.audioManager.clearSlices(); // Explicitly clear slices
-
-      window.electron.debugLog("debug", "[PlaySlice] After clearSlices", {
-        slicesPresent: !!this.audioManager.getCurrentSlices(),
-      });
+      this.audioManager.clearSlices();
 
       await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
 
-      // Update waveform visualization (without slice markers)
       this.updateWaveformVisualization();
 
-      this.terminal.writeln(`\x1b[32mPlaying slice ${sliceId}\x1b[0m`);
-      this.terminal.writeln(
-        `Slice ${slice.slice_index}: ${startSample} - ${endSample} (${duration.toFixed(3)}s)`,
-      );
+      this.terminal.writeln(`\x1b[32mPlaying slice ${sliceIndex}\x1b[0m`);
+      this.terminal.writeln(`Duration: ${duration.toFixed(3)}s`);
 
       window.electron.debugLog("info", "[PlaySlice] Playback started", {
-        sliceId,
+        sourceHash,
+        sliceIndex,
       });
     } catch (error) {
       window.electron.debugLog("error", "[PlaySlice] Error playing slice", {
@@ -1477,41 +1452,21 @@ export class BounceApp {
         return;
       }
 
-      // Get feature ID
-      const featureRecord = await window.electron.getMostRecentFeature(
+      // Get derived sample by index
+      const derivedSample = await window.electron.getDerivedSampleByIndex(
         sample.hash,
-        "nmf",
-      );
-      
-      if (!featureRecord) {
-        this.terminal.writeln(
-          `\x1b[31mFeature record not found\x1b[0m`,
-        );
-        return;
-      }
-
-      // Get component from database
-      const component = await window.electron.getComponentByIndex(
-        sample.hash,
-        featureRecord.id,
+        feature.feature_hash,
         componentIndex,
       );
 
-      if (!component) {
+      if (!derivedSample) {
         this.terminal.writeln(
           `\x1b[31mComponent ${componentIndex} not found. Run 'sep ${sampleHash}' first.\x1b[0m`,
         );
         return;
       }
 
-      const componentAudioBuffer = component.audio_data as Buffer;
-      
-      if (!componentAudioBuffer || componentAudioBuffer.length === 0) {
-        this.terminal.writeln(
-          `\x1b[31mNo audio data for component ${componentIndex}. Run 'sep ${sampleHash}' to resynthesize.\x1b[0m`,
-        );
-        return;
-      }
+      const componentAudioBuffer = derivedSample.audio_data as Buffer;
 
       window.electron.debugLog("info", "[PlayComponent] Component audio loaded", {
         sampleHash: sample.hash.substring(0, 8),
@@ -1519,7 +1474,6 @@ export class BounceApp {
         audioDataLength: componentAudioBuffer.length,
       });
 
-      // Convert buffer to Float32Array
       const componentAudio = new Float32Array(
         componentAudioBuffer.buffer,
         componentAudioBuffer.byteOffset,
@@ -1528,13 +1482,12 @@ export class BounceApp {
 
       const duration = componentAudio.length / sample.sample_rate;
 
-      // Create audio object for playback
       const audio = {
         audioData: componentAudio,
         sampleRate: sample.sample_rate,
         duration: duration,
-        filePath: `Component ${componentIndex} from ${sample.file_path}`,
-        hash: `${sample.hash}-component-${componentIndex}`,
+        filePath: `Component ${componentIndex} from ${sample.file_path ?? sampleHash.substring(0, 8)}`,
+        hash: derivedSample.hash,
         visualize: () => "Visualization not available for components",
         analyzeOnsetSlice: async () => ({
           slices: [],
@@ -1542,13 +1495,11 @@ export class BounceApp {
         }),
       };
 
-      // Set as current audio
       this.audioManager.setCurrentAudio(audio);
       this.audioManager.clearSlices();
 
       await this.audioManager.playAudio(audio.audioData, audio.sampleRate);
 
-      // Update waveform visualization
       this.updateWaveformVisualization();
 
       this.terminal.writeln(
@@ -1616,7 +1567,7 @@ export class BounceApp {
           audioData: audioData,
           sampleRate: sample.sample_rate,
           duration: sample.duration,
-          filePath: sample.file_path,
+          filePath: sample.file_path ?? undefined,
           hash: sample.hash,
           visualize: () => "Visualization available",
           analyzeOnsetSlice: async () => ({
@@ -1697,7 +1648,7 @@ export class BounceApp {
         audioData: audioData,
         sampleRate: sample.sample_rate,
         duration: sample.duration,
-        filePath: sample.file_path,
+        filePath: sample.file_path ?? undefined,
         hash: sample.hash,
         visualize: () => "NX Visualization",
         analyzeOnsetSlice: async () => ({
@@ -1822,7 +1773,7 @@ export class BounceApp {
 
     for (const sample of samples) {
       const shortHash = sample.hash.substring(0, 8);
-      const basename = sample.file_path.split("/").pop() || sample.file_path;
+      const basename = (sample.file_path ?? sample.hash).split("/").pop() || sample.hash.substring(0, 8);
       const durationStr = `${sample.duration.toFixed(2)}s`;
       const channelsStr = sample.channels === 1 ? "mono" : "stereo";
 
@@ -1862,9 +1813,10 @@ export class BounceApp {
   }
 
   private async listSlices(): Promise<void> {
-    const slicesSummary = await window.electron.listSlicesSummary();
+    const summary = await window.electron.listDerivedSamplesSummary();
+    const sliceSummary = summary.filter((s) => s.feature_type === "onset-slice");
 
-    if (slicesSummary.length === 0) {
+    if (sliceSummary.length === 0) {
       this.terminal.writeln("\x1b[33mNo slices in database\x1b[0m");
       return;
     }
@@ -1873,29 +1825,34 @@ export class BounceApp {
     this.terminal.writeln("");
 
     let totalSlices = 0;
-    for (const summary of slicesSummary) {
-      const shortHash = summary.sample_hash.substring(0, 8);
-      const fileName = summary.file_path.split("/").pop();
+    for (const s of sliceSummary) {
+      const shortHash = s.source_hash.substring(0, 8);
+      const fileName =
+        (s.source_file_path ?? s.source_hash).split("/").pop() ??
+        shortHash;
 
       this.terminal.writeln(`  \x1b[33m${shortHash}\x1b[0m: ${fileName}`);
       this.terminal.writeln(
-        `     ${summary.slice_count} slices (IDs: ${summary.min_slice_id} - ${summary.max_slice_id})`,
+        `     ${s.derived_count} slices (indices: 0-${s.derived_count - 1})`,
       );
-      this.terminal.writeln(`     Feature ID: ${summary.feature_id}`);
+      this.terminal.writeln(
+        `     Feature: ${s.feature_hash.substring(0, 8)}`,
+      );
 
-      totalSlices += summary.slice_count;
+      totalSlices += s.derived_count;
     }
 
     this.terminal.writeln("");
     this.terminal.writeln(
-      `Total: ${totalSlices} slice(s) across ${slicesSummary.length} sample(s)`,
+      `Total: ${totalSlices} slice(s) across ${sliceSummary.length} sample(s)`,
     );
   }
 
   private async listComponents(): Promise<void> {
-    const componentsSummary = await window.electron.listComponentsSummary();
+    const summary = await window.electron.listDerivedSamplesSummary();
+    const componentSummary = summary.filter((s) => s.feature_type === "nmf");
 
-    if (componentsSummary.length === 0) {
+    if (componentSummary.length === 0) {
       this.terminal.writeln("\x1b[33mNo components in database\x1b[0m");
       this.terminal.writeln(
         "\x1b[36mTip: Use 'sep <sample-hash>' to mark NMF components\x1b[0m",
@@ -1907,22 +1864,26 @@ export class BounceApp {
     this.terminal.writeln("");
 
     let totalComponents = 0;
-    for (const summary of componentsSummary) {
-      const shortHash = summary.sample_hash.substring(0, 8);
-      const fileName = summary.file_path.split("/").pop();
+    for (const s of componentSummary) {
+      const shortHash = s.source_hash.substring(0, 8);
+      const fileName =
+        (s.source_file_path ?? s.source_hash).split("/").pop() ??
+        shortHash;
 
       this.terminal.writeln(`  \x1b[33m${shortHash}\x1b[0m: ${fileName}`);
       this.terminal.writeln(
-        `     ${summary.component_count} components (indices: 0-${summary.component_count - 1})`,
+        `     ${s.derived_count} components (indices: 0-${s.derived_count - 1})`,
       );
-      this.terminal.writeln(`     Feature ID: ${summary.feature_id}`);
+      this.terminal.writeln(
+        `     Feature: ${s.feature_hash.substring(0, 8)}`,
+      );
 
-      totalComponents += summary.component_count;
+      totalComponents += s.derived_count;
     }
 
     this.terminal.writeln("");
     this.terminal.writeln(
-      `Total: ${totalComponents} component(s) across ${componentsSummary.length} sample(s)`,
+      `Total: ${totalComponents} component(s) across ${componentSummary.length} sample(s)`,
     );
     this.terminal.writeln("");
     this.terminal.writeln(
@@ -1958,7 +1919,7 @@ export class BounceApp {
       "  \x1b[33mslice\x1b[0m - Create slices from most recent onset analysis",
     );
     this.terminal.writeln(
-      "  \x1b[33mplay-slice <id>\x1b[0m - Play an individual slice",
+      "  \x1b[33mplay-slice <hash> <index>\x1b[0m - Play an individual slice",
     );
     this.terminal.writeln(
       "  \x1b[33manalyze-nmf <sample-hash>\x1b[0m - Analyze audio using NMF",

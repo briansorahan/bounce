@@ -144,13 +144,14 @@ test.describe("NMF Cross-Synthesis", () => {
 
     // Verify components were created and have audio data
     const componentsSummary = await window.evaluate(async () => {
-      return await window.electron.listComponentsSummary();
+      const summary = await window.electron.listDerivedSamplesSummary();
+      return summary.filter((s) => s.feature_type === "nmf");
     });
 
     const targetComponents = componentsSummary.find(
-      (s) => s.sample_hash.startsWith(targetHashShort) && s.component_count === 2,
+      (s) => s.source_hash.startsWith(targetHashShort) && s.derived_count === 2,
     );
     expect(targetComponents).toBeDefined();
-    expect(targetComponents!.component_count).toBe(2);
+    expect(targetComponents!.derived_count).toBe(2);
   });
 });
