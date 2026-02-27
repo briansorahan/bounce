@@ -145,7 +145,7 @@ test.describe("NMF Cross-Synthesis", () => {
     // Verify components were created and have audio data
     const componentsSummary = await window.evaluate(async () => {
       const summary = await window.electron.listDerivedSamplesSummary();
-      return summary.filter((s) => s.feature_type === "nmf");
+      return summary.filter((s) => s.feature_type === "nmf-cross");
     });
 
     const targetComponents = componentsSummary.find(
