@@ -1,3 +1,12 @@
+---
+name: debug-logging
+description: Guide for using the SQLite-backed debug logging system in Bounce
+version: 1.0.0
+created: 2026-02-27
+updated: 2026-02-27
+tags: [logging, sqlite, debugging, electron, renderer, ipc]
+---
+
 # Debug Logging Skill
 
 Always use the SQLite-backed debug logging system instead of `console.log` in the Bounce application.

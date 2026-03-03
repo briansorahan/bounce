@@ -187,20 +187,11 @@ Example:
 
       debugLog("info", "[NX] Cross-synthesis feature stored");
 
-      // Get feature ID for component storage
-      const featureRecord = dbManager.db
-        .prepare("SELECT id FROM features WHERE feature_hash = ?")
-        .get(featureHash) as { id: number } | undefined;
-
-      if (!featureRecord) {
-        return { success: false, message: "Failed to retrieve feature ID" };
-      }
-
       // Now resynthesize components using the cross-synthesis result
       debugLog("info", "[NX] Resynthesizing components");
 
       const nmf = new BufNMF({ fftSize, hopSize, windowSize });
-      const componentIds: number[] = [];
+      const derivedHashes: string[] = [];
 
       for (let i = 0; i < numComponents; i++) {
         debugLog("info", `[NX] Resynthesizing component ${i}/${numComponents}`);
@@ -215,17 +206,20 @@ Example:
 
         const componentBuffer = Buffer.from(componentAudio.buffer);
 
-        const result = dbManager.db
-          .prepare(
-            `INSERT OR REPLACE INTO components (sample_hash, feature_id, component_index, audio_data) 
-             VALUES (?, ?, ?, ?)`,
-          )
-          .run(targetSample.hash, featureRecord.id, i, componentBuffer);
+        const derivedHash = dbManager.createDerivedSample(
+          targetSample.hash,
+          featureHash,
+          i,
+          componentBuffer,
+          targetSample.sample_rate,
+          targetSample.channels,
+          componentAudio.length / targetSample.sample_rate,
+        );
 
-        componentIds.push(result.lastInsertRowid as number);
+        derivedHashes.push(derivedHash);
       }
 
-      debugLog("info", "[NX] All components resynthesized", { componentIds });
+      debugLog("info", "[NX] All components resynthesized", { derivedHashes });
 
       return {
         success: true,

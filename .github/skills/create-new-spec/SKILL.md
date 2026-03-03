@@ -128,6 +128,16 @@ If during PLAN or IMPL you discover a flaw in a previous phase:
 
 Previous phase files should be treated as immutable except for critical corrections.
 
+## Maintaining Plan Consistency
+
+Whenever any part of a plan is changed (e.g., a requirement is reversed, a constraint is dropped, an approach is revised), **immediately review the entire plan file for contradictions**:
+
+1. **Identify all sections** that reference the changed topic (search for related keywords)
+2. **Remove or update** any content that now contradicts the change
+3. **Do not leave stale content** — a plan with conflicting statements is worse than one that is silent on a topic
+
+This applies equally to PLAN.md and IMPL.md. A common failure mode is adding a new section that reflects the updated decision while leaving an old section with the opposite requirement intact.
+
 ## Resuming Paused Work
 
 When returning to a spec after a break:

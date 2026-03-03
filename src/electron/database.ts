@@ -14,7 +14,7 @@ export interface DebugLogEntry {
 export interface SampleRecord {
   id: number;
   hash: string;
-  file_path: string;
+  file_path: string | null;
   audio_data: Buffer;
   sample_rate: number;
   channels: number;
@@ -30,27 +30,10 @@ export interface FeatureRecord {
   options: string | null;
 }
 
-export interface SliceRecord {
-  id: number;
-  sample_hash: string;
-  feature_id: number;
-  slice_index: number;
-  start_sample: number;
-  end_sample: number;
-}
-
-export interface ComponentRecord {
-  id: number;
-  sample_hash: string;
-  feature_id: number;
-  component_index: number;
-  audio_data: Buffer;
-}
-
 export interface SampleListRecord {
   id: number;
   hash: string;
-  file_path: string;
+  file_path: string | null;
   sample_rate: number;
   channels: number;
   duration: number;
@@ -67,22 +50,19 @@ export interface FeatureListRecord {
   feature_hash: string;
 }
 
-export interface SlicesSummaryRecord {
+export interface SampleFeatureLink {
   sample_hash: string;
-  file_path: string;
-  feature_id: number;
-  slice_count: number;
-  min_slice_id: number;
-  max_slice_id: number;
+  source_hash: string;
+  feature_hash: string;
+  index_order: number;
 }
 
-export interface ComponentsSummaryRecord {
-  sample_hash: string;
-  file_path: string;
-  feature_id: number;
-  component_count: number;
-  min_component_id: number;
-  max_component_id: number;
+export interface DerivedSampleSummary {
+  source_hash: string;
+  source_file_path: string | null;
+  feature_hash: string;
+  feature_type: string;
+  derived_count: number;
 }
 
 export interface FeatureOptions {
@@ -93,16 +73,47 @@ export interface FeatureOptions {
 export class DatabaseManager {
   public db: Database.Database;
 
-  constructor() {
-    const userDataPath = app.getPath("userData");
-    const dbPath = path.join(userDataPath, "bounce.db");
+  constructor(dbPath?: string) {
+    const resolvedPath =
+      dbPath ?? path.join(app.getPath("userData"), "bounce.db");
 
-    this.db = new Database(dbPath);
+    this.db = new Database(resolvedPath);
     this.initializeTables();
   }
 
   private initializeTables(): void {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_versions (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const migrations: Array<() => void> = [
+      () => this.migrate001_baseTables(),
+      () => this.migrate002_sampleFilePathNullable(),
+      () => this.migrate003_samplesFeatures(),
+      () => this.migrate004_repairFeaturesFK(),
+    ];
+
+    for (let version = 1; version <= migrations.length; version++) {
+      const applied = this.db
+        .prepare("SELECT 1 FROM schema_versions WHERE version = ?")
+        .get(version);
+      if (!applied) {
+        migrations[version - 1]();
+        this.db
+          .prepare("INSERT INTO schema_versions (version) VALUES (?)")
+          .run(version);
+      }
+    }
+  }
+
+  private migrate001_baseTables(): void {
+    this.db.exec(`
+      DROP TABLE IF EXISTS slices;
+      DROP TABLE IF EXISTS components;
+
       CREATE TABLE IF NOT EXISTS command_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         command TEXT NOT NULL,
@@ -110,7 +121,7 @@ export class DatabaseManager {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE INDEX IF NOT EXISTS idx_command_history_timestamp 
+      CREATE INDEX IF NOT EXISTS idx_command_history_timestamp
       ON command_history(timestamp DESC);
 
       CREATE TABLE IF NOT EXISTS debug_logs (
@@ -122,25 +133,8 @@ export class DatabaseManager {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE INDEX IF NOT EXISTS idx_debug_logs_timestamp 
+      CREATE INDEX IF NOT EXISTS idx_debug_logs_timestamp
       ON debug_logs(timestamp DESC);
-
-      CREATE TABLE IF NOT EXISTS samples (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        hash TEXT NOT NULL UNIQUE,
-        file_path TEXT NOT NULL,
-        audio_data BLOB NOT NULL,
-        sample_rate INTEGER NOT NULL,
-        channels INTEGER NOT NULL,
-        duration REAL NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_samples_hash 
-      ON samples(hash);
-
-      CREATE INDEX IF NOT EXISTS idx_samples_file_path 
-      ON samples(file_path);
 
       CREATE TABLE IF NOT EXISTS features (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,50 +148,192 @@ export class DatabaseManager {
         FOREIGN KEY (sample_hash) REFERENCES samples(hash)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_features_sample 
-      ON features(sample_hash);
-
-      CREATE INDEX IF NOT EXISTS idx_features_type 
-      ON features(feature_type);
-
-      CREATE INDEX IF NOT EXISTS idx_features_hash 
-      ON features(feature_hash);
-
-      CREATE TABLE IF NOT EXISTS slices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sample_hash TEXT NOT NULL,
-        feature_id INTEGER NOT NULL,
-        slice_index INTEGER NOT NULL,
-        start_sample INTEGER NOT NULL,
-        end_sample INTEGER NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (sample_hash) REFERENCES samples(hash),
-        FOREIGN KEY (feature_id) REFERENCES features(id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_slices_sample 
-      ON slices(sample_hash);
-
-      CREATE INDEX IF NOT EXISTS idx_slices_feature 
-      ON slices(feature_id);
-
-      CREATE TABLE IF NOT EXISTS components (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sample_hash TEXT NOT NULL,
-        feature_id INTEGER NOT NULL,
-        component_index INTEGER NOT NULL,
-        audio_data BLOB NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (sample_hash) REFERENCES samples(hash),
-        FOREIGN KEY (feature_id) REFERENCES features(id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_components_sample 
-      ON components(sample_hash);
-
-      CREATE INDEX IF NOT EXISTS idx_components_feature 
-      ON components(feature_id);
+      CREATE INDEX IF NOT EXISTS idx_features_sample ON features(sample_hash);
+      CREATE INDEX IF NOT EXISTS idx_features_type ON features(feature_type);
+      CREATE INDEX IF NOT EXISTS idx_features_hash ON features(feature_hash);
     `);
+  }
+
+  private migrate002_sampleFilePathNullable(): void {
+    // All DDL in this migration runs with FK enforcement off.
+    // SQLite's ALTER TABLE RENAME silently rewrites FK references in dependent
+    // tables (since 3.37.0), which means after any rename the features table
+    // may have a stale FK pointing to the old table name. We detect and fix
+    // that at the end of this migration using PRAGMA foreign_key_list.
+    this.db.exec("PRAGMA foreign_keys = OFF;");
+
+    try {
+      const samplesExists = !!this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='samples'",
+        )
+        .get();
+
+      const samplesOldExists = !!this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='samples_old'",
+        )
+        .get();
+
+      if (!samplesExists && !samplesOldExists) {
+        // Fresh install: create samples with nullable file_path from scratch.
+        this.db.exec(`
+          CREATE TABLE samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash TEXT NOT NULL UNIQUE,
+            file_path TEXT,
+            audio_data BLOB NOT NULL,
+            sample_rate INTEGER NOT NULL,
+            channels INTEGER NOT NULL,
+            duration REAL NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+      } else if (!samplesExists && samplesOldExists) {
+        // Crashed after rename but before CREATE TABLE samples: restore from samples_old.
+        this.db.exec(`
+          CREATE TABLE samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash TEXT NOT NULL UNIQUE,
+            file_path TEXT,
+            audio_data BLOB NOT NULL,
+            sample_rate INTEGER NOT NULL,
+            channels INTEGER NOT NULL,
+            duration REAL NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO samples
+            SELECT id, hash, file_path, audio_data, sample_rate, channels, duration, created_at
+            FROM samples_old;
+          DROP TABLE samples_old;
+        `);
+      } else if (samplesExists) {
+        const cols = this.db
+          .prepare("PRAGMA table_info(samples)")
+          .all() as Array<{ name: string; notnull: number }>;
+        const filePathCol = cols.find((c) => c.name === "file_path");
+
+        if (filePathCol && filePathCol.notnull === 1) {
+          // samples.file_path is still NOT NULL — run the rename/recreate/drop.
+          // Drop any pre-existing samples_old first so the rename can proceed.
+          if (samplesOldExists) {
+            this.db.exec("DROP TABLE samples_old;");
+          }
+          this.db.exec(`
+            ALTER TABLE samples RENAME TO samples_old;
+            CREATE TABLE samples (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              hash TEXT NOT NULL UNIQUE,
+              file_path TEXT,
+              audio_data BLOB NOT NULL,
+              sample_rate INTEGER NOT NULL,
+              channels INTEGER NOT NULL,
+              duration REAL NOT NULL,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO samples
+              SELECT id, hash, file_path, audio_data, sample_rate, channels, duration, created_at
+              FROM samples_old;
+            DROP TABLE samples_old;
+          `);
+        } else if (samplesOldExists) {
+          // samples.file_path is already nullable but samples_old is still
+          // around (DROP TABLE failed in a previous run). Clean it up.
+          this.db.exec("DROP TABLE samples_old;");
+        }
+      }
+
+      // After any rename operation SQLite may have rewritten the features FK to
+      // point to a now-dropped table. Detect and repair it.
+      const featuresFKs = this.db
+        .prepare("PRAGMA foreign_key_list(features)")
+        .all() as Array<{ table: string; from: string }>;
+      const hasStaleFK = featuresFKs.some(
+        (fk) => fk.from === "sample_hash" && fk.table !== "samples",
+      );
+
+      if (hasStaleFK) {
+        this.db.exec(`
+          ALTER TABLE features RENAME TO features_old;
+          CREATE TABLE features (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sample_hash TEXT NOT NULL,
+            feature_hash TEXT NOT NULL,
+            feature_type TEXT NOT NULL,
+            feature_data TEXT NOT NULL,
+            options TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(sample_hash, feature_hash),
+            FOREIGN KEY (sample_hash) REFERENCES samples(hash)
+          );
+          INSERT INTO features
+            SELECT id, sample_hash, feature_hash, feature_type, feature_data, options, created_at
+            FROM features_old;
+          DROP TABLE features_old;
+        `);
+      }
+    } finally {
+      this.db.exec("PRAGMA foreign_keys = ON;");
+    }
+  }
+
+  private migrate003_samplesFeatures(): void {
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_samples_hash ON samples(hash);
+      CREATE INDEX IF NOT EXISTS idx_samples_file_path ON samples(file_path);
+
+      CREATE TABLE IF NOT EXISTS samples_features (
+        sample_hash TEXT NOT NULL PRIMARY KEY,
+        source_hash TEXT NOT NULL,
+        feature_hash TEXT NOT NULL,
+        index_order INTEGER NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sample_hash) REFERENCES samples(hash),
+        FOREIGN KEY (source_hash) REFERENCES samples(hash)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_samples_features_source
+      ON samples_features(source_hash);
+
+      CREATE INDEX IF NOT EXISTS idx_samples_features_feature
+      ON samples_features(source_hash, feature_hash);
+    `);
+  }
+
+  private migrate004_repairFeaturesFK(): void {
+    // Repair features FK if it still points to samples_old (from a failed
+    // or pre-SQLite-3.26 migrate002 run).
+    this.db.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      const featuresFKs = this.db
+        .prepare("PRAGMA foreign_key_list(features)")
+        .all() as Array<{ table: string; from: string }>;
+      const hasStaleFK = featuresFKs.some(
+        (fk) => fk.from === "sample_hash" && fk.table !== "samples",
+      );
+      if (hasStaleFK) {
+        this.db.exec(`
+          ALTER TABLE features RENAME TO features_old;
+          CREATE TABLE features (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sample_hash TEXT NOT NULL,
+            feature_hash TEXT NOT NULL,
+            feature_type TEXT NOT NULL,
+            feature_data TEXT NOT NULL,
+            options TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(sample_hash, feature_hash),
+            FOREIGN KEY (sample_hash) REFERENCES samples(hash)
+          );
+          INSERT INTO features
+            SELECT id, sample_hash, feature_hash, feature_type, feature_data, options, created_at
+            FROM features_old;
+          DROP TABLE features_old;
+        `);
+      }
+    } finally {
+      this.db.exec("PRAGMA foreign_keys = ON;");
+    }
   }
 
   addDebugLog(
@@ -398,55 +534,139 @@ export class DatabaseManager {
     return stmt.get(...params) as FeatureRecord | undefined;
   }
 
-  createSlices(
-    sampleHash: string,
-    featureId: number,
-    slicePositions: number[],
-  ): number[] {
-    const stmt = this.db.prepare(`
-      INSERT INTO slices (sample_hash, feature_id, slice_index, start_sample, end_sample) 
-      VALUES (?, ?, ?, ?, ?)
-    `);
+  createDerivedSample(
+    sourceHash: string,
+    featureHash: string,
+    index: number,
+    audioData: Buffer,
+    sampleRate: number,
+    channels: number,
+    duration: number,
+  ): string {
+    // Hash includes provenance to ensure uniqueness per derivation
+    const hashInput = `${sourceHash}:${featureHash}:${index}:`;
+    const hash = crypto
+      .createHash("sha256")
+      .update(hashInput)
+      .update(audioData)
+      .digest("hex");
 
-    const sliceIds: number[] = [];
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO samples (hash, file_path, audio_data, sample_rate, channels, duration)
+         VALUES (?, NULL, ?, ?, ?, ?)`,
+      )
+      .run(hash, audioData, sampleRate, channels, duration);
 
-    for (let i = 0; i < slicePositions.length; i++) {
-      const startSample = slicePositions[i];
-      const endSample =
-        i < slicePositions.length - 1 ? slicePositions[i + 1] : null;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO samples_features (sample_hash, source_hash, feature_hash, index_order)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(hash, sourceHash, featureHash, index);
 
-      if (endSample !== null) {
-        const result = stmt.run(
-          sampleHash,
-          featureId,
-          i,
-          startSample,
-          endSample,
-        );
-        sliceIds.push(result.lastInsertRowid as number);
-      }
+    return hash;
+  }
+
+  createSliceSamples(
+    sourceHash: string,
+    featureHash: string,
+  ): { hash: string; index: number }[] {
+    const sample = this.getSampleByHash(sourceHash);
+    if (!sample) {
+      throw new Error(`Source sample not found: ${sourceHash}`);
     }
 
-    return sliceIds;
+    const feature = this.db
+      .prepare(
+        "SELECT feature_data, feature_hash FROM features WHERE sample_hash = ? AND feature_hash LIKE ?",
+      )
+      .get(sample.hash, `${featureHash}%`) as
+      | { feature_data: string; feature_hash: string }
+      | undefined;
+
+    if (!feature) {
+      throw new Error(`Feature not found: ${featureHash}`);
+    }
+
+    const positions = JSON.parse(feature.feature_data) as number[];
+    const audioData = new Float32Array(
+      sample.audio_data.buffer,
+      sample.audio_data.byteOffset,
+      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+    );
+
+    const results: { hash: string; index: number }[] = [];
+
+    for (let i = 0; i < positions.length - 1; i++) {
+      const start = positions[i];
+      const end = positions[i + 1];
+      const sliceAudio = audioData.slice(start, end);
+      const sliceBuffer = Buffer.from(
+        sliceAudio.buffer,
+        sliceAudio.byteOffset,
+        sliceAudio.byteLength,
+      );
+      const duration = sliceAudio.length / sample.sample_rate;
+      const hash = this.createDerivedSample(
+        sample.hash,
+        feature.feature_hash,
+        i,
+        sliceBuffer,
+        sample.sample_rate,
+        sample.channels,
+        duration,
+      );
+      results.push({ hash, index: i });
+    }
+
+    return results;
   }
 
-  getSlicesByFeature(featureId: number): SliceRecord[] {
+  getDerivedSamples(
+    sourceHash: string,
+    featureHash: string,
+  ): SampleFeatureLink[] {
     const stmt = this.db.prepare(`
-      SELECT id, sample_hash, feature_id, slice_index, start_sample, end_sample 
-      FROM slices 
-      WHERE feature_id = ? 
-      ORDER BY slice_index ASC
+      SELECT sample_hash, source_hash, feature_hash, index_order
+      FROM samples_features
+      WHERE source_hash = ? AND feature_hash LIKE ?
+      ORDER BY index_order ASC
     `);
-    return stmt.all(featureId) as SliceRecord[];
+    return stmt.all(sourceHash, `${featureHash}%`) as SampleFeatureLink[];
   }
 
-  getSlice(sliceId: number): SliceRecord | undefined {
+  getDerivedSampleByIndex(
+    sourceHash: string,
+    featureHash: string,
+    index: number,
+  ): SampleRecord | undefined {
     const stmt = this.db.prepare(`
-      SELECT id, sample_hash, feature_id, slice_index, start_sample, end_sample 
-      FROM slices 
-      WHERE id = ?
+      SELECT s.id, s.hash, s.file_path, s.audio_data, s.sample_rate, s.channels, s.duration
+      FROM samples s
+      JOIN samples_features sf ON s.hash = sf.sample_hash
+      WHERE sf.source_hash = ? AND sf.feature_hash LIKE ? AND sf.index_order = ?
     `);
-    return stmt.get(sliceId) as SliceRecord | undefined;
+    return stmt.get(sourceHash, `${featureHash}%`, index) as
+      | SampleRecord
+      | undefined;
+  }
+
+  listDerivedSamplesSummary(): DerivedSampleSummary[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        sf.source_hash,
+        s.file_path as source_file_path,
+        sf.feature_hash,
+        f.feature_type,
+        COUNT(*) as derived_count
+      FROM samples_features sf
+      JOIN samples s ON sf.source_hash = s.hash
+      JOIN features f ON sf.source_hash = f.sample_hash AND sf.feature_hash = f.feature_hash
+      GROUP BY sf.source_hash, sf.feature_hash
+      ORDER BY sf.source_hash
+    `);
+    return stmt.all() as DerivedSampleSummary[];
   }
 
   listSamples(): SampleListRecord[] {
@@ -461,6 +681,7 @@ export class DatabaseManager {
         length(audio_data) as data_size,
         created_at
       FROM samples 
+      WHERE file_path IS NOT NULL
       ORDER BY id DESC
     `);
     return stmt.all() as SampleListRecord[];
@@ -480,23 +701,6 @@ export class DatabaseManager {
       ORDER BY MAX(f.id) DESC
     `);
     return stmt.all() as FeatureListRecord[];
-  }
-
-  listSlicesSummary(): SlicesSummaryRecord[] {
-    const stmt = this.db.prepare(`
-      SELECT 
-        s.sample_hash,
-        sa.file_path,
-        s.feature_id,
-        COUNT(*) as slice_count,
-        MIN(s.id) as min_slice_id,
-        MAX(s.id) as max_slice_id
-      FROM slices s
-      JOIN samples sa ON s.sample_hash = sa.hash
-      GROUP BY s.sample_hash, s.feature_id
-      ORDER BY s.sample_hash
-    `);
-    return stmt.all() as SlicesSummaryRecord[];
   }
 
   getFeature(
@@ -552,76 +756,5 @@ LIMIT 1
           options: string;
         }
       | undefined;
-  }
-
-  createComponents(
-    sampleHash: string,
-    featureId: number,
-    componentAudioData: Buffer[],
-  ): number[] {
-    const stmt = this.db.prepare(`
-      INSERT INTO components (sample_hash, feature_id, component_index, audio_data) 
-      VALUES (?, ?, ?, ?)
-    `);
-
-    const componentIds: number[] = [];
-
-    for (let i = 0; i < componentAudioData.length; i++) {
-      const result = stmt.run(sampleHash, featureId, i, componentAudioData[i]);
-      componentIds.push(result.lastInsertRowid as number);
-    }
-
-    return componentIds;
-  }
-
-  getComponentsByFeature(featureId: number): ComponentRecord[] {
-    const stmt = this.db.prepare(`
-      SELECT id, sample_hash, feature_id, component_index, audio_data 
-      FROM components 
-      WHERE feature_id = ? 
-      ORDER BY component_index ASC
-    `);
-    return stmt.all(featureId) as ComponentRecord[];
-  }
-
-  getComponent(componentId: number): ComponentRecord | undefined {
-    const stmt = this.db.prepare(`
-      SELECT id, sample_hash, feature_id, component_index, audio_data 
-      FROM components 
-      WHERE id = ?
-    `);
-    return stmt.get(componentId) as ComponentRecord | undefined;
-  }
-
-  getComponentByIndex(
-    sampleHash: string,
-    featureId: number,
-    componentIndex: number,
-  ): ComponentRecord | undefined {
-    const stmt = this.db.prepare(`
-      SELECT id, sample_hash, feature_id, component_index, audio_data 
-      FROM components 
-      WHERE sample_hash = ? AND feature_id = ? AND component_index = ?
-    `);
-    return stmt.get(sampleHash, featureId, componentIndex) as
-      | ComponentRecord
-      | undefined;
-  }
-
-  listComponentsSummary(): ComponentsSummaryRecord[] {
-    const stmt = this.db.prepare(`
-      SELECT 
-        c.sample_hash,
-        sa.file_path,
-        c.feature_id,
-        COUNT(*) as component_count,
-        MIN(c.id) as min_component_id,
-        MAX(c.id) as max_component_id
-      FROM components c
-      JOIN samples sa ON c.sample_hash = sa.hash
-      GROUP BY c.sample_hash, c.feature_id
-      ORDER BY c.sample_hash
-    `);
-    return stmt.all() as ComponentsSummaryRecord[];
   }
 }

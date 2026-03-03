@@ -66,36 +66,27 @@ contextBridge.exposeInMainWorld("electron", {
     ),
   getMostRecentFeature: (sampleHash?: string, featureType?: string) =>
     ipcRenderer.invoke("get-most-recent-feature", sampleHash, featureType),
-  createSlices: (
-    sampleHash: string,
-    featureId: number,
-    slicePositions: number[],
-  ) =>
-    ipcRenderer.invoke("create-slices", sampleHash, featureId, slicePositions),
-  getSlicesByFeature: (featureId: number) =>
-    ipcRenderer.invoke("get-slices-by-feature", featureId),
-  getSlice: (sliceId: number) => ipcRenderer.invoke("get-slice", sliceId),
-  getComponentsByFeature: (featureId: number) =>
-    ipcRenderer.invoke("get-components-by-feature", featureId),
-  getComponent: (componentId: number) =>
-    ipcRenderer.invoke("get-component", componentId),
-  getComponentByIndex: (
-    sampleHash: string,
-    featureId: number,
-    componentIndex: number,
+  createSliceSamples: (sampleHash: string, featureHash: string) =>
+    ipcRenderer.invoke("create-slice-samples", sampleHash, featureHash),
+  getDerivedSamples: (sourceHash: string, featureHash: string) =>
+    ipcRenderer.invoke("get-derived-samples", sourceHash, featureHash),
+  getDerivedSampleByIndex: (
+    sourceHash: string,
+    featureHash: string,
+    index: number,
   ) =>
     ipcRenderer.invoke(
-      "get-component-by-index",
-      sampleHash,
-      featureId,
-      componentIndex,
+      "get-derived-sample-by-index",
+      sourceHash,
+      featureHash,
+      index,
     ),
+  listDerivedSamplesSummary: () =>
+    ipcRenderer.invoke("list-derived-samples-summary"),
   listSamples: () => ipcRenderer.invoke("list-samples"),
   listFeatures: () => ipcRenderer.invoke("list-features"),
   getSampleByHash: (hash: string) =>
     ipcRenderer.invoke("get-sample-by-hash", hash),
-  listSlicesSummary: () => ipcRenderer.invoke("list-slices-summary"),
-  listComponentsSummary: () => ipcRenderer.invoke("list-components-summary"),
   sendCommand: (command: string, args: string[]) =>
     ipcRenderer.invoke("send-command", command, args),
   analyzeNMF: (args: string[]) => ipcRenderer.invoke("analyze-nmf", args),

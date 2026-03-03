@@ -119,17 +119,8 @@ Example:
       // Create BufNMF instance for resynthesis
       const nmf = new BufNMF({ fftSize, hopSize, windowSize });
 
-      // Get feature ID
-      const featureRecord = dbManager.db
-        .prepare("SELECT id FROM features WHERE feature_hash = ?")
-        .get(feature.feature_hash) as { id: number } | undefined;
-
-      if (!featureRecord) {
-        return { success: false, message: "Feature ID not found" };
-      }
-
       // Resynthesize and store each component
-      const componentIds: number[] = [];
+      const derivedHashes: string[] = [];
 
       for (let i = 0; i < numComponents; i++) {
         debugLog("info", `[Sep] Resynthesizing component ${i}/${numComponents}`);
@@ -146,19 +137,21 @@ Example:
         // Convert to Buffer for storage
         const componentBuffer = Buffer.from(componentAudio.buffer);
 
-        // Store component with actual audio data
-        const result = dbManager.db
-          .prepare(
-            `INSERT OR REPLACE INTO components (sample_hash, feature_id, component_index, audio_data) 
-             VALUES (?, ?, ?, ?)`,
-          )
-          .run(sample.hash, featureRecord.id, i, componentBuffer);
+        const derivedHash = dbManager.createDerivedSample(
+          sample.hash,
+          feature.feature_hash,
+          i,
+          componentBuffer,
+          sample.sample_rate,
+          sample.channels,
+          componentAudio.length / sample.sample_rate,
+        );
 
-        componentIds.push(result.lastInsertRowid as number);
+        derivedHashes.push(derivedHash);
       }
 
       debugLog("info", "[Sep] All components resynthesized and stored", {
-        componentIds,
+        derivedHashes,
       });
 
       return {

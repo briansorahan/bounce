@@ -299,111 +299,64 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
-  "create-slices",
-  async (
-    _event,
-    sampleHash: string,
-    featureId: number,
-    slicePositions: number[],
-  ) => {
+  "create-slice-samples",
+  async (_event, sampleHash: string, featureHash: string) => {
     try {
       if (!dbManager) {
         throw new Error("Database not initialized");
       }
-      const sliceIds = dbManager.createSlices(
-        sampleHash,
-        featureId,
-        slicePositions,
-      );
-      return sliceIds;
+      return dbManager.createSliceSamples(sampleHash, featureHash);
     } catch (error) {
       throw new Error(
-        `Failed to create slices: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to create slice samples: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   },
 );
 
-ipcMain.handle("get-slices-by-feature", async (_event, featureId: number) => {
-  try {
-    if (!dbManager) {
+ipcMain.handle(
+  "get-derived-samples",
+  async (_event, sourceHash: string, featureHash: string) => {
+    try {
+      if (!dbManager) {
+        return [];
+      }
+      return dbManager.getDerivedSamples(sourceHash, featureHash);
+    } catch (error) {
+      console.error("Failed to get derived samples:", error);
       return [];
     }
-    return dbManager.getSlicesByFeature(featureId);
-  } catch (error) {
-    console.error("Failed to get slices:", error);
-    return [];
-  }
-});
-
-ipcMain.handle("get-slice", async (_event, sliceId: number) => {
-  try {
-    if (!dbManager) {
-      return null;
-    }
-    return dbManager.getSlice(sliceId);
-  } catch (error) {
-    console.error("Failed to get slice:", error);
-    return null;
-  }
-});
-
-ipcMain.handle("get-components-by-feature", async (_event, featureId: number) => {
-  try {
-    if (!dbManager) {
-      return [];
-    }
-    return dbManager.getComponentsByFeature(featureId);
-  } catch (error) {
-    console.error("Failed to get components by feature:", error);
-    return [];
-  }
-});
-
-ipcMain.handle("get-component", async (_event, componentId: number) => {
-  try {
-    if (!dbManager) {
-      return null;
-    }
-    return dbManager.getComponent(componentId);
-  } catch (error) {
-    console.error("Failed to get component:", error);
-    return null;
-  }
-});
+  },
+);
 
 ipcMain.handle(
-  "get-component-by-index",
+  "get-derived-sample-by-index",
   async (
     _event,
-    sampleHash: string,
-    featureId: number,
-    componentIndex: number,
+    sourceHash: string,
+    featureHash: string,
+    index: number,
   ) => {
     try {
       if (!dbManager) {
         return null;
       }
-      return dbManager.getComponentByIndex(
-        sampleHash,
-        featureId,
-        componentIndex,
-      );
+      return dbManager.getDerivedSampleByIndex(sourceHash, featureHash, index) ?? null;
     } catch (error) {
-      console.error("Failed to get component by index:", error);
+      console.error("Failed to get derived sample by index:", error);
       return null;
     }
   },
 );
 
-ipcMain.handle("list-components-summary", async () => {
+ipcMain.handle("list-derived-samples-summary", async () => {
   try {
     if (!dbManager) {
       return [];
     }
-    return dbManager.listComponentsSummary();
+    return dbManager.listDerivedSamplesSummary();
   } catch (error) {
-    console.error("Failed to list components summary:", error);
+    console.error("Failed to list derived samples summary:", error);
     return [];
   }
 });
@@ -441,18 +394,6 @@ ipcMain.handle("get-sample-by-hash", async (_event, hash: string) => {
   } catch (error) {
     console.error("Failed to get sample:", error);
     return null;
-  }
-});
-
-ipcMain.handle("list-slices-summary", async () => {
-  try {
-    if (!dbManager) {
-      return [];
-    }
-    return dbManager.listSlicesSummary();
-  } catch (error) {
-    console.error("Failed to list slices summary:", error);
-    return [];
   }
 });
 
