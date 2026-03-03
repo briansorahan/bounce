@@ -453,25 +453,7 @@ export class BounceApp {
         return true;
 
       case "clear":
-        window.electron.debugLog("info", "[App] Clear command executing", {
-          hasVisualizer: !!this.waveformVisualizer,
-        });
         this.terminal.clear();
-        // Also clear waveform visualization
-        if (this.waveformVisualizer) {
-          window.electron.debugLog(
-            "info",
-            "[App] Clearing waveform visualizer",
-          );
-          this.waveformVisualizer = null;
-          const container = document.getElementById("waveform-container");
-          if (container) {
-            container.style.display = "none";
-          }
-        }
-        window.electron.debugLog("info", "[App] Clear command complete", {
-          hasVisualizer: !!this.waveformVisualizer,
-        });
         return true;
 
       case "analyze":
