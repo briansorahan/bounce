@@ -44,7 +44,7 @@ test.describe("Play Component Then Play Full", () => {
     const terminal = await window.locator(".xterm-screen");
     
     // Load audio
-    await window.keyboard.type(`play "${testAudioPath}"`);
+    await window.keyboard.type(`await play("${testAudioPath}")`);
     await window.keyboard.press("Enter");
     await window.waitForTimeout(2000);
 
@@ -55,7 +55,7 @@ test.describe("Play Component Then Play Full", () => {
     const sampleHash = hashMatch![1];
 
     // Analyze with NMF
-    await window.keyboard.type(`analyze-nmf ${sampleHash} --components 3`);
+    await window.keyboard.type("await analyzeNmf({ components: 3 })");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(3000);
 
@@ -76,7 +76,7 @@ test.describe("Play Component Then Play Full", () => {
     });
 
     // Now play full audio by hash
-    await window.keyboard.type(`play ${sampleHash}`);
+    await window.keyboard.type(`await play("${sampleHash}")`);
     await window.keyboard.press("Enter");
     await window.waitForTimeout(2000);
 

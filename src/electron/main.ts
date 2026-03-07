@@ -479,6 +479,26 @@ ipcMain.handle(
   },
 );
 
+// Lazily loaded TypeScript transpiler — runs in the main process where require() is always available
+let _ts: typeof import("typescript") | null = null;
+function getMainTs(): typeof import("typescript") {
+  if (!_ts) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _ts = require("typescript") as typeof import("typescript");
+  }
+  return _ts;
+}
+
+ipcMain.handle("transpile-typescript", (_event, source: string): string => {
+  return getMainTs().transpileModule(source, {
+    compilerOptions: {
+      target: 99 /* ScriptTarget.ESNext */,
+      module: 1 /* ModuleKind.CommonJS */,
+      esModuleInterop: true,
+    },
+  }).outputText;
+});
+
 app.whenReady().then(() => {
   dbManager = new DatabaseManager();
   setDatabaseManager(dbManager);

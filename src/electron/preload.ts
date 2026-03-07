@@ -99,4 +99,6 @@ contextBridge.exposeInMainWorld("electron", {
       callback(data),
     );
   },
+  transpileTypeScript: (source: string): Promise<string> =>
+    ipcRenderer.invoke("transpile-typescript", source),
 });

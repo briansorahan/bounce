@@ -10,7 +10,7 @@ async function sendCommand(window: any, command: string) {
     if (!executeCommand) {
       throw new Error("Execute command function not exposed");
     }
-    executeCommand(cmd);
+    return executeCommand(cmd);
   }, command);
 }
 
@@ -80,15 +80,11 @@ test.describe("Audio Format Support", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `display "${testFile}"`);
-    await window.waitForTimeout(1500);
+    await sendCommand(window, `await display("${testFile}")`);
 
-    const waveformContainer = await window.locator("#waveform-container");
-    const isVisible = await waveformContainer.isVisible();
-
-    if (!isVisible) {
-      throw new Error("WAV file failed to load and display");
-    }
+    await expect(window.locator("#waveform-container")).toBeVisible({
+      timeout: 5000,
+    });
 
     await electronApp.close();
     fs.unlinkSync(testFile);
@@ -112,16 +108,11 @@ test.describe("Audio Format Support", () => {
     await window.waitForTimeout(1000);
 
     const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
-    await sendCommand(window, `display "${nonexistentPath}"`);
-    await window.waitForTimeout(1000);
+    await sendCommand(window, `await display("${nonexistentPath}")`);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (!terminalContent?.toLowerCase().includes("error")) {
-      throw new Error(
-        `Expected error message for missing file. Got: ${terminalContent}`,
-      );
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
+      timeout: 5000,
+    });
 
     await electronApp.close();
   });
@@ -146,17 +137,14 @@ test.describe("Audio Format Support", () => {
     const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
 
     for (const file of unsupportedFormats) {
-      await sendCommand(window, `display "${file}"`);
-      await window.waitForTimeout(300);
+      await sendCommand(window, `await display("${file}")`);
 
-      const terminalContent = await window.locator(".xterm-rows").textContent();
+      await expect(window.locator(".xterm-rows")).toContainText(
+        "Unsupported file format",
+        { timeout: 5000 },
+      );
 
-      if (!terminalContent?.includes("unsupported file format")) {
-        throw new Error(`Should reject unsupported format: ${file}`);
-      }
-
-      await sendCommand(window, "clear");
-      await window.waitForTimeout(200);
+      await sendCommand(window, "clear()");
     }
 
     await electronApp.close();
