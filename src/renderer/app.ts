@@ -63,11 +63,11 @@ export class BounceApp {
 
     // Expose terminal and executeCommand for testing
     const testWindow = window as Window & {
-      __bounceExecuteCommand?: (cmd: string) => void;
+      __bounceExecuteCommand?: (cmd: string) => Promise<void>;
     };
     testWindow.__bounceExecuteCommand = (cmd: string) => {
       this.commandBuffer = cmd;
-      this.executeCommand(cmd);
+      return this.executeCommand(cmd);
     };
   }
 

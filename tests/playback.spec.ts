@@ -10,7 +10,7 @@ async function sendCommand(window: any, command: string) {
     if (!executeCommand) {
       throw new Error("Execute command function not exposed");
     }
-    executeCommand(cmd);
+    return executeCommand(cmd);
   }, command);
 }
 
@@ -81,19 +81,12 @@ test.describe("Playback and Visualization", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, `await play("${testFile}")`);
-    await window.waitForTimeout(500);
 
-    const waveformCanvas = await window.locator("#waveform-canvas");
-    const isVisible = await waveformCanvas.isVisible();
-
-    if (!isVisible) {
-      throw new Error("Waveform canvas should be visible during playback");
-    }
-
-    await window.waitForTimeout(200);
+    await expect(window.locator("#waveform-canvas")).toBeVisible({
+      timeout: 5000,
+    });
 
     await sendCommand(window, "stop()");
-    await window.waitForTimeout(200);
 
     await electronApp.close();
     fs.unlinkSync(testFile);
@@ -127,14 +120,10 @@ test.describe("Playback and Visualization", () => {
     }
 
     await sendCommand(window, `await display("${testFile}")`);
-    await window.waitForTimeout(1000);
 
-    const waveformContainerAfter = await window.locator("#waveform-container");
-    const isVisibleAfter = await waveformContainerAfter.isVisible();
-
-    if (!isVisibleAfter) {
-      throw new Error("Waveform should be visible after display command");
-    }
+    await expect(window.locator("#waveform-container")).toBeVisible({
+      timeout: 5000,
+    });
 
     await electronApp.close();
     fs.unlinkSync(testFile);
@@ -161,26 +150,18 @@ test.describe("Playback and Visualization", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, `await play("${testFile}")`);
-    await window.waitForTimeout(1000);
 
-    const waveformContainer = await window.locator("#waveform-container");
-    const isVisible = await waveformContainer.isVisible();
-
-    if (!isVisible) {
-      throw new Error("Play command should create visualization for new file");
-    }
-
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (
-      !terminalContent?.includes("Loaded:") ||
-      !terminalContent?.includes("Playing:")
-    ) {
-      throw new Error('Expected both "Loaded:" and "Playing:" messages');
-    }
+    await expect(window.locator("#waveform-container")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(window.locator(".xterm-rows")).toContainText("Loaded:", {
+      timeout: 5000,
+    });
+    await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
+      timeout: 5000,
+    });
 
     await sendCommand(window, "stop()");
-    await window.waitForTimeout(200);
 
     await electronApp.close();
     fs.unlinkSync(testFile);
@@ -204,13 +185,11 @@ test.describe("Playback and Visualization", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, "stop()");
-    await window.waitForTimeout(300);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (!terminalContent?.includes("Playback stopped")) {
-      throw new Error("Stop command should work even when nothing is playing");
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(
+      "Playback stopped",
+      { timeout: 5000 },
+    );
 
     await electronApp.close();
   });

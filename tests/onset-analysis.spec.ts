@@ -10,7 +10,7 @@ async function sendCommand(window: any, command: string) {
     if (!executeCommand) {
       throw new Error("Execute command function not exposed");
     }
-    executeCommand(cmd);
+    return executeCommand(cmd);
   }, command);
 }
 
@@ -83,29 +83,18 @@ test.describe("Onset Slice Analysis", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, `await display("${testFile}")`);
-    await window.waitForTimeout(500);
     await sendCommand(window, `await analyze()`);
-    await window.waitForTimeout(2000);
 
-    // Check that waveform canvas is visible
-    const waveformCanvas = window.locator("#waveform-canvas");
-    const isVisible = await waveformCanvas.isVisible();
+    await expect(window.locator("#waveform-canvas")).toBeVisible({
+      timeout: 5000,
+    });
 
-    if (!isVisible) {
-      throw new Error("Waveform canvas not visible");
-    }
-
-    // Check terminal shows success message
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (
-      !terminalContent?.includes("Found") ||
-      !terminalContent?.includes("onset slices")
-    ) {
-      throw new Error(
-        `Expected onset slice count message, got: ${terminalContent?.slice(-200)}`,
-      );
-    }
+    await expect(window.locator(".xterm-rows")).toContainText("Found", {
+      timeout: 5000,
+    });
+    await expect(window.locator(".xterm-rows")).toContainText("onset slices", {
+      timeout: 5000,
+    });
 
     await electronApp.close();
     fs.unlinkSync(testFile);
@@ -133,23 +122,25 @@ test.describe("Onset Slice Analysis", () => {
 
     // First analysis
     await sendCommand(window, `await display("${testFile}")`);
-    await window.waitForTimeout(500);
     await sendCommand(window, `await analyze()`);
-    await window.waitForTimeout(1000);
-
-    let terminalContent = await window.locator(".xterm-rows").textContent();
-    const firstMatch = terminalContent?.match(/Found (\d+) onset slices/);
+    await expect(window.locator(".xterm-rows")).toContainText(
+      /Found \d+ onset slices/,
+      { timeout: 5000 },
+    );
 
     // Second analysis with different threshold
     await sendCommand(window, `await analyze({ threshold: 0.5 })`);
-    await window.waitForTimeout(1000);
 
-    terminalContent = await window.locator(".xterm-rows").textContent();
-    const secondMatch = terminalContent?.match(/Found (\d+) onset slices/g);
-
-    if (!secondMatch || secondMatch.length < 2) {
-      throw new Error("Expected two analysis results in terminal");
-    }
+    await expect
+      .poll(
+        async () => {
+          const text =
+            (await window.locator(".xterm-rows").textContent()) ?? "";
+          return (text.match(/Found \d+ onset slices/g) ?? []).length;
+        },
+        { timeout: 5000 },
+      )
+      .toBeGreaterThanOrEqual(2);
 
     await electronApp.close();
     fs.unlinkSync(testFile);

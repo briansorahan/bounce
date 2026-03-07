@@ -10,7 +10,7 @@ async function sendCommand(window: any, command: string) {
     if (!executeCommand) {
       throw new Error("Execute command function not exposed");
     }
-    executeCommand(cmd);
+    return executeCommand(cmd);
   }, command);
 }
 
@@ -42,14 +42,10 @@ test.describe("Audio Commands", () => {
     }
 
     await sendCommand(window, `await display("${testFile}")`);
-    await window.waitForTimeout(1000);
 
-    const waveformContainer = await window.locator("#waveform-container");
-    const isVisible = await waveformContainer.isVisible();
-
-    if (!isVisible) {
-      throw new Error("Waveform container not visible after display command");
-    }
+    await expect(window.locator("#waveform-container")).toBeVisible({
+      timeout: 5000,
+    });
 
     await electronApp.close();
   });
@@ -72,13 +68,11 @@ test.describe("Audio Commands", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, 'await display("file.txt")');
-    await window.waitForTimeout(500);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (!terminalContent?.includes("Unsupported file format")) {
-      throw new Error("Expected error message for unsupported file format");
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(
+      "Unsupported file format",
+      { timeout: 5000 },
+    );
 
     await electronApp.close();
   });
@@ -110,16 +104,10 @@ test.describe("Audio Commands", () => {
     }
 
     await sendCommand(window, `await play("${testFile}")`);
-    await window.waitForTimeout(1500);
 
-    const waveformContainer = await window.locator("#waveform-container");
-    const isVisible = await waveformContainer.isVisible();
-
-    if (!isVisible) {
-      throw new Error(
-        "Waveform not created when play command used on new file",
-      );
-    }
+    await expect(window.locator("#waveform-container")).toBeVisible({
+      timeout: 5000,
+    });
 
     await electronApp.close();
   });
@@ -151,16 +139,13 @@ test.describe("Audio Commands", () => {
     }
 
     await sendCommand(window, `await play("${testFile}")`);
-    await window.waitForTimeout(500);
 
     await sendCommand(window, "stop()");
-    await window.waitForTimeout(500);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (!terminalContent?.includes("Playback stopped")) {
-      throw new Error('Expected "Playback stopped" message');
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(
+      "Playback stopped",
+      { timeout: 5000 },
+    );
 
     await electronApp.close();
   });
@@ -183,22 +168,10 @@ test.describe("Audio Commands", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, "help()");
-    await window.waitForTimeout(1000);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    // The help output is long, so we just check that it includes some key commands
-    // Even if it scrolls, we should see at least some of: play, stop, clear, help, analyze
-    const hasCommands =
-      terminalContent?.includes("play") ||
-      terminalContent?.includes("stop") ||
-      terminalContent?.includes("clear") ||
-      terminalContent?.includes("help") ||
-      terminalContent?.includes("analyze");
-
-    if (!hasCommands) {
-      throw new Error("Help command should list available commands");
-    }
+    await expect(window.locator(".xterm-rows")).toContainText("play", {
+      timeout: 5000,
+    });
 
     await electronApp.close();
   });
@@ -221,16 +194,17 @@ test.describe("Audio Commands", () => {
     await window.waitForTimeout(1000);
 
     await sendCommand(window, "help()");
-    await window.waitForTimeout(500);
+    await expect(window.locator(".xterm-rows")).toContainText(
+      "Available Functions",
+      { timeout: 5000 },
+    );
 
     await sendCommand(window, "clear()");
-    await window.waitForTimeout(500);
 
-    const terminalContent = await window.locator(".xterm-rows").textContent();
-
-    if (terminalContent?.includes("Available Commands")) {
-      throw new Error("Terminal should be cleared after clear command");
-    }
+    await expect(window.locator(".xterm-rows")).not.toContainText(
+      "Available Functions",
+      { timeout: 5000 },
+    );
 
     await electronApp.close();
   });
