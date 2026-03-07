@@ -8,10 +8,3 @@ build/
 # Build artifacts for foonathan/memory
 third_party/memory/build/
 third_party/memory/install/
-
-# Prevent crufty AI markdown files
-*.md
-!README.md
-!.github/copilot-instructions.md
-!.github/agents/*.md
-!.github/skills/**/*.md
