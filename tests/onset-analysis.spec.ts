@@ -82,7 +82,9 @@ test.describe("Onset Slice Analysis", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `analyze onset-slice "${testFile}"`);
+    await sendCommand(window, `await display("${testFile}")`);
+    await window.waitForTimeout(500);
+    await sendCommand(window, `await analyze()`);
     await window.waitForTimeout(2000);
 
     // Check that waveform canvas is visible
@@ -130,17 +132,16 @@ test.describe("Onset Slice Analysis", () => {
     await window.waitForTimeout(1000);
 
     // First analysis
-    await sendCommand(window, `analyze onset-slice "${testFile}"`);
+    await sendCommand(window, `await display("${testFile}")`);
+    await window.waitForTimeout(500);
+    await sendCommand(window, `await analyze()`);
     await window.waitForTimeout(1000);
 
     let terminalContent = await window.locator(".xterm-rows").textContent();
     const firstMatch = terminalContent?.match(/Found (\d+) onset slices/);
 
     // Second analysis with different threshold
-    await sendCommand(
-      window,
-      `analyze onset-slice "${testFile}" --threshold 0.5`,
-    );
+    await sendCommand(window, `await analyze({ threshold: 0.5 })`);
     await window.waitForTimeout(1000);
 
     terminalContent = await window.locator(".xterm-rows").textContent();

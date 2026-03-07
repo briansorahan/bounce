@@ -41,7 +41,7 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `display "${testFile}"`);
+    await sendCommand(window, `await display("${testFile}")`);
     await window.waitForTimeout(1000);
 
     const waveformContainer = await window.locator("#waveform-container");
@@ -71,12 +71,12 @@ test.describe("Audio Commands", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, 'display "file.txt"');
+    await sendCommand(window, 'await display("file.txt")');
     await window.waitForTimeout(500);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();
 
-    if (!terminalContent?.includes("unsupported file format")) {
+    if (!terminalContent?.includes("Unsupported file format")) {
       throw new Error("Expected error message for unsupported file format");
     }
 
@@ -109,7 +109,7 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `play "${testFile}"`);
+    await sendCommand(window, `await play("${testFile}")`);
     await window.waitForTimeout(1500);
 
     const waveformContainer = await window.locator("#waveform-container");
@@ -150,10 +150,10 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `play "${testFile}"`);
+    await sendCommand(window, `await play("${testFile}")`);
     await window.waitForTimeout(500);
 
-    await sendCommand(window, "stop");
+    await sendCommand(window, "stop()");
     await window.waitForTimeout(500);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();
@@ -182,7 +182,7 @@ test.describe("Audio Commands", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, "help");
+    await sendCommand(window, "help()");
     await window.waitForTimeout(1000);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();
@@ -220,10 +220,10 @@ test.describe("Audio Commands", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, "help");
+    await sendCommand(window, "help()");
     await window.waitForTimeout(500);
 
-    await sendCommand(window, "clear");
+    await sendCommand(window, "clear()");
     await window.waitForTimeout(500);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();

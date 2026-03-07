@@ -80,7 +80,7 @@ test.describe("Audio Format Support", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `display "${testFile}"`);
+    await sendCommand(window, `await display("${testFile}")`);
     await window.waitForTimeout(1500);
 
     const waveformContainer = await window.locator("#waveform-container");
@@ -112,7 +112,7 @@ test.describe("Audio Format Support", () => {
     await window.waitForTimeout(1000);
 
     const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
-    await sendCommand(window, `display "${nonexistentPath}"`);
+    await sendCommand(window, `await display("${nonexistentPath}")`);
     await window.waitForTimeout(1000);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();
@@ -146,16 +146,16 @@ test.describe("Audio Format Support", () => {
     const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
 
     for (const file of unsupportedFormats) {
-      await sendCommand(window, `display "${file}"`);
+      await sendCommand(window, `await display("${file}")`);
       await window.waitForTimeout(300);
 
       const terminalContent = await window.locator(".xterm-rows").textContent();
 
-      if (!terminalContent?.includes("unsupported file format")) {
+      if (!terminalContent?.includes("Unsupported file format")) {
         throw new Error(`Should reject unsupported format: ${file}`);
       }
 
-      await sendCommand(window, "clear");
+      await sendCommand(window, "clear()");
       await window.waitForTimeout(200);
     }
 

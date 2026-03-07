@@ -43,7 +43,7 @@ test.describe("NMF Analysis", () => {
     expect(fs.existsSync(testFile)).toBe(true);
 
     // Play the audio file to load it into samples table
-    await window.keyboard.type(`play "${testFile}"`);
+    await window.keyboard.type(`await play("${testFile}")`);
     await window.keyboard.press("Enter");
 
     // Wait for file to load
@@ -56,19 +56,19 @@ test.describe("NMF Analysis", () => {
     const sampleHash = hashMatch![1].substring(0, 8);
 
     // Stop playback but keep audio data loaded
-    await window.keyboard.type("stop");
+    await window.keyboard.type("stop()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
     // Run NMF analysis
-    await window.keyboard.type(`analyze-nmf ${sampleHash}`);
+    await window.keyboard.type("await analyzeNmf()");
     await window.keyboard.press("Enter");
 
     // Wait for analysis to complete (NMF can take a few seconds)
     await window.waitForTimeout(5000);
 
     // Verify feature was stored
-    await window.keyboard.type("list-features");
+    await window.keyboard.type("await list()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
@@ -76,7 +76,7 @@ test.describe("NMF Analysis", () => {
     expect(featuresOutput).toContain("nmf");
 
     // Play the sample again to show waveform
-    await window.keyboard.type(`play ${sampleHash}`);
+    await window.keyboard.type(`await play("${sampleHash}")`);
     await window.keyboard.press("Enter");
     await window.waitForTimeout(1000);
 
@@ -85,12 +85,12 @@ test.describe("NMF Analysis", () => {
     await expect(waveformCanvas).toBeVisible();
 
     // Stop playback
-    await window.keyboard.type("stop");
+    await window.keyboard.type("stop()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
     // Visualize NMF on the waveform
-    await window.keyboard.type(`visualize-nmf ${sampleHash}`);
+    await window.keyboard.type("await visualizeNmf()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(1000);
 
@@ -103,12 +103,12 @@ test.describe("NMF Analysis", () => {
     const testFile = path.join(__dirname, "test-multi-viz.wav");
 
     // Clear any existing visualizations
-    await window.keyboard.type("clear");
+    await window.keyboard.type("clear()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
     // Load sample
-    await window.keyboard.type(`play "${testFile}"`);
+    await window.keyboard.type(`await play("${testFile}")`);
     await window.keyboard.press("Enter");
     await window.waitForTimeout(2000);
 
@@ -127,22 +127,22 @@ test.describe("NMF Analysis", () => {
     expect(hashMatch).toBeTruthy();
     const sampleHash = hashMatch![1].substring(0, 8);
 
-    await window.keyboard.type("stop");
+    await window.keyboard.type("stop()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
     // Ensure sample has NMF data (may already exist from previous test)
-    await window.keyboard.type(`analyze-nmf ${sampleHash}`);
+    await window.keyboard.type("await analyzeNmf()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(5000);
 
     // Clear the waveform
-    await window.keyboard.type("clear");
+    await window.keyboard.type("clear()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 
     // Try to visualize NMF without waveform displayed
-    await window.keyboard.type(`visualize-nmf ${sampleHash}`);
+    await window.keyboard.type("await visualizeNmf()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(1500); // Give IPC time to complete
 

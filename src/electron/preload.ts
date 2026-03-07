@@ -1,4 +1,25 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { TranspileOptions } from "typescript";
+
+// Lazily loaded on first call to avoid slowing app startup
+let _ts: typeof import("typescript") | null = null;
+function getTs(): typeof import("typescript") {
+  if (!_ts) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _ts = require("typescript") as typeof import("typescript");
+  }
+  return _ts;
+}
+
+const replTsOptions: TranspileOptions = {
+  compilerOptions: {
+    // Use ESNext features (async/await, etc.) without downleveling
+    target: 99 /* ScriptTarget.ESNext */,
+    // CommonJS so require() works in the AsyncFunction execution context
+    module: 1 /* ModuleKind.CommonJS */,
+    esModuleInterop: true,
+  },
+};
 
 interface OnsetSliceOptions {
   threshold?: number;
@@ -98,5 +119,8 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("overlay-nmf-visualization", (_event, data) =>
       callback(data),
     );
+  },
+  transpileTypeScript: (source: string): string => {
+    return getTs().transpileModule(source, replTsOptions).outputText;
   },
 });

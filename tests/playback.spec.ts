@@ -80,7 +80,7 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `play "${testFile}"`);
+    await sendCommand(window, `await play("${testFile}")`);
     await window.waitForTimeout(500);
 
     const waveformCanvas = await window.locator("#waveform-canvas");
@@ -92,7 +92,7 @@ test.describe("Playback and Visualization", () => {
 
     await window.waitForTimeout(200);
 
-    await sendCommand(window, "stop");
+    await sendCommand(window, "stop()");
     await window.waitForTimeout(200);
 
     await electronApp.close();
@@ -126,7 +126,7 @@ test.describe("Playback and Visualization", () => {
       throw new Error("Waveform should not be visible before display command");
     }
 
-    await sendCommand(window, `display "${testFile}"`);
+    await sendCommand(window, `await display("${testFile}")`);
     await window.waitForTimeout(1000);
 
     const waveformContainerAfter = await window.locator("#waveform-container");
@@ -160,7 +160,7 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `play "${testFile}"`);
+    await sendCommand(window, `await play("${testFile}")`);
     await window.waitForTimeout(1000);
 
     const waveformContainer = await window.locator("#waveform-container");
@@ -179,7 +179,7 @@ test.describe("Playback and Visualization", () => {
       throw new Error('Expected both "Loaded:" and "Playing:" messages');
     }
 
-    await sendCommand(window, "stop");
+    await sendCommand(window, "stop()");
     await window.waitForTimeout(200);
 
     await electronApp.close();
@@ -203,7 +203,7 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, "stop");
+    await sendCommand(window, "stop()");
     await window.waitForTimeout(300);
 
     const terminalContent = await window.locator(".xterm-rows").textContent();
