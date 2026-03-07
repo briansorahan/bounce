@@ -165,6 +165,6 @@ interface Window {
     sep: (args: string[]) => Promise<{ success: boolean; message: string }>;
     nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
-    transpileTypeScript: (source: string) => string;
+    transpileTypeScript: (source: string) => Promise<string>;
   };
 }

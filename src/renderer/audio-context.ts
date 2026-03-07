@@ -1,3 +1,4 @@
+/// <reference path="./types.d.ts" />
 // Browser compatibility types
 interface WebkitWindow extends Window {
   webkitAudioContext?: typeof AudioContext;

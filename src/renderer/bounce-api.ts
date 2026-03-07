@@ -1,3 +1,5 @@
+/// <reference path="./types.d.ts" />
+/// <reference path="./bounce-globals.d.ts" />
 import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
@@ -47,7 +49,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     audioManager.setCurrentAudio(audio);
     onUpdateWaveform();
-    terminal.writeln(`\x1b[32mLoaded: ${audioFileData.hash.substring(0, 8)}\x1b[0m`);
+    terminal.writeln(`\x1b[32mLoaded: ${audioFileData.filePath ?? audioFileData.hash.substring(0, 8)}\x1b[0m`);
+    terminal.writeln(`\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`);
   }
 
   async function play(fileOrHash?: string): Promise<void> {
@@ -172,6 +175,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   async function list(): Promise<SampleListData[]> {
     const samples = await window.electron.listSamples();
+    const features = await window.electron.listFeatures();
 
     if (samples.length === 0) {
       terminal.writeln("\x1b[33mNo samples in database\x1b[0m");
@@ -189,6 +193,20 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       }
       terminal.writeln("");
       terminal.writeln(`Total: ${samples.length} sample(s)`);
+    }
+
+    if (features.length > 0) {
+      terminal.writeln("");
+      terminal.writeln("\x1b[1;36mStored Features:\x1b[0m");
+      terminal.writeln("");
+      for (const feature of features) {
+        const shortHash = feature.sample_hash.substring(0, 8);
+        terminal.writeln(
+          `  \x1b[33m${shortHash}\x1b[0m \x1b[90m${feature.feature_type}\x1b[0m  ${feature.feature_count} entries`,
+        );
+      }
+      terminal.writeln("");
+      terminal.writeln(`Total: ${features.length} feature(s)`);
     }
 
     return samples;

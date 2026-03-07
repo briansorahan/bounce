@@ -352,7 +352,7 @@ export class ReplEvaluator {
   }
 
   async evaluate(source: string): Promise<unknown> {
-    const js = window.electron.transpileTypeScript(source);
+    const js = await window.electron.transpileTypeScript(source);
     checkReservedNames(js);
     const promoted = promoteDeclarations(js);
     const declaredNames = getTopLevelVarNames(promoted);
