@@ -4,6 +4,9 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
+import { BounceResult, AudioResult, FeatureResult } from "./bounce-result.js";
+
+export { BounceResult, AudioResult, FeatureResult };
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -18,7 +21,7 @@ export interface BounceApiDeps {
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { terminal, audioManager, onUpdateWaveform } = deps;
 
-  async function display(fileOrHash: string): Promise<void> {
+  async function display(fileOrHash: string): Promise<AudioResult> {
     const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
     const isHash =
       /^[0-9a-f]{8,}$/i.test(fileOrHash) &&
@@ -49,28 +52,57 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     audioManager.setCurrentAudio(audio);
     onUpdateWaveform();
-    terminal.writeln(`\x1b[32mLoaded: ${audioFileData.filePath ?? audioFileData.hash.substring(0, 8)}\x1b[0m`);
-    terminal.writeln(`\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`);
+    return new AudioResult(
+      [
+        `\x1b[32mLoaded: ${audioFileData.filePath ?? audioFileData.hash.substring(0, 8)}\x1b[0m`,
+        `\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`,
+      ].join("\n"),
+      audioFileData.hash,
+      audioFileData.filePath ?? undefined,
+      audioFileData.sampleRate,
+      audioFileData.duration,
+    );
   }
 
-  async function play(fileOrHash?: string): Promise<void> {
-    if (fileOrHash) {
-      await display(fileOrHash);
+  async function play(source?: string | AudioResult): Promise<AudioResult> {
+    let displayResult: AudioResult | undefined;
+
+    if (typeof source === "string") {
+      displayResult = await display(source);
+    } else if (source instanceof AudioResult) {
+      // Reload only if this isn't already the current audio
+      if (audioManager.getCurrentAudio()?.hash !== source.hash) {
+        displayResult = await display(source.hash);
+      }
     }
+
     const audio = audioManager.getCurrentAudio();
     if (!audio) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
     await audioManager.playAudio(audio.audioData, audio.sampleRate);
-    terminal.writeln(`\x1b[32mPlaying: ${audio.hash?.substring(0, 8) ?? audio.filePath ?? "audio"}\x1b[0m`);
+
+    const playLine = `\x1b[32mPlaying: ${audio.hash?.substring(0, 8) ?? audio.filePath ?? "audio"}\x1b[0m`;
+    const displayStr = displayResult ? `${displayResult.toString()}\n${playLine}` : playLine;
+    return new AudioResult(
+      displayStr,
+      audio.hash!,
+      audio.filePath ?? undefined,
+      audio.sampleRate,
+      audio.duration,
+    );
   }
 
-  function stop(): void {
+  function stop(): BounceResult {
     audioManager.stopAudio();
-    terminal.writeln("\x1b[32mPlayback stopped\x1b[0m");
+    return new BounceResult("\x1b[32mPlayback stopped\x1b[0m");
   }
 
-  async function analyze(options?: AnalyzeOptions): Promise<OnsetResult> {
+  async function analyze(
+    source?: AudioResult | AnalyzeOptions,
+    options?: AnalyzeOptions,
+  ): Promise<FeatureResult> {
+    const opts = source instanceof AudioResult ? options : (source as AnalyzeOptions | undefined);
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -78,18 +110,25 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     terminal.writeln("\x1b[36mAnalyzing onset slices...\x1b[0m");
 
-    const slices = await window.electron.analyzeOnsetSlice(audio.audioData, options);
-
-    const featureId = await window.electron.storeFeature(audio.hash, "onset-slice", slices, options as FeatureOptions | undefined);
+    const slices = await window.electron.analyzeOnsetSlice(audio.audioData, opts);
+    const featureId = await window.electron.storeFeature(audio.hash, "onset-slice", slices, opts as FeatureOptions | undefined);
 
     audioManager.setCurrentSlices(slices);
     onUpdateWaveform();
 
-    terminal.writeln(`\x1b[32mFound ${slices.length} onset slices (feature: ${featureId})\x1b[0m`);
-    return { slices, count: slices.length };
+    return new FeatureResult(
+      `\x1b[32mFound ${slices.length} onset slices (feature: ${featureId})\x1b[0m`,
+      audio.hash,
+      String(featureId),
+      "onset-slice",
+    );
   }
 
-  async function analyzeNmf(options?: NmfOptions): Promise<NmfResult> {
+  async function analyzeNmf(
+    source?: AudioResult | NmfOptions,
+    options?: NmfOptions,
+  ): Promise<FeatureResult> {
+    const opts = source instanceof AudioResult ? options : (source as NmfOptions | undefined);
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -97,7 +136,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     terminal.writeln("\x1b[36mPerforming NMF decomposition...\x1b[0m");
 
-    const result = await window.electron.analyzeBufNMF(audio.audioData, audio.sampleRate, options);
+    const result = await window.electron.analyzeBufNMF(audio.audioData, audio.sampleRate, opts);
 
     const flattenedData = [
       result.components,
@@ -110,23 +149,37 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       audio.hash,
       "nmf",
       flattenedData,
-      { ...options, components: result.components },
+      { ...opts, components: result.components },
     );
 
-    terminal.writeln(`\x1b[32mNMF complete: ${result.components} components (feature: ${featureId})\x1b[0m`);
-    terminal.writeln(`Converged: ${result.converged ? "Yes" : "No"} after ${result.iterations} iterations`);
-    return result;
+    return new FeatureResult(
+      [
+        `\x1b[32mNMF complete: ${result.components} components (feature: ${featureId})\x1b[0m`,
+        `Converged: ${result.converged ? "Yes" : "No"} after ${result.iterations} iterations`,
+      ].join("\n"),
+      audio.hash,
+      String(featureId),
+      "nmf",
+    );
   }
 
-  async function slice(options?: SliceOptions): Promise<void> {
+  async function slice(
+    source?: FeatureResult | AudioResult | SliceOptions,
+    options?: SliceOptions,
+  ): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
-    const feature = options?.featureHash
-      ? await window.electron.getMostRecentFeature(audio.hash, "onset-slice")
-      : await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
+    let feature: FeatureData | null;
+    if (source instanceof FeatureResult) {
+      feature = await window.electron.getMostRecentFeature(source.sourceHash, "onset-slice");
+    } else {
+      const opts = source instanceof AudioResult ? options : (source as SliceOptions | undefined);
+      void opts;
+      feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
+    }
 
     if (!feature) {
       throw new Error('No onset-slice analysis found. Run analyze() first.');
@@ -136,28 +189,44 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     const slices = await window.electron.createSliceSamples(audio.hash, feature.feature_hash);
 
-    terminal.writeln(`\x1b[32mCreated ${slices.length} slices\x1b[0m`);
+    return new BounceResult(`\x1b[32mCreated ${slices.length} slices\x1b[0m`);
   }
 
-  async function sep(options?: SepOptions): Promise<void> {
-    const audio = audioManager.getCurrentAudio();
-    if (!audio?.hash) {
-      throw new Error('No audio loaded. Use display("path/to/file") first.');
+  async function sep(
+    source?: AudioResult | FeatureResult | SepOptions,
+    options?: SepOptions,
+  ): Promise<BounceResult> {
+    let hash: string;
+    let opts: SepOptions | undefined;
+
+    if (source instanceof AudioResult) {
+      hash = source.hash;
+      opts = options;
+    } else if (source instanceof FeatureResult) {
+      hash = source.sourceHash;
+      opts = options;
+    } else {
+      const audio = audioManager.getCurrentAudio();
+      if (!audio?.hash) {
+        throw new Error('No audio loaded. Use display("path/to/file") first.');
+      }
+      hash = audio.hash;
+      opts = source as SepOptions | undefined;
     }
 
-    const args: string[] = [audio.hash];
-    if (options?.components !== undefined) args.push("--components", String(options.components));
-    if (options?.iterations !== undefined) args.push("--iterations", String(options.iterations));
+    const args: string[] = [hash];
+    if (opts?.components !== undefined) args.push("--components", String(opts.components));
+    if (opts?.iterations !== undefined) args.push("--iterations", String(opts.iterations));
 
     const result = await window.electron.sep(args);
     if (result.success) {
-      terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+      return new BounceResult(`\x1b[32m${result.message}\x1b[0m`);
     } else {
       throw new Error(result.message);
     }
   }
 
-  async function nx(options?: NxOptions): Promise<void> {
+  async function nx(options?: NxOptions): Promise<BounceResult> {
     if (!options?.targetHash || !options?.sourceHash) {
       throw new Error("nx() requires options.targetHash and options.sourceHash");
     }
@@ -167,64 +236,69 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     const result = await window.electron.nx(args);
     if (result.success) {
-      terminal.writeln(`\x1b[32m${result.message}\x1b[0m`);
+      return new BounceResult(`\x1b[32m${result.message}\x1b[0m`);
     } else {
       throw new Error(result.message);
     }
   }
 
-  async function list(): Promise<SampleListData[]> {
+  async function list(): Promise<BounceResult> {
     const samples = await window.electron.listSamples();
     const features = await window.electron.listFeatures();
+    const lines: string[] = [];
 
     if (samples.length === 0) {
-      terminal.writeln("\x1b[33mNo samples in database\x1b[0m");
+      lines.push("\x1b[33mNo samples in database\x1b[0m");
     } else {
-      terminal.writeln("\x1b[1;36mStored Samples:\x1b[0m");
-      terminal.writeln("");
+      lines.push("\x1b[1;36mStored Samples:\x1b[0m", "");
       for (const sample of samples) {
         const shortHash = sample.hash.substring(0, 8);
         const basename =
           (sample.file_path ?? sample.hash).split("/").pop() ?? shortHash;
         const channelsStr = sample.channels === 1 ? "mono" : "stereo";
-        terminal.writeln(
+        lines.push(
           `  \x1b[33m${shortHash}\x1b[0m ${basename.padEnd(25)} ${sample.sample_rate}Hz ${channelsStr.padEnd(6)} ${sample.duration.toFixed(2)}s`,
         );
       }
-      terminal.writeln("");
-      terminal.writeln(`Total: ${samples.length} sample(s)`);
+      lines.push("", `Total: ${samples.length} sample(s)`);
     }
 
     if (features.length > 0) {
-      terminal.writeln("");
-      terminal.writeln("\x1b[1;36mStored Features:\x1b[0m");
-      terminal.writeln("");
+      lines.push("", "\x1b[1;36mStored Features:\x1b[0m", "");
       for (const feature of features) {
         const shortHash = feature.sample_hash.substring(0, 8);
-        terminal.writeln(
+        lines.push(
           `  \x1b[33m${shortHash}\x1b[0m \x1b[90m${feature.feature_type}\x1b[0m  ${feature.feature_count} entries`,
         );
       }
-      terminal.writeln("");
-      terminal.writeln(`Total: ${features.length} feature(s)`);
+      lines.push("", `Total: ${features.length} feature(s)`);
     }
 
-    return samples;
+    return new BounceResult(lines.join("\n"));
   }
 
-  async function playSlice(index = 0): Promise<void> {
+  async function playSlice(index = 0, source?: FeatureResult | AudioResult): Promise<AudioResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
-    const feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
+    const lookupHash = source instanceof AudioResult
+      ? source.hash
+      : source instanceof FeatureResult
+        ? source.sourceHash
+        : audio.hash;
+
+    const feature = source instanceof FeatureResult
+      ? await window.electron.getMostRecentFeature(lookupHash, "onset-slice")
+      : await window.electron.getMostRecentFeature(lookupHash, "onset-slice");
+
     if (!feature) {
       throw new Error('No onset-slice analysis found. Run analyze() first.');
     }
 
     const derivedSample = await window.electron.getDerivedSampleByIndex(
-      audio.hash,
+      lookupHash,
       feature.feature_hash,
       index,
     );
@@ -244,7 +318,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       audioData,
       sampleRate: derivedSample.sample_rate,
       duration,
-      filePath: `Slice ${index} from ${audio.hash.substring(0, 8)}`,
+      filePath: `Slice ${index} from ${lookupHash.substring(0, 8)}`,
       hash: derivedSample.hash,
       visualize: () => "Not available for slices",
       analyzeOnsetSlice: async () => ({ slices: [], visualize: () => "Not available" }),
@@ -254,16 +328,28 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     await audioManager.playAudio(audioData, derivedSample.sample_rate);
     onUpdateWaveform();
 
-    terminal.writeln(`\x1b[32mPlaying slice ${index} (${duration.toFixed(3)}s)\x1b[0m`);
+    return new AudioResult(
+      `\x1b[32mPlaying slice ${index} (${duration.toFixed(3)}s)\x1b[0m`,
+      derivedSample.hash,
+      undefined,
+      derivedSample.sample_rate,
+      duration,
+    );
   }
 
-  async function playComponent(index = 0): Promise<void> {
+  async function playComponent(index = 0, source?: FeatureResult | AudioResult): Promise<AudioResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
-    const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
+    const lookupHash = source instanceof AudioResult
+      ? source.hash
+      : source instanceof FeatureResult
+        ? source.sourceHash
+        : audio.hash;
+
+    const feature = await window.electron.getMostRecentFeature(lookupHash, "nmf");
     if (!feature) {
       throw new Error('No NMF analysis found. Run analyzeNmf() first.');
     }
@@ -275,7 +361,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     }
 
     const derivedSample = await window.electron.getDerivedSampleByIndex(
-      audio.hash,
+      lookupHash,
       feature.feature_hash,
       index,
     );
@@ -295,7 +381,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       audioData: componentAudio,
       sampleRate: derivedSample.sample_rate,
       duration,
-      filePath: `Component ${index} from ${audio.hash.substring(0, 8)}`,
+      filePath: `Component ${index} from ${lookupHash.substring(0, 8)}`,
       hash: derivedSample.hash,
       visualize: () => "Not available for components",
       analyzeOnsetSlice: async () => ({ slices: [], visualize: () => "Not available" }),
@@ -305,10 +391,16 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     await audioManager.playAudio(componentAudio, derivedSample.sample_rate);
     onUpdateWaveform();
 
-    terminal.writeln(`\x1b[32mPlaying component ${index} (${duration.toFixed(3)}s)\x1b[0m`);
+    return new AudioResult(
+      `\x1b[32mPlaying component ${index} (${duration.toFixed(3)}s)\x1b[0m`,
+      derivedSample.hash,
+      undefined,
+      derivedSample.sample_rate,
+      duration,
+    );
   }
 
-  async function visualizeNmf(options?: VisualizeNmfOptions): Promise<void> {
+  async function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -340,10 +432,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     onUpdateWaveform();
 
     await window.electron.visualizeNMF(hash);
-    terminal.writeln(`\x1b[32mNMF visualization overlaid for ${hash.substring(0, 8)}\x1b[0m`);
+    return new BounceResult(`\x1b[32mNMF visualization overlaid for ${hash.substring(0, 8)}\x1b[0m`);
   }
 
-  async function visualizeNx(options?: VisualizeNxOptions): Promise<void> {
+  async function visualizeNx(options?: VisualizeNxOptions): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
     const targetHash = options?.featureHash ?? audio?.hash;
     if (!targetHash) {
@@ -373,10 +465,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     onUpdateWaveform();
 
     await window.electron.sendCommand("visualize-nx", [targetHash]);
-    terminal.writeln(`\x1b[32mNX visualization overlaid for ${targetHash.substring(0, 8)}\x1b[0m`);
+    return new BounceResult(`\x1b[32mNX visualization overlaid for ${targetHash.substring(0, 8)}\x1b[0m`);
   }
 
-  async function onsetSlice(options?: OnsetSliceVisOptions): Promise<void> {
+  async function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -390,12 +482,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     const slicesData = JSON.parse(feature.feature_data) as number[];
     audioManager.setCurrentSlices(slicesData);
     onUpdateWaveform();
-    terminal.writeln(
+    return new BounceResult(
       `\x1b[32mOnset slice markers updated (${slicesData.length} slices, feature: ${options?.featureHash ? options.featureHash.substring(0, 8) : feature.feature_hash.substring(0, 8)})\x1b[0m`,
     );
   }
 
-  async function nmf(options?: NmfVisOptions): Promise<void> {
+  async function nmf(options?: NmfVisOptions): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -431,20 +523,22 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       components: nmfData.components,
     });
 
-    terminal.writeln(
+    return new BounceResult(
       `\x1b[32mNMF visualization created (${nmfData.components} components, feature: ${options?.featureHash ? options.featureHash.substring(0, 8) : feature.feature_hash.substring(0, 8)})\x1b[0m`,
     );
   }
 
-  async function clearDebug(): Promise<void> {
+  async function clearDebug(): Promise<BounceResult> {
     await window.electron.clearDebugLogs();
-    terminal.writeln("\x1b[32mDebug logs cleared\x1b[0m");
+    return new BounceResult("\x1b[32mDebug logs cleared\x1b[0m");
   }
 
-  async function debug(limit = 20): Promise<DebugLogEntry[]> {
+  async function debug(limit = 20): Promise<BounceResult> {
     const logs = await window.electron.getDebugLogs(limit);
-    terminal.writeln(`\x1b[1;36mDebug Logs (${logs.length} entries):\x1b[0m`);
-    terminal.writeln("");
+    const lines: string[] = [
+      `\x1b[1;36mDebug Logs (${logs.length} entries):\x1b[0m`,
+      "",
+    ];
 
     for (const log of [...logs].reverse()) {
       const levelColor =
@@ -452,42 +546,45 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         log.level === "warn" ? "\x1b[33m" : "\x1b[90m";
       const timestamp = new Date(log.timestamp).toISOString();
       const data = log.data ? ` ${log.data}` : "";
-      terminal.writeln(
+      lines.push(
         `${levelColor}[${timestamp}] ${log.level.toUpperCase()}: ${log.message}${data}\x1b[0m`,
       );
     }
 
     if (logs.length === 0) {
-      terminal.writeln("\x1b[90mNo debug logs found\x1b[0m");
+      lines.push("\x1b[90mNo debug logs found\x1b[0m");
     }
 
-    return logs;
+    return new BounceResult(lines.join("\n"));
   }
 
-  function help(): void {
-    terminal.writeln("\x1b[1;36mBounce REPL — Available Functions:\x1b[0m");
-    terminal.writeln("");
-    terminal.writeln('  \x1b[33mdisplay(fileOrHash)\x1b[0m       Load and visualize an audio file or sample hash');
-    terminal.writeln('  \x1b[33mplay(fileOrHash?)\x1b[0m          Play current or specified audio');
-    terminal.writeln('  \x1b[33mstop()\x1b[0m                     Stop playback');
-    terminal.writeln('  \x1b[33manalyze(options?)\x1b[0m          Onset-slice analysis on current audio');
-    terminal.writeln('  \x1b[33manalyzeNmf(options?)\x1b[0m       NMF decomposition on current audio');
-    terminal.writeln('  \x1b[33mslice(options?)\x1b[0m            Create sample slices from onset analysis');
-    terminal.writeln('  \x1b[33msep(options?)\x1b[0m              NMF source separation on current audio');
-    terminal.writeln('  \x1b[33mnx(options)\x1b[0m                NMF cross-synthesis (requires targetHash, sourceHash)');
-    terminal.writeln('  \x1b[33mlist()\x1b[0m                     List all samples in the database');
-    terminal.writeln('  \x1b[33mplaySlice(index?)\x1b[0m          Play onset slice by index (default: 0)');
-    terminal.writeln('  \x1b[33mplayComponent(index?)\x1b[0m      Play NMF component by index (default: 0)');
-    terminal.writeln('  \x1b[33mvisualizeNmf(options?)\x1b[0m     Show NMF overlay on current waveform');
-    terminal.writeln('  \x1b[33mvisualizeNx(options?)\x1b[0m      Show NX cross-synthesis overlay');
-    terminal.writeln('  \x1b[33monsetSlice(options?)\x1b[0m       Show onset slice markers on waveform');
-    terminal.writeln('  \x1b[33mnmf(options?)\x1b[0m              Show NMF visualization panel');
-    terminal.writeln('  \x1b[33mclearDebug()\x1b[0m               Clear debug logs');
-    terminal.writeln('  \x1b[33mdebug(limit?)\x1b[0m              Show last N debug log entries (default: 20)');
-    terminal.writeln('  \x1b[33mhelp()\x1b[0m                     Show this help message');
-    terminal.writeln('  \x1b[33mclear()\x1b[0m                    Clear the terminal screen');
-    terminal.writeln("");
-    terminal.writeln("  TypeScript is fully supported. Variables persist across evaluations.");
+  function help(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mBounce REPL — Available Functions:\x1b[0m",
+      "",
+      '  \x1b[33mdisplay(fileOrHash)\x1b[0m              Load and visualize an audio file or sample hash',
+      '  \x1b[33mplay(source?)\x1b[0m                    Play current, specified path/hash, or AudioResult',
+      '  \x1b[33mstop()\x1b[0m                           Stop playback',
+      '  \x1b[33manalyze(source?, options?)\x1b[0m       Onset-slice analysis (accepts AudioResult)',
+      '  \x1b[33manalyzeNmf(source?, options?)\x1b[0m    NMF decomposition (accepts AudioResult)',
+      '  \x1b[33mslice(source?, options?)\x1b[0m         Create slices (accepts FeatureResult)',
+      '  \x1b[33msep(source?, options?)\x1b[0m           NMF separation (accepts AudioResult or FeatureResult)',
+      '  \x1b[33mnx(options)\x1b[0m                      NMF cross-synthesis (requires targetHash, sourceHash)',
+      '  \x1b[33mlist()\x1b[0m                           List all samples in the database',
+      '  \x1b[33mplaySlice(index?, source?)\x1b[0m       Play onset slice (accepts FeatureResult)',
+      '  \x1b[33mplayComponent(index?, source?)\x1b[0m   Play NMF component (accepts FeatureResult)',
+      '  \x1b[33mvisualizeNmf(options?)\x1b[0m           Show NMF overlay on current waveform',
+      '  \x1b[33mvisualizeNx(options?)\x1b[0m            Show NX cross-synthesis overlay',
+      '  \x1b[33monsetSlice(options?)\x1b[0m             Show onset slice markers on waveform',
+      '  \x1b[33mnmf(options?)\x1b[0m                    Show NMF visualization panel',
+      '  \x1b[33mclearDebug()\x1b[0m                     Clear debug logs',
+      '  \x1b[33mdebug(limit?)\x1b[0m                    Show last N debug log entries (default: 20)',
+      '  \x1b[33mhelp()\x1b[0m                           Show this help message',
+      '  \x1b[33mclear()\x1b[0m                          Clear the terminal screen',
+      "",
+      "  TypeScript is fully supported. Variables persist across evaluations.",
+      "  Results are objects — compose commands: sep(play(\"path\")), slice(analyze()), etc.",
+    ].join("\n"));
   }
 
   function clear(): void {

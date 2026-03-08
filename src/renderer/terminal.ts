@@ -36,6 +36,10 @@ export class BounceTerminal {
     this.xterm.loadAddon(this.fitAddon);
   }
 
+  get cols(): number {
+    return this.xterm.cols;
+  }
+
   clear() {
     this.xterm.clear();
   }

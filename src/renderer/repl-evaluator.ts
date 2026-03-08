@@ -1,4 +1,4 @@
-const BOUNCE_GLOBALS = new Set([
+export const BOUNCE_GLOBALS = new Set([
   "display",
   "play",
   "stop",
@@ -377,12 +377,20 @@ export class ReplEvaluator {
 
     // Try to return the expression value (works for single-expression inputs).
     // new AsyncFunction throws SyntaxError at construction if the body is invalid.
+    //
+    // TypeScript always appends a trailing semicolon to transpiled output, so
+    // `promoted` looks like `play("hash");\n`. Wrapping that directly in
+    // `const __result__ = (play("hash");)` is a SyntaxError, which causes the
+    // fallback (non-awaiting) path to be used — meaning async calls like play()
+    // would not be awaited and the prompt would print before their output.
+    // Strip trailing semicolons so the expression wrapper succeeds.
+    const singleExpr = promoted.trim().replace(/;+$/, "");
     let fn: (...args: unknown[]) => Promise<unknown>;
     try {
       fn = new AsyncFunction(
         "__scope__",
         ...bounceNames,
-        `${prelude}\nconst __result__ = (${promoted});\n${epilogue}\nreturn __result__;`,
+        `${prelude}\nconst __result__ = (${singleExpr});\n${epilogue}\nreturn __result__;`,
       );
     } catch {
       // Multi-statement input: no return value
