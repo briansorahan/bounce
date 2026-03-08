@@ -165,7 +165,6 @@ Napi::Value BufNMF::Resynthesize(const Napi::CallbackInfo& info) {
   }
   
   Napi::Float32Array audioData = info[0].As<Napi::Float32Array>();
-  double sampleRate = info[1].As<Napi::Number>().DoubleValue();
   Napi::Array basesJS = info[2].As<Napi::Array>();
   Napi::Array activationsJS = info[3].As<Napi::Array>();
   int componentIndex = info[4].As<Napi::Number>().Int32Value();
@@ -348,7 +347,6 @@ Napi::Value BufNMFCross::Process(const Napi::CallbackInfo& info) {
   
   Napi::Float32Array targetAudio = info[0].As<Napi::Float32Array>();
   Napi::Array basesJS = info[2].As<Napi::Array>();
-  Napi::Array activationsJS = info[3].As<Napi::Array>();
   
   size_t numSamples = targetAudio.ElementLength();
   
