@@ -146,12 +146,23 @@ declare class LsResult extends BounceResult {
   [Symbol.iterator](): Iterator<FsLsEntry>;
 }
 
-declare class GrainCollection {
+declare class GlobResult extends BounceResult {
+  readonly paths: string[];
+  readonly length: number;
+  filter(fn: (path: string) => boolean): string[];
+  map<T>(fn: (path: string) => T): T[];
+  find(fn: (path: string) => boolean): string | undefined;
+  forEach(fn: (path: string) => void): void;
+  some(fn: (path: string) => boolean): boolean;
+  every(fn: (path: string) => boolean): boolean;
+  [Symbol.iterator](): Iterator<string>;
+}
+
+declare class GrainCollection extends BounceResult {
   length(): number;
   forEach(callback: (grain: AudioResult, index: number) => void | Promise<void>): Promise<void>;
   map<T>(callback: (grain: AudioResult, index: number) => T): T[];
   filter(predicate: (grain: AudioResult, index: number) => boolean): GrainCollection;
-  toString(): string;
 }
 
 declare const display: {
@@ -289,11 +300,11 @@ interface FsApi {
     help(): BounceResult;
   };
   glob: {
-    (pattern: string): Promise<string[]>;
+    (pattern: string): Promise<GlobResult>;
     help(): BounceResult;
   };
   walk: {
-    (dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void>;
+    (dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<BounceResult | undefined>;
     help(): BounceResult;
   };
 }

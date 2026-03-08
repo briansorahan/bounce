@@ -4,10 +4,10 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
-import { BounceResult, AudioResult, FeatureResult, LsResult } from "./bounce-result.js";
+import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 
-export { BounceResult, AudioResult, FeatureResult, LsResult, GrainCollection };
+export { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, GrainCollection };
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -286,10 +286,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "mfcc",
         coefficients.flat(),
         { ...options, numFrames, numCoeffs },
-      );
-
-      terminal.writeln(
-        `\x1b[32mMFCC complete: ${numFrames} frames × ${numCoeffs} coefficients (feature: ${featureId})\x1b[0m`,
       );
 
       return new FeatureResult(
@@ -924,14 +920,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
       const result = await window.electron.granularizeSample(hash, opts);
 
-      const storedCount = result.grainHashes.filter((h: string | null) => h !== null).length;
-      const totalCount = result.grainHashes.length;
-      const silentCount = totalCount - storedCount;
-      const silentNote = silentCount > 0 ? `, ${silentCount} silent` : "";
-      terminal.writeln(
-        `\x1b[32mGranularized ${hash.substring(0, 8)} → ${storedCount} grains${silentNote}\x1b[0m`,
-      );
-
       const grains: Array<AudioResult | null> = result.grainHashes.map(
         (grainHash: string | null) => {
           if (grainHash === null) return null;
@@ -1096,9 +1084,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
       const result = await window.electron.corpusBuild(sourceHash, featureHash);
 
-      const msg = `\x1b[32mBuilt corpus: ${result.segmentCount} segments, ${result.featureDims}-dim features, KDTree ready\x1b[0m`;
-      terminal.writeln(msg);
-      return new BounceResult(msg);
+      return new BounceResult(`\x1b[32mBuilt corpus: ${result.segmentCount} segments, ${result.featureDims}-dim features, KDTree ready\x1b[0m`);
     },
 
     /**
@@ -1121,7 +1107,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       });
 
       const msg = lines.join("\n");
-      terminal.writeln(msg);
       return new BounceResult(msg);
     },
 
@@ -1138,7 +1123,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       await audioManager.playAudio(audio, sampleRate);
 
       const msg = `\x1b[32mResynthesis complete: ${queryIndices.length} segments, ${(audio.length / sampleRate).toFixed(2)}s\x1b[0m`;
-      terminal.writeln(msg);
       return new BounceResult(msg);
     },
   };
@@ -1245,9 +1229,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     cd: Object.assign(
       async function cd(dirPath: string): Promise<BounceResult> {
         const newCwd = await window.electron.fsCd(dirPath);
-        const msg = `\x1b[32m${newCwd}\x1b[0m`;
-        terminal.writeln(msg);
-        return new BounceResult(newCwd);
+        return new BounceResult(`\x1b[32m${newCwd}\x1b[0m`);
       },
       {
         help: (): BounceResult => new BounceResult([
@@ -1269,7 +1251,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     pwd: Object.assign(
       async function pwd(): Promise<BounceResult> {
         const cwd = await window.electron.fsPwd();
-        terminal.writeln(cwd);
         return new BounceResult(cwd);
       },
       {
@@ -1285,10 +1266,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
 
     glob: Object.assign(
-      async function glob(pattern: string): Promise<string[]> {
+      async function glob(pattern: string): Promise<GlobResult> {
         const paths = await window.electron.fsGlob(pattern);
-        paths.forEach((p: string) => terminal.writeln(p));
-        return paths;
+        return new GlobResult(paths);
       },
       {
         help: (): BounceResult => new BounceResult([
@@ -1311,14 +1291,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       async function walk(
         dirPath: string,
         handler: WalkCatchAll | WalkHandlers,
-      ): Promise<void> {
+      ): Promise<BounceResult | undefined> {
         const { entries, truncated } = await window.electron.fsWalk(dirPath);
         const typedEntries = entries as WalkEntry[];
-        if (truncated) {
-          terminal.writeln(
-            `\x1b[33mWarning: walk truncated at 10,000 entries\x1b[0m`,
-          );
-        }
         for (const entry of typedEntries) {
           if (typeof handler === "function") {
             await handler(entry.path, entry.type);
@@ -1326,6 +1301,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
             const cb = handler[entry.type];
             if (cb) await cb(entry.path);
           }
+        }
+        if (truncated) {
+          return new BounceResult(`\x1b[33mWarning: walk truncated at 10,000 entries\x1b[0m`);
         }
       },
       {

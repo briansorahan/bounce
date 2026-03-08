@@ -1,6 +1,6 @@
-import { AudioResult } from "./bounce-result.js";
+import { AudioResult, BounceResult } from "./bounce-result.js";
 
-export class GrainCollection {
+export class GrainCollection extends BounceResult {
   private readonly grains: Array<AudioResult | null>;
   private readonly _normalize: boolean;
   private readonly sourceHash: string;
@@ -10,6 +10,10 @@ export class GrainCollection {
     normalize: boolean,
     sourceHash: string,
   ) {
+    const stored = grains.filter((g) => g !== null).length;
+    const silent = grains.length - stored;
+    const silentNote = silent > 0 ? `, ${silent} silent` : "";
+    super(`\x1b[32mGranularized ${sourceHash.substring(0, 8)} → ${stored} grains${silentNote}\x1b[0m`);
     this.grains = grains;
     this._normalize = normalize;
     this.sourceHash = sourceHash;
@@ -60,12 +64,5 @@ export class GrainCollection {
       }
     }
     return new GrainCollection(kept, this._normalize, this.sourceHash);
-  }
-
-  toString(): string {
-    const stored = this.grains.filter((g) => g !== null).length;
-    const silent = this.grains.length - stored;
-    const silentNote = silent > 0 ? `, ${silent} silent` : "";
-    return `GrainCollection(${stored} grains from ${this.sourceHash.substring(0, 8)}${silentNote})`;
   }
 }

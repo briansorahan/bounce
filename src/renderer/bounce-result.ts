@@ -80,6 +80,51 @@ export class LsResult extends BounceResult {
 }
 
 /**
+ * Returned by fs.glob().
+ * Displays as one path per line, but is filterable/iterable as a string collection.
+ */
+export class GlobResult extends BounceResult {
+  readonly paths: string[];
+
+  constructor(paths: string[]) {
+    super(paths.length === 0 ? "\x1b[90m(no matches)\x1b[0m" : paths.join("\n"));
+    this.paths = paths;
+  }
+
+  get length(): number {
+    return this.paths.length;
+  }
+
+  filter(fn: (path: string) => boolean): string[] {
+    return this.paths.filter(fn);
+  }
+
+  map<T>(fn: (path: string) => T): T[] {
+    return this.paths.map(fn);
+  }
+
+  find(fn: (path: string) => boolean): string | undefined {
+    return this.paths.find(fn);
+  }
+
+  forEach(fn: (path: string) => void): void {
+    this.paths.forEach(fn);
+  }
+
+  some(fn: (path: string) => boolean): boolean {
+    return this.paths.some(fn);
+  }
+
+  every(fn: (path: string) => boolean): boolean {
+    return this.paths.every(fn);
+  }
+
+  [Symbol.iterator](): Iterator<string> {
+    return this.paths[Symbol.iterator]();
+  }
+}
+
+/**
  * Returned by analyze() and analyzeNmf().
  * Carries source + feature hashes so it can be passed to slice(), sep(), playSlice(), etc.
  */
