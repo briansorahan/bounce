@@ -1201,7 +1201,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       async function ls(dirPath?: string): Promise<LsResult> {
         const { entries, truncated, total } = await window.electron.fsLs(dirPath);
         const msg = formatLsEntries(entries, truncated, total);
-        terminal.writeln(msg);
         return new LsResult(msg, entries, total, truncated);
       },
       {
@@ -1227,7 +1226,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       async function la(dirPath?: string): Promise<LsResult> {
         const { entries, truncated, total } = await window.electron.fsLa(dirPath);
         const msg = formatLsEntries(entries, truncated, total);
-        terminal.writeln(msg);
         return new LsResult(msg, entries, total, truncated);
       },
       {

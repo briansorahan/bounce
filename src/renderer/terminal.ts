@@ -67,4 +67,13 @@ export class BounceTerminal {
   writeln(content: string) {
     this.xterm.writeln(content);
   }
+
+  /**
+   * Write content only after xterm has finished processing all previously
+   * queued writes. Prevents output from appearing after the prompt when
+   * commands write large amounts of data.
+   */
+  writeWhenFlushed(content: string): void {
+    this.xterm.write("", () => this.xterm.write(content));
+  }
 }
