@@ -2,7 +2,8 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { WaveformVisualizer } from "./waveform-visualizer.js";
 import { ReplEvaluator } from "./repl-evaluator.js";
-import { buildBounceApi } from "./bounce-api.js";
+import { buildBounceApi, BounceResult } from "./bounce-api.js";
+import { TabCompletion } from "./tab-completion.js";
 
 enum ControlCode {
   CTRL_A = 1,
@@ -40,10 +41,12 @@ export class BounceApp {
   private savedCommandBuffer: string = "";
   private inputLines: string[] = [];
   private replEvaluator!: ReplEvaluator;
+  private completion: TabCompletion;
 
   constructor() {
     this.terminal = new BounceTerminal();
     this.audioManager = new AudioManager();
+    this.completion = new TabCompletion();
     const bounceApi = buildBounceApi({
       terminal: this.terminal,
       audioManager: this.audioManager,
@@ -108,6 +111,11 @@ export class BounceApp {
     const code = data.charCodeAt(0);
 
     if (code === ControlCode.CTRL_R) {
+      if (!this.isReverseSearchMode) {
+        // Erase ghost text before entering search mode
+        this.terminal.write(this.completion.eraseGhostText());
+        this.completion.reset();
+      }
       this.handleReverseSearch();
       return;
     }
@@ -130,6 +138,14 @@ export class BounceApp {
 
     // Normal mode input handling
     if (code === ControlCode.ENTER) {
+      // Multi-match completion: Enter pastes selected candidate without executing
+      const completionAction = this.completion.handleEnter();
+      if (completionAction !== null && completionAction.kind === "accept") {
+        this.commandBuffer = completionAction.newBuffer;
+        this.cursorPosition = completionAction.newCursorPosition;
+        this.redrawCommandLine();
+        return;
+      }
       this.terminal.write("\r\n");
       const accumulated = [...this.inputLines, this.commandBuffer].join("\n");
       if (!this.commandBuffer.trim() && this.inputLines.length === 0) {
@@ -216,6 +232,18 @@ export class BounceApp {
       } else {
         // Unknown escape sequence - ignore it
       }
+    } else if (data === "\t") {
+      const action = this.completion.handleTab();
+      if (action === null) return;
+      if (action.kind === "accept") {
+        this.commandBuffer = action.newBuffer;
+        this.cursorPosition = action.newCursorPosition;
+        this.redrawCommandLine();
+      } else {
+        // Cycle multi-match list: erase old ghost text, render updated selection
+        this.terminal.write(this.completion.eraseGhostText());
+        this.terminal.write(this.completion.ghostText());
+      }
     } else if (code >= ControlCode.SPACE) {
       this.commandBuffer =
         this.commandBuffer.slice(0, this.cursorPosition) +
@@ -296,18 +324,23 @@ export class BounceApp {
   }
 
   private redrawCommandLine(): void {
+    // Erase multi-match ghost lines below the prompt (single-match inline ghost
+    // is on the same line and will be cleared by the \r\x1b[K below)
+    this.terminal.write(this.completion.eraseGhostText());
+    // Update completion state for the current buffer and cursor position
+    this.completion.update(this.commandBuffer, this.cursorPosition);
     // Clear the current line and redraw with cursor at correct position
     this.terminal.write("\r\x1b[K");
     this.terminal.write(`\x1b[32m>\x1b[0m ${this.commandBuffer}`);
     // Move cursor to correct position
     const targetColumn = 3 + this.cursorPosition; // 3 = "> " prompt (including space)
     this.terminal.write(`\r\x1b[${targetColumn}G`);
+    // Render ghost text (saves and restores cursor position)
+    this.terminal.write(this.completion.ghostText());
   }
 
   private updateCursorPosition(): void {
-    // Move cursor to correct position without redrawing
-    const targetColumn = 3 + this.cursorPosition; // 3 = "> " prompt (including space)
-    this.terminal.write(`\r\x1b[${targetColumn}G`);
+    this.redrawCommandLine();
   }
 
   private navigateHistory(direction: number): void {
@@ -318,7 +351,6 @@ export class BounceApp {
     const newIndex = this.historyIndex + direction;
 
     if (newIndex >= -1 && newIndex < this.commandHistory.length) {
-      this.clearCurrentLine();
       this.historyIndex = newIndex;
 
       if (this.historyIndex === -1) {
@@ -331,7 +363,7 @@ export class BounceApp {
       }
 
       this.cursorPosition = this.commandBuffer.length;
-      this.terminal.write(`> ${this.commandBuffer}`);
+      this.redrawCommandLine();
     }
   }
 
@@ -361,10 +393,12 @@ export class BounceApp {
     try {
       const result = await this.replEvaluator.evaluate(trimmed);
       if (result !== undefined) {
-        if (typeof result === "object" && result !== null) {
-          this.terminal.writeln(JSON.stringify(result, null, 2));
+        const formatted = this.formatResult(result);
+        // BounceResult and string carry their own ANSI formatting; bare values get dim gray.
+        if (result instanceof BounceResult || typeof result === "string") {
+          this.terminal.writeln(formatted);
         } else {
-          this.terminal.writeln(String(result));
+          this.terminal.writeln(`\x1b[90m${formatted}\x1b[0m`);
         }
       }
     } catch (error) {
@@ -372,6 +406,26 @@ export class BounceApp {
         `\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m`,
       );
     }
+  }
+
+  private formatResult(value: unknown): string {
+    if (value instanceof BounceResult) {
+      return value.toString().replace(/\r?\n/g, "\r\n");
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value === "function") {
+      return `[Function: ${(value as { name?: string }).name || "(anonymous)"}]`;
+    }
+    if (typeof value === "object" && value !== null) {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
   }
 
   private handleNMFOverlay(data: {
@@ -488,9 +542,7 @@ export class BounceApp {
     } else if (code === ControlCode.CTRL_G) {
       this.exitSearchMode(false);
     } else if (code === ControlCode.ENTER) {
-      this.exitSearchMode(true).catch((error) => {
-        console.error("Error executing command from search:", error);
-      });
+      this.exitSearchMode(true);
     } else if (code === ControlCode.BACKSPACE) {
       if (this.searchQuery.length > 0) {
         this.searchQuery = this.searchQuery.slice(0, -1);
@@ -557,19 +609,16 @@ export class BounceApp {
     return `${before}\x1b[1;32m${match}\x1b[0m${after}`;
   }
 
-  private async exitSearchMode(executeCommand: boolean): Promise<void> {
+  private exitSearchMode(executeCommand: boolean): void {
     this.isReverseSearchMode = false;
 
     this.clearCurrentLine();
 
     if (executeCommand && this.searchResultIndex >= 0) {
-      const command = this.matchedCommands[this.searchResultIndex];
-      this.terminal.write(`> ${command}`);
-      this.terminal.write("\r\n");
-      await this.executeCommand(command);
-      this.commandBuffer = "";
+      // Paste matched command into prompt without executing
+      this.commandBuffer = this.matchedCommands[this.searchResultIndex];
     } else {
-      // Restore saved buffer if not executing
+      // Restore saved buffer on cancel
       this.commandBuffer = this.savedCommandBuffer;
     }
 

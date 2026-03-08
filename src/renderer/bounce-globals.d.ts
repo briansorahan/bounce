@@ -79,22 +79,39 @@ interface Sample {
   created_at: string;
 }
 
-declare function display(fileOrHash: string): Promise<void>;
-declare function play(fileOrHash?: string): Promise<void>;
-declare function stop(): void;
-declare function analyze(options?: AnalyzeOptions): Promise<OnsetResult>;
-declare function analyzeNmf(options?: NmfOptions): Promise<NmfResult>;
-declare function slice(options?: SliceOptions): Promise<void>;
-declare function sep(options?: SepOptions): Promise<void>;
-declare function nx(options?: NxOptions): Promise<void>;
-declare function list(): Promise<Sample[]>;
-declare function playSlice(index?: number): Promise<void>;
-declare function playComponent(index?: number): Promise<void>;
-declare function visualizeNmf(options?: VisualizeNmfOptions): void;
-declare function visualizeNx(options?: VisualizeNxOptions): void;
-declare function onsetSlice(options?: OnsetSliceVisOptions): void;
-declare function nmf(options?: NmfVisOptions): void;
-declare function clearDebug(): Promise<void>;
-declare function debug(limit?: number): Promise<DebugLogEntry[]>;
-declare function help(): void;
+declare class BounceResult {
+  toString(): string;
+}
+
+declare class AudioResult extends BounceResult {
+  readonly hash: string;
+  readonly filePath: string | undefined;
+  readonly sampleRate: number;
+  readonly duration: number;
+}
+
+declare class FeatureResult extends BounceResult {
+  readonly sourceHash: string;
+  readonly featureHash: string;
+  readonly featureType: string;
+}
+
+declare function display(fileOrHash: string): Promise<AudioResult>;
+declare function play(source?: string | AudioResult): Promise<AudioResult>;
+declare function stop(): BounceResult;
+declare function analyze(source?: AudioResult | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
+declare function analyzeNmf(source?: AudioResult | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
+declare function slice(source?: FeatureResult | AudioResult | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
+declare function sep(source?: AudioResult | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
+declare function nx(options?: NxOptions): Promise<BounceResult>;
+declare function list(): Promise<BounceResult>;
+declare function playSlice(index?: number, source?: FeatureResult | AudioResult): Promise<AudioResult>;
+declare function playComponent(index?: number, source?: FeatureResult | AudioResult): Promise<AudioResult>;
+declare function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult>;
+declare function visualizeNx(options?: VisualizeNxOptions): Promise<BounceResult>;
+declare function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult>;
+declare function nmf(options?: NmfVisOptions): Promise<BounceResult>;
+declare function clearDebug(): Promise<BounceResult>;
+declare function debug(limit?: number): Promise<BounceResult>;
+declare function help(): BounceResult;
 declare function clear(): void;
