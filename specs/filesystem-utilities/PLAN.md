@@ -84,39 +84,64 @@ fsGlob: (pattern: string) => ipcRenderer.invoke("fs-glob", pattern),
 fsWalk: (dirPath: string) => ipcRenderer.invoke("fs-walk", dirPath),
 ```
 
+The `fs-walk` IPC handler returns `{ path: string, type: FileType }[]` — a flat list that the renderer iterates locally. Callbacks never cross IPC.
+
 #### `src/renderer/bounce-api.ts`
-Add `fs` object to the return value of `buildBounceApi`. The `fs` object:
+Add `fs` object to the return value of `buildBounceApi`.
+
+**`fs.FileType` enum** — defined in `bounce-api.ts` and re-exported as a property of the `fs` object so it's accessible as `fs.FileType.File` in the REPL:
+
+```typescript
+enum FileType {
+  File          = "file",
+  Directory     = "directory",
+  Symlink       = "symlink",
+  BlockDevice   = "blockDevice",
+  CharDevice    = "charDevice",
+  FIFO          = "fifo",
+  Socket        = "socket",
+  Unknown       = "unknown",
+}
+```
+
+**`fs.walk` callback — union type**, accepts either a catch-all or a per-type handler map:
+
+```typescript
+type WalkCatchAll = (path: string, type: FileType) => Promise<void>;
+type WalkHandlers = Partial<Record<FileType, (path: string) => Promise<void>>>;
+
+// Catch-all: user decides what to do with each type
+await fs.walk("~/samples", async (filePath, type) => {
+  if (type === fs.FileType.File) await display(filePath);
+});
+
+// Handler map: only types with a key are invoked, rest silently skipped
+await fs.walk("~/samples", {
+  [fs.FileType.File]: async (filePath) => { await display(filePath); },
+  [fs.FileType.Directory]: async (dirPath) => { terminal.writeln("entering " + dirPath); },
+});
+```
+
+**Full `fs` object sketch:**
 
 ```typescript
 const fs = {
-  async ls(dirPath?: string): Promise<BounceResult> {
-    const entries = await window.electron.fsLs(dirPath);
-    // format + write to terminal with ANSI colors, return BounceResult
-  },
-  async la(dirPath?: string): Promise<BounceResult> {
-    const entries = await window.electron.fsLa(dirPath);
-    // same formatting as ls
-  },
-  async cd(dirPath: string): Promise<BounceResult> {
-    const newCwd = await window.electron.fsCd(dirPath);
-    terminal.writeln(`\x1b[32m${newCwd}\x1b[0m`);
-    return new BounceResult(newCwd);
-  },
-  async pwd(): Promise<BounceResult> {
-    const cwd = await window.electron.fsPwd();
-    terminal.writeln(cwd);
-    return new BounceResult(cwd);
-  },
-  async glob(pattern: string): Promise<string[]> {
-    const paths = await window.electron.fsGlob(pattern);
-    paths.forEach(p => terminal.writeln(p));
-    return paths;
-  },
-  async walk(dirPath: string, cb: (filePath: string) => Promise<void>): Promise<void> {
-    const filePaths = await window.electron.fsWalk(dirPath);
-    for (const rel of filePaths) {
-      // main process returns absolute paths
-      await cb(rel);
+  FileType, // expose enum on the fs object
+  async ls(dirPath?: string): Promise<BounceResult> { ... },
+  async la(dirPath?: string): Promise<BounceResult> { ... },
+  async cd(dirPath: string): Promise<BounceResult> { ... },
+  async pwd(): Promise<BounceResult> { ... },
+  async glob(pattern: string): Promise<string[]> { ... },
+  async walk(dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void> {
+    const entries = await window.electron.fsWalk(dirPath);
+    // entries: { path: string, type: FileType }[]
+    for (const entry of entries) {
+      if (typeof handler === "function") {
+        await handler(entry.path, entry.type);
+      } else if (handler[entry.type]) {
+        await handler[entry.type]!(entry.path);
+      }
+      // no handler for this type → silently skip
     }
   },
 };
@@ -134,19 +159,36 @@ Add `"fs"` to `BOUNCE_GLOBALS`.
 #### `src/renderer/bounce-globals.d.ts`
 Add:
 ```typescript
+declare namespace fs {
+  const enum FileType {
+    File        = "file",
+    Directory   = "directory",
+    Symlink     = "symlink",
+    BlockDevice = "blockDevice",
+    CharDevice  = "charDevice",
+    FIFO        = "fifo",
+    Socket      = "socket",
+    Unknown     = "unknown",
+  }
+}
+
 interface FsEntry {
   name: string;
-  isDir: boolean;
+  type: fs.FileType;
   isAudio: boolean;
 }
 
+type WalkCatchAll = (path: string, type: fs.FileType) => Promise<void>;
+type WalkHandlers = Partial<Record<fs.FileType, (path: string) => Promise<void>>>;
+
 interface FsApi {
+  FileType: typeof fs.FileType;
   ls(dirPath?: string): Promise<BounceResult>;
   la(dirPath?: string): Promise<BounceResult>;
   cd(dirPath: string): Promise<BounceResult>;
   pwd(): Promise<BounceResult>;
   glob(pattern: string): Promise<string[]>;
-  walk(dirPath: string, cb: (filePath: string) => Promise<void>): Promise<void>;
+  walk(dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void>;
 }
 
 declare const fs: FsApi;
