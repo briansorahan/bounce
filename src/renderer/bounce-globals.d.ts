@@ -68,6 +68,25 @@ interface NmfVisOptions {
   featureHash?: string;
 }
 
+interface MFCCOptions {
+  /** Number of cepstral coefficients per frame. Default: 13 */
+  numCoeffs?: number;
+  /** Number of Mel filter bands. Default: 40 */
+  numBands?: number;
+  /** Low frequency bound in Hz. Default: 20 */
+  minFreq?: number;
+  /** High frequency bound in Hz. Default: 20000 */
+  maxFreq?: number;
+  /** Analysis window size in samples. Default: 1024 */
+  windowSize?: number;
+  /** FFT size in samples. Default: 1024 */
+  fftSize?: number;
+  /** Hop size between frames in samples. Default: 512 */
+  hopSize?: number;
+  /** Sample rate in Hz. Default: 44100 */
+  sampleRate?: number;
+}
+
 interface Sample {
   id: number;
   hash: string;
@@ -115,3 +134,4 @@ declare function clearDebug(): Promise<BounceResult>;
 declare function debug(limit?: number): Promise<BounceResult>;
 declare function help(): BounceResult;
 declare function clear(): void;
+declare function analyzeMFCC(source?: AudioResult | MFCCOptions, options?: MFCCOptions): Promise<number[][]>;

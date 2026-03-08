@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { OnsetSlice, BufNMF } from "../index";
+import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
 import { DatabaseManager } from "./database";
 import { debugLog, setDatabaseManager } from "./logger";
@@ -175,6 +175,32 @@ ipcMain.handle(
     } catch (error) {
       throw new Error(
         `Failed to perform NMF: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+);
+
+interface MFCCOptions {
+  numCoeffs?: number;
+  numBands?: number;
+  minFreq?: number;
+  maxFreq?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+  sampleRate?: number;
+}
+
+ipcMain.handle(
+  "analyze-mfcc",
+  async (_event, audioDataArray: number[], options?: MFCCOptions) => {
+    try {
+      const audioData = new Float32Array(audioDataArray);
+      const analyzer = new MFCCFeature(options || {});
+      return analyzer.process(audioData);
+    } catch (error) {
+      throw new Error(
+        `Failed to compute MFCCs: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   },

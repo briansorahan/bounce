@@ -163,6 +163,30 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
+  async function analyzeMFCC(
+    source?: AudioResult | MFCCOptions,
+    options?: MFCCOptions,
+  ): Promise<number[][]> {
+    const opts = source instanceof AudioResult ? options : (source as MFCCOptions | undefined);
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use display("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mComputing MFCCs...\x1b[0m");
+
+    const coefficients = await window.electron.analyzeMFCC(audio.audioData, {
+      sampleRate: audio.sampleRate,
+      ...opts,
+    });
+
+    terminal.writeln(
+      `\x1b[32mMFCC complete: ${coefficients.length} frames × ${coefficients[0]?.length ?? 0} coefficients\x1b[0m`,
+    );
+
+    return coefficients;
+  }
+
   async function slice(
     source?: FeatureResult | AudioResult | SliceOptions,
     options?: SliceOptions,
@@ -611,5 +635,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     debug,
     help,
     clear,
+    analyzeMFCC,
   };
 }

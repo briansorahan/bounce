@@ -76,6 +76,17 @@ interface BufNMFOptions {
   seed?: number;
 }
 
+interface MFCCOptions {
+  numCoeffs?: number;
+  numBands?: number;
+  minFreq?: number;
+  maxFreq?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+  sampleRate?: number;
+}
+
 interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;
@@ -119,6 +130,10 @@ interface Window {
       bases: number[][];
       activations: number[][];
     }>;
+    analyzeMFCC: (
+      audioData: Float32Array,
+      options?: MFCCOptions,
+    ) => Promise<number[][]>;
     saveCommand: (command: string) => Promise<void>;
     sendCommand: (command: string, args: string[]) => Promise<void>;
     getCommandHistory: (limit?: number) => Promise<string[]>;
