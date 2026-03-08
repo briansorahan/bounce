@@ -160,4 +160,4 @@ declare function debug(limit?: number): Promise<BounceResult>;
 declare function help(): BounceResult;
 declare function clear(): void;
 declare function analyzeMFCC(sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;
-declare function granularize(source?: string | AudioResult | Promise<AudioResult>, options?: GranularizeOptions): Promise<GrainCollection>;
+declare function granularize(source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions, options?: GranularizeOptions): Promise<GrainCollection>;

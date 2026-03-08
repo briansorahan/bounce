@@ -617,17 +617,25 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function granularize(
-    source?: string | AudioResult | Promise<AudioResult>,
+    source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions,
     options?: GranularizeOptions,
   ): Promise<GrainCollection> {
-    let hash: string;
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const isOptionsArg =
+      resolvedSource !== null &&
+      resolvedSource !== undefined &&
+      typeof resolvedSource === "object" &&
+      !(resolvedSource instanceof AudioResult);
+    const opts = isOptionsArg
+      ? (resolvedSource as GranularizeOptions)
+      : options;
 
-    if (typeof source === "string") {
-      const loaded = await display(source);
+    let hash: string;
+    if (typeof resolvedSource === "string") {
+      const loaded = await display(resolvedSource);
       hash = loaded.hash;
-    } else if (source !== undefined) {
-      const resolved = await resolveAudio(source);
-      hash = resolved.hash;
+    } else if (resolvedSource instanceof AudioResult) {
+      hash = resolvedSource.hash;
     } else {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
@@ -638,7 +646,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
     terminal.writeln("\x1b[36mGranularizing...\x1b[0m");
 
-    const result = await window.electron.granularizeSample(hash, options);
+    const result = await window.electron.granularizeSample(hash, opts);
 
     const storedCount = result.grainHashes.filter((h: string | null) => h !== null).length;
     const totalCount = result.grainHashes.length;
