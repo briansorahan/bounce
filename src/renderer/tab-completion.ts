@@ -11,9 +11,15 @@ export class TabCompletion {
   private ghostLines: number = 0; // number of extra lines rendered below prompt
   private lastBuffer: string = "";
   private lastCursorPosition: number = 0;
+  private methodObject: string | null = null;
+  private api: Record<string, unknown> = {};
 
   constructor() {
     this.candidates = [...BOUNCE_GLOBALS].sort();
+  }
+
+  setApi(api: Record<string, unknown>): void {
+    this.api = api;
   }
 
   get matchCount(): number {
@@ -24,6 +30,7 @@ export class TabCompletion {
     this.lastBuffer = buffer;
     this.lastCursorPosition = cursorPosition;
     this.selectedIndex = 0;
+    this.methodObject = null;
 
     // Only complete when cursor is at the end of the buffer
     if (cursorPosition < buffer.length) {
@@ -31,7 +38,27 @@ export class TabCompletion {
       return;
     }
 
-    const prefix = this.extractPrefix(buffer.slice(0, cursorPosition));
+    const text = buffer.slice(0, cursorPosition);
+
+    // Dot-completion: "identifier.methodPrefix" — introspect the API object
+    const dotMatch = text.match(/([a-zA-Z][a-zA-Z0-9]*)\.([a-zA-Z][a-zA-Z0-9]*)?$/);
+    if (dotMatch) {
+      const objName = dotMatch[1];
+      const methodPrefix = dotMatch[2] ?? "";
+      const obj = this.api[objName];
+      if (obj && typeof obj === "function") {
+        const methods = Object.keys(obj)
+          .filter((k) => k.startsWith(methodPrefix))
+          .sort();
+        if (methods.length > 0) {
+          this.methodObject = objName;
+          this.matches = methods;
+          return;
+        }
+      }
+    }
+
+    const prefix = this.extractPrefix(text);
     if (!prefix) {
       this.matches = [];
       return;
@@ -73,9 +100,7 @@ export class TabCompletion {
       return "";
     }
 
-    const prefix = this.extractPrefix(
-      this.lastBuffer.slice(0, this.lastCursorPosition),
-    );
+    const prefix = this.getActivePrefix();
 
     if (this.matches.length === 1) {
       const suffix = this.matches[0].slice(prefix.length) + "()";
@@ -119,6 +144,16 @@ export class TabCompletion {
     this.ghostLines = 0;
     this.lastBuffer = "";
     this.lastCursorPosition = 0;
+    this.methodObject = null;
+  }
+
+  private getActivePrefix(): string {
+    const text = this.lastBuffer.slice(0, this.lastCursorPosition);
+    if (this.methodObject !== null) {
+      const m = text.match(/\.([a-zA-Z][a-zA-Z0-9]*)$/);
+      return m ? m[1] : "";
+    }
+    return this.extractPrefix(text);
   }
 
   private extractPrefix(text: string): string {
@@ -127,9 +162,7 @@ export class TabCompletion {
   }
 
   private makeAcceptAction(fullName: string): CompletionAction {
-    const prefix = this.extractPrefix(
-      this.lastBuffer.slice(0, this.lastCursorPosition),
-    );
+    const prefix = this.getActivePrefix();
     const base = this.lastBuffer.slice(
       0,
       this.lastCursorPosition - prefix.length,

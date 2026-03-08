@@ -66,6 +66,7 @@ async function main() {
     terminal: terminal as unknown as import("./renderer/terminal.js").BounceTerminal,
     audioManager: audioManager as unknown as import("./renderer/audio-context.js").AudioManager,
     onUpdateWaveform: () => { waveformUpdated = true; },
+    onHideWaveform: () => {},
   }) as Record<string, (...args: unknown[]) => unknown>;
 
   // help() prints to terminal

@@ -142,6 +142,7 @@ declare class GrainCollection {
 
 declare const display: {
   (fileOrHash: string): Promise<AudioResult>;
+  hide(): void;
   help(): BounceResult;
 };
 declare const play: {

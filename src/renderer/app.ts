@@ -51,8 +51,10 @@ export class BounceApp {
       terminal: this.terminal,
       audioManager: this.audioManager,
       onUpdateWaveform: () => this.updateWaveformVisualization(),
+      onHideWaveform: () => this.hideWaveformVisualization(),
     });
     this.replEvaluator = new ReplEvaluator(bounceApi);
+    this.completion.setApi(bounceApi);
 
     this.setupEventHandlers();
     this.loadHistoryFromStorage().catch((err) => {
@@ -96,8 +98,50 @@ export class BounceApp {
       this.terminal.fit();
     });
 
+    this.setupDivider(container);
+
     this.audioManager.setPlaybackUpdateCallback((position) => {
       this.updatePlaybackCursor(position);
+    });
+  }
+
+  private setupDivider(terminalEl: HTMLElement): void {
+    const divider = document.getElementById("divider");
+    if (!divider) return;
+
+    let isDragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    divider.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startY = e.clientY;
+      startHeight = terminalEl.getBoundingClientRect().height;
+      divider.classList.add("dragging");
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      requestAnimationFrame(() => {
+        const delta = e.clientY - startY;
+        const minHeight = 60;
+        const maxHeight = window.innerHeight - 60;
+        const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + delta));
+        terminalEl.style.height = `${newHeight}px`;
+        window.dispatchEvent(new Event("resize"));
+      });
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (!isDragging) return;
+      isDragging = false;
+      divider.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.dispatchEvent(new Event("resize"));
     });
   }
 
@@ -483,6 +527,7 @@ export class BounceApp {
     const container = document.getElementById("waveform-container");
     if (!container) return;
 
+    document.body.classList.add("waveform-visible");
     container.classList.add("active");
 
     if (!this.waveformVisualizer) {
@@ -503,6 +548,13 @@ export class BounceApp {
         slices || undefined,
       );
     }
+  }
+
+  private hideWaveformVisualization(): void {
+    document.body.classList.remove("waveform-visible");
+    const container = document.getElementById("waveform-container");
+    container?.classList.remove("active");
+    this.terminal.fit();
   }
 
   private updatePlaybackCursor(position: number): void {

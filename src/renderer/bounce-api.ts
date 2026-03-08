@@ -13,6 +13,7 @@ export interface BounceApiDeps {
   terminal: BounceTerminal;
   audioManager: AudioManager;
   onUpdateWaveform: () => void;
+  onHideWaveform: () => void;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface BounceApiDeps {
  * Each function closes over the provided deps and the global window.electron IPC bridge.
  */
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
-  const { terminal, audioManager, onUpdateWaveform } = deps;
+  const { terminal, audioManager, onUpdateWaveform, onHideWaveform } = deps;
 
   const display = Object.assign(
     async function display(fileOrHash: string): Promise<AudioResult> {
@@ -66,6 +67,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       );
     },
     {
+      hide: (): void => {
+        onHideWaveform();
+      },
       help: (): BounceResult => new BounceResult([
         "\x1b[1;36mdisplay(fileOrHash)\x1b[0m",
         "",
@@ -77,6 +81,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  \x1b[90mExample:\x1b[0m  const a = await display(\"kick.wav\")",
         "           await display(\"a1b2c3d4\")",
+        "           display.hide()",
       ].join("\n")),
     },
   );
