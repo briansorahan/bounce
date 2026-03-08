@@ -1,10 +1,11 @@
 import {
   OnsetFeature as NativeOnsetFeature,
   OnsetSlice as NativeOnsetSlice,
+  MFCCFeature as NativeMFCCFeature,
 } from "./native";
 
 // Re-export types
-export type { OnsetFeatureOptions, OnsetSliceOptions } from "./native";
+export type { OnsetFeatureOptions, OnsetSliceOptions, MFCCFeatureOptions } from "./native";
 
 // Load the native addon
 const addon = require("../build/Release/flucoma_native.node");
@@ -110,3 +111,37 @@ export class BufNMF {
 }
 
 export default OnsetFeature;
+
+/**
+ * MFCCFeature analyzer wrapper
+ */
+export class MFCCFeature {
+  private _native: NativeMFCCFeature;
+
+  constructor(options?: {
+    numCoeffs?: number;
+    numBands?: number;
+    minFreq?: number;
+    maxFreq?: number;
+    windowSize?: number;
+    fftSize?: number;
+    hopSize?: number;
+    sampleRate?: number;
+  }) {
+    this._native = new addon.MFCCFeature(options || {});
+  }
+
+  /**
+   * Process audio buffer and extract MFCC feature vectors
+   */
+  process(audioBuffer: Float32Array | Float64Array): number[][] {
+    return this._native.process(audioBuffer);
+  }
+
+  /**
+   * Reset analyzer state
+   */
+  reset(): void {
+    this._native.reset();
+  }
+}

@@ -106,3 +106,70 @@ export class OnsetSlice {
    */
   reset(): void;
 }
+
+export interface MFCCFeatureOptions {
+  /**
+   * Number of cepstral coefficients to output per frame.
+   * Must be >= 2 and <= numBands. Default: 13
+   */
+  numCoeffs?: number;
+
+  /**
+   * Number of Mel filter bands. Must be >= 2. Default: 40
+   */
+  numBands?: number;
+
+  /**
+   * Low frequency bound in Hz. Default: 20
+   */
+  minFreq?: number;
+
+  /**
+   * High frequency bound in Hz. Default: 20000
+   */
+  maxFreq?: number;
+
+  /**
+   * Analysis window size in samples. Default: 1024
+   */
+  windowSize?: number;
+
+  /**
+   * FFT size in samples. Must be >= windowSize. Default: 1024
+   */
+  fftSize?: number;
+
+  /**
+   * Hop size between frames in samples. Default: 512
+   */
+  hopSize?: number;
+
+  /**
+   * Sample rate of the input audio in Hz. Default: 44100
+   */
+  sampleRate?: number;
+}
+
+/**
+ * MFCCFeature - Mel-Frequency Cepstral Coefficients extraction
+ * Computes MFCCs from audio samples using an STFT → MelBands → DCT pipeline.
+ */
+export class MFCCFeature {
+  /**
+   * Create a new MFCCFeature analyzer
+   * @param options - Configuration options
+   */
+  constructor(options?: MFCCFeatureOptions);
+
+  /**
+   * Process audio buffer and extract MFCC feature vectors
+   * @param audioBuffer - Float32Array or Float64Array containing audio samples
+   * @returns Array of per-frame coefficient arrays (numFrames × numCoeffs)
+   */
+  process(audioBuffer: Float32Array | Float64Array): number[][];
+
+  /**
+   * Reset the internal state of the analyzer
+   */
+  reset(): void;
+}
