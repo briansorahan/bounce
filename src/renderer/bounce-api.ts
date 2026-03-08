@@ -64,15 +64,20 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
-  async function play(source?: string | AudioResult): Promise<AudioResult> {
+  async function resolveAudio(source: AudioResult | Promise<AudioResult>): Promise<AudioResult> {
+    return source instanceof Promise ? await source : source;
+  }
+
+  async function play(source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
     let displayResult: AudioResult | undefined;
 
     if (typeof source === "string") {
       displayResult = await display(source);
-    } else if (source instanceof AudioResult) {
+    } else if (source !== undefined) {
+      const resolved = await resolveAudio(source);
       // Reload only if this isn't already the current audio
-      if (audioManager.getCurrentAudio()?.hash !== source.hash) {
-        displayResult = await display(source.hash);
+      if (audioManager.getCurrentAudio()?.hash !== resolved.hash) {
+        displayResult = await display(resolved.hash);
       }
     }
 
@@ -99,10 +104,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function analyze(
-    source?: AudioResult | AnalyzeOptions,
+    source?: AudioResult | Promise<AudioResult> | AnalyzeOptions,
     options?: AnalyzeOptions,
   ): Promise<FeatureResult> {
-    const opts = source instanceof AudioResult ? options : (source as AnalyzeOptions | undefined);
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as AnalyzeOptions | undefined);
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -125,10 +131,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function analyzeNmf(
-    source?: AudioResult | NmfOptions,
+    source?: AudioResult | Promise<AudioResult> | NmfOptions,
     options?: NmfOptions,
   ): Promise<FeatureResult> {
-    const opts = source instanceof AudioResult ? options : (source as NmfOptions | undefined);
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as NmfOptions | undefined);
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
@@ -164,31 +171,53 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function analyzeMFCC(
-    source?: AudioResult | MFCCOptions,
+    sampleOrPromise: AudioResult | Promise<AudioResult>,
     options?: MFCCOptions,
-  ): Promise<number[][]> {
-    const opts = source instanceof AudioResult ? options : (source as MFCCOptions | undefined);
-    const audio = audioManager.getCurrentAudio();
-    if (!audio?.hash) {
-      throw new Error('No audio loaded. Use display("path/to/file") first.');
+  ): Promise<FeatureResult> {
+    const sample = await resolveAudio(sampleOrPromise);
+    let audioData: Float32Array;
+    let sampleRate: number;
+
+    const current = audioManager.getCurrentAudio();
+    if (current?.hash === sample.hash) {
+      audioData = current.audioData;
+      sampleRate = current.sampleRate;
+    } else {
+      const loaded = await window.electron.readAudioFile(sample.hash);
+      audioData = loaded.channelData;
+      sampleRate = loaded.sampleRate;
     }
 
     terminal.writeln("\x1b[36mComputing MFCCs...\x1b[0m");
 
-    const coefficients = await window.electron.analyzeMFCC(audio.audioData, {
-      sampleRate: audio.sampleRate,
-      ...opts,
+    const coefficients = await window.electron.analyzeMFCC(audioData, {
+      sampleRate,
+      ...options,
     });
 
-    terminal.writeln(
-      `\x1b[32mMFCC complete: ${coefficients.length} frames × ${coefficients[0]?.length ?? 0} coefficients\x1b[0m`,
+    const numFrames = coefficients.length;
+    const numCoeffs = coefficients[0]?.length ?? 0;
+    const featureId = await window.electron.storeFeature(
+      sample.hash,
+      "mfcc",
+      coefficients.flat(),
+      { ...options, numFrames, numCoeffs },
     );
 
-    return coefficients;
+    terminal.writeln(
+      `\x1b[32mMFCC complete: ${numFrames} frames × ${numCoeffs} coefficients (feature: ${featureId})\x1b[0m`,
+    );
+
+    return new FeatureResult(
+      `\x1b[32mMFCC complete: ${numFrames} frames × ${numCoeffs} coefficients (feature: ${featureId})\x1b[0m`,
+      sample.hash,
+      String(featureId),
+      "mfcc",
+    );
   }
 
   async function slice(
-    source?: FeatureResult | AudioResult | SliceOptions,
+    source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions,
     options?: SliceOptions,
   ): Promise<BounceResult> {
     const audio = audioManager.getCurrentAudio();
@@ -196,11 +225,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
+    const resolvedSource = source instanceof Promise ? await source : source;
     let feature: FeatureData | null;
-    if (source instanceof FeatureResult) {
-      feature = await window.electron.getMostRecentFeature(source.sourceHash, "onset-slice");
+    if (resolvedSource instanceof FeatureResult) {
+      feature = await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice");
     } else {
-      const opts = source instanceof AudioResult ? options : (source as SliceOptions | undefined);
+      const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as SliceOptions | undefined);
       void opts;
       feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
     }
@@ -217,17 +247,18 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function sep(
-    source?: AudioResult | FeatureResult | SepOptions,
+    source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions,
     options?: SepOptions,
   ): Promise<BounceResult> {
     let hash: string;
     let opts: SepOptions | undefined;
 
-    if (source instanceof AudioResult) {
-      hash = source.hash;
+    const resolvedSource = source instanceof Promise ? await source : source;
+    if (resolvedSource instanceof AudioResult) {
+      hash = resolvedSource.hash;
       opts = options;
-    } else if (source instanceof FeatureResult) {
-      hash = source.sourceHash;
+    } else if (resolvedSource instanceof FeatureResult) {
+      hash = resolvedSource.sourceHash;
       opts = options;
     } else {
       const audio = audioManager.getCurrentAudio();
@@ -235,7 +266,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         throw new Error('No audio loaded. Use display("path/to/file") first.');
       }
       hash = audio.hash;
-      opts = source as SepOptions | undefined;
+      opts = resolvedSource as SepOptions | undefined;
     }
 
     const args: string[] = [hash];
@@ -301,19 +332,20 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     return new BounceResult(lines.join("\n"));
   }
 
-  async function playSlice(index = 0, source?: FeatureResult | AudioResult): Promise<AudioResult> {
+  async function playSlice(index = 0, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
-    const lookupHash = source instanceof AudioResult
-      ? source.hash
-      : source instanceof FeatureResult
-        ? source.sourceHash
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const lookupHash = resolvedSource instanceof AudioResult
+      ? resolvedSource.hash
+      : resolvedSource instanceof FeatureResult
+        ? resolvedSource.sourceHash
         : audio.hash;
 
-    const feature = source instanceof FeatureResult
+    const feature = resolvedSource instanceof FeatureResult
       ? await window.electron.getMostRecentFeature(lookupHash, "onset-slice")
       : await window.electron.getMostRecentFeature(lookupHash, "onset-slice");
 
@@ -361,16 +393,17 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
-  async function playComponent(index = 0, source?: FeatureResult | AudioResult): Promise<AudioResult> {
+  async function playComponent(index = 0, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
       throw new Error('No audio loaded. Use display("path/to/file") first.');
     }
 
-    const lookupHash = source instanceof AudioResult
-      ? source.hash
-      : source instanceof FeatureResult
-        ? source.sourceHash
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const lookupHash = resolvedSource instanceof AudioResult
+      ? resolvedSource.hash
+      : resolvedSource instanceof FeatureResult
+        ? resolvedSource.sourceHash
         : audio.hash;
 
     const feature = await window.electron.getMostRecentFeature(lookupHash, "nmf");
