@@ -26,7 +26,7 @@ async function testSingleMatchDisplay() {
 async function testMultiMatchAnalyze() {
   const c = new TabCompletion();
   c.update("an", 2);
-  assert.strictEqual(c.matchCount, 2);
+  assert.strictEqual(c.matchCount, 3);
 }
 
 async function testAllMatchOnSingleChar() {
@@ -104,13 +104,13 @@ async function testHandleEnterMultiMatchReturnsAccept() {
 async function testHandleEnterMultiMatchAfterTabCycle() {
   const c = new TabCompletion();
   c.update("an", 2);
-  c.handleTab(); // advance to index 1 → "analyzeNmf"
+  c.handleTab(); // advance to index 1 → "analyzeMFCC" (alphabetical: analyze, analyzeMFCC, analyzeNmf)
   const action = c.handleEnter();
   assert.ok(action !== null);
   assert.strictEqual(action!.kind, "accept");
   if (action!.kind === "accept") {
-    assert.strictEqual(action.newBuffer, "analyzeNmf()");
-    assert.strictEqual(action.newCursorPosition, 11);
+    assert.strictEqual(action.newBuffer, "analyzeMFCC()");
+    assert.strictEqual(action.newCursorPosition, 12);
   }
 }
 
@@ -199,11 +199,11 @@ async function testEraseGhostTextEmptyWhenNoGhostLines() {
 async function testEraseGhostTextHasCorrectLineCountForMultiMatch() {
   const c = new TabCompletion();
   c.update("an", 2);
-  c.ghostText(); // 2 matches → ghostLines = 2
+  c.ghostText(); // 3 matches → ghostLines = 3
   const erase = c.eraseGhostText();
-  // Should contain two \r\n\x1b[2K sequences
+  // Should contain three \r\n\x1b[2K sequences
   const count = (erase.match(/\r\n\x1b\[2K/g) || []).length;
-  assert.strictEqual(count, 2);
+  assert.strictEqual(count, 3);
   assert.ok(erase.includes("\x1b7"));
   assert.ok(erase.includes("\x1b8"));
 }

@@ -6,6 +6,11 @@ import {
 
 // Re-export types
 export type { OnsetFeatureOptions, OnsetSliceOptions, MFCCFeatureOptions } from "./native";
+export { SpectralShapeFeature } from "./spectral-shape";
+export type { SpectralShapeOptions, SpectralShapeResult } from "./spectral-shape";
+export { Normalization } from "./normalization";
+export { KDTree } from "./kdtree";
+export type { KNNResult } from "./kdtree";
 
 // Load the native addon
 const addon = require("../build/Release/flucoma_native.node");

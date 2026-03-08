@@ -18,6 +18,9 @@ export const BOUNCE_GLOBALS = new Set([
   "debug",
   "help",
   "clear",
+  "analyzeMFCC",
+  "granularize",
+  "corpus",
 ]);
 
 /**

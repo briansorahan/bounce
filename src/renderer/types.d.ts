@@ -179,5 +179,16 @@ interface Window {
       sampleRate: number;
       grainDuration: number;
     }>;
+    corpusBuild: (
+      sourceHash: string,
+      featureHash: string,
+    ) => Promise<{ segmentCount: number; featureDims: number }>;
+    corpusQuery: (
+      segmentIndex: number,
+      k?: number,
+    ) => Promise<Array<{ id: string; index: number; distance: number }>>;
+    corpusResynthesize: (
+      indices: number[],
+    ) => Promise<{ audio: Float32Array; sampleRate: number }>;
   };
 }
