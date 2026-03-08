@@ -2,7 +2,7 @@
 
 **Spec:** specs/filesystem-utilities  
 **Created:** 2026-03-08  
-**Status:** In Progress
+**Status:** Complete
 
 ## Problem Statement
 
@@ -41,11 +41,13 @@ Not directly applicable. The output of filesystem utilities feeds into `display 
 
 ## Terminal UI Considerations
 
-- **`ls [path]`** — list directory contents, highlighting audio files (by extension) distinctly from other files and subdirectories. Should show file names with a visual cue (e.g., `[audio]` tag or color via xterm ANSI codes) for the supported formats: `.wav`, `.mp3`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.opus`.
-- **`cd <path>`** — change the REPL's current working directory. Subsequent relative paths in `display` and other commands should resolve against the cwd.
-- **`pwd`** — print the current working directory.
-- **`find <pattern> [path]`** — recursively search for audio files matching a glob pattern (e.g., `find *.wav`, `find kick ~/samples`). Limits results to audio files only for simplicity.
-- Output should be paginated or truncated for very large directories (e.g., cap at 200 entries with a "... N more" message).
+- **`fs.ls(path?)`** — list directory contents, hiding dotfiles. Highlights audio files (supported extensions) distinctly from subdirectories and other files using ANSI color codes (xterm supports these). Shows `[dir]` prefix for subdirectories.
+- **`fs.la(path?)`** — same as `ls` but includes dotfiles and hidden directories.
+- **`fs.cd(path)`** — change cwd; prints the new absolute path on success. Updates the prompt prefix if feasible.
+- **`fs.pwd()`** — prints the absolute cwd.
+- **`fs.glob(pattern)`** — returns a `string[]` of matched paths (printed to terminal and returned for use in further REPL expressions). Uses full glob syntax (`**/*.wav`, `*.{wav,flac}`).
+- **`fs.walk(path, cb)`** — walks silently; the callback controls terminal output. If the callback throws, walk stops and prints the error.
+- Output should be truncated for very large directories (cap `ls`/`la` at 200 entries with `... N more items` message).
 - The terminal uses xterm.js; ANSI escape codes for color are supported.
 
 ## Cross-Platform Considerations
@@ -58,11 +60,20 @@ Not directly applicable. The output of filesystem utilities feeds into `display 
 
 ## Open Questions
 
-1. Should `cd` maintain a persistent cwd across app restarts, or reset to `os.homedir()` on each launch?
-2. Should relative paths in `display <path>` be resolved against the REPL cwd, or always require absolute paths?
-3. Should `find` support full glob syntax (e.g., `**/*.wav`) or just simple wildcards (`*.wav`)?
-4. Should `ls` show hidden files (dotfiles) by default, or only with a flag like `ls -a`?
-5. Should there be a `load` or `loadDir` command that calls `display` on every audio file in a directory (batch loading)?
+~~1. Should `cd` maintain a persistent cwd across app restarts, or reset to `os.homedir()` on each launch?~~
+**Decision:** cwd persists across restarts (stored in SQLite or Electron's `app.getPath("userData")`).
+
+~~2. Should relative paths in `display <path>` be resolved against the REPL cwd, or always require absolute paths?~~
+**Decision:** Relative paths in all commands (including `display`) resolve against the REPL cwd.
+
+~~3. Should `find` support full glob syntax (e.g., `**/*.wav`) or just simple wildcards (`*.wav`)?~~
+**Decision:** Replaced by `fs.glob(pattern)` which supports full glob syntax. No `find` command.
+
+~~4. Should `ls` show hidden files (dotfiles) by default, or only with a flag like `ls -a`?~~
+**Decision:** `fs.ls()` hides dotfiles by default. `fs.la()` shows all entries including dotfiles.
+
+~~5. Should there be a `load` or `loadDir` command that calls `display` on every audio file in a directory (batch loading)?~~
+**Decision:** No `loadDir`. Instead `fs.walk(path, callback)` lets users write their own recursive loaders in the REPL.
 
 ## Research Findings
 
@@ -77,21 +88,46 @@ Not directly applicable. The output of filesystem utilities feeds into `display 
 - `src/electron/preload.ts`: Exposes `window.electron` via `contextBridge`. New IPC channels need entries here.
 - `src/electron/main.ts`: `ipcMain.handle(...)` registers handlers. New filesystem IPC handlers go here.
 
-### IPC Pattern
-New filesystem commands will follow the established IPC pattern:
-1. `ipcMain.handle("fs-ls", ...)` in `main.ts`
-2. Exposed as `window.electron.fsLs(path)` in `preload.ts`
-3. Wrapped as `ls(path)` global in `bounce-api.ts`
-4. Added to `BOUNCE_GLOBALS` in `repl-evaluator.ts`
+### API Design (Resolved)
+
+The filesystem utilities are exposed as a single `fs` global object (not individual top-level globals). This keeps the global namespace clean and groups related functionality:
+
+```typescript
+fs.ls(path?: string): Promise<void>        // list directory, hide dotfiles
+fs.la(path?: string): Promise<void>        // list directory, show all including dotfiles
+fs.cd(path: string): Promise<void>         // change cwd, persists across restarts
+fs.pwd(): Promise<void>                    // print cwd
+fs.glob(pattern: string): Promise<string[]> // full glob, returns matched paths
+fs.walk(path: string, cb: (filePath: string) => Promise<void>): Promise<void>
+// recursively walks directory, calling cb for each file
+```
+
+**`fs.walk` usage example** — how a user would build a corpus from a directory:
+```typescript
+await fs.walk("~/samples/kicks", async (file) => {
+  await display(file);
+});
+// then: await corpus.build(...)
+```
+
+### IPC Pattern (Revised)
+New filesystem commands expose `fs` as a single object rather than individual IPC channels:
+1. `ipcMain.handle("fs-ls", ...)`, `ipcMain.handle("fs-cd", ...)` etc. in `main.ts`
+2. Exposed as `window.electron.fsLs(path)`, `window.electron.fsCd(path)` etc. in `preload.ts`
+3. Assembled into `fs` object in `bounce-api.ts`
+4. `"fs"` added to `BOUNCE_GLOBALS` in `repl-evaluator.ts`
 
 ### Supported Audio Extensions
 `.wav`, `.mp3`, `.ogg`, `.flac`, `.m4a`, `.aac`, `.opus` — defined in both `main.ts` and `bounce-api.ts`. Should be extracted to a shared constant to avoid duplication.
 
 ## Next Steps
 
-- Answer the open questions (esp. #1, #2, #5) before planning
-- Design the IPC API surface for each new command
-- Decide on the exact terminal output format for `ls` and `find`
-- Determine if `~` expansion and relative path resolution in `display` are in scope
-- Plan the `BOUNCE_GLOBALS` and `BounceApi` additions
+- ~~Answer the open questions (esp. #1, #2, #5) before planning~~ ✓ Resolved above
+- Design the IPC API surface for each new command → done above
+- Decide on the exact terminal output format for `ls`/`la` (columns? icons? audio file highlighting?)
+- Plan cwd persistence mechanism (SQLite `settings` table vs. Electron `store`)
+- Plan `~` expansion in the main process
+- Plan the `BOUNCE_GLOBALS` addition (`"fs"`) and `BounceApi` interface changes
+- Plan `fs.walk` callback execution model in the REPL (async iteration, error handling)
 - Consider a shared `AUDIO_EXTENSIONS` constant as a housekeeping improvement
+- Mark RESEARCH as Complete and move to PLAN phase
