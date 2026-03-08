@@ -183,15 +183,7 @@ interface Window {
     transpileTypeScript: (source: string) => Promise<string>;
     granularizeSample: (
       sourceHash: string,
-      options?: {
-        grainSize?: number;
-        hopSize?: number;
-        jitter?: number;
-        startTime?: number;
-        endTime?: number;
-        normalize?: boolean;
-        silenceThreshold?: number;
-      },
+      options?: GranularizeOptions,
     ) => Promise<{
       grainHashes: Array<string | null>;
       featureHash: string;

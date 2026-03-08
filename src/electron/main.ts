@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
-import { DatabaseManager } from "./database";
+import { DatabaseManager, GranularizeOptions } from "./database";
 import { debugLog, setDatabaseManager } from "./logger";
 
 let dbManager: DatabaseManager | undefined = undefined;
@@ -425,19 +425,7 @@ ipcMain.handle("get-sample-by-hash", async (_event, hash: string) => {
 
 ipcMain.handle(
   "granularize-sample",
-  async (
-    _event,
-    sourceHash: string,
-    options?: {
-      grainSize?: number;
-      hopSize?: number;
-      jitter?: number;
-      startTime?: number;
-      endTime?: number;
-      normalize?: boolean;
-      silenceThreshold?: number;
-    },
-  ) => {
+  async (_event, sourceHash: string, options?: GranularizeOptions) => {
     try {
       if (!dbManager) {
         throw new Error("Database not initialized");

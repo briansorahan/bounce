@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { GranularizeOptions } from "./database";
 
 interface OnsetSliceOptions {
   threshold?: number;
@@ -31,16 +32,6 @@ interface MFCCOptions {
 interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;
-}
-
-interface GranularizeOptions {
-  grainSize?: number;
-  hopSize?: number;
-  jitter?: number;
-  startTime?: number;
-  endTime?: number;
-  normalize?: boolean;
-  silenceThreshold?: number;
 }
 
 interface NMFVisualizationData {
