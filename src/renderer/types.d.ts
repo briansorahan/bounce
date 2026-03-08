@@ -76,17 +76,6 @@ interface BufNMFOptions {
   seed?: number;
 }
 
-interface MFCCOptions {
-  numCoeffs?: number;
-  numBands?: number;
-  minFreq?: number;
-  maxFreq?: number;
-  windowSize?: number;
-  fftSize?: number;
-  hopSize?: number;
-  sampleRate?: number;
-}
-
 interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;
@@ -181,5 +170,14 @@ interface Window {
     nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
     transpileTypeScript: (source: string) => Promise<string>;
+    granularizeSample: (
+      sourceHash: string,
+      options?: GranularizeOptions,
+    ) => Promise<{
+      grainHashes: Array<string | null>;
+      featureHash: string;
+      sampleRate: number;
+      grainDuration: number;
+    }>;
   };
 }

@@ -4,7 +4,12 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
-import { DatabaseManager } from "./database";
+import { DatabaseManager, FeatureOptions, GranularizeOptions } from "./database";
+import {
+  BufNMFOptions,
+  MFCCOptions,
+  OnsetSliceOptions,
+} from "./ipc-types";
 import { debugLog, setDatabaseManager } from "./logger";
 
 let dbManager: DatabaseManager | undefined = undefined;
@@ -117,28 +122,6 @@ ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
   }
 });
 
-interface OnsetSliceOptions {
-  threshold?: number;
-  minSliceLength?: number;
-  filterSize?: number;
-  frameDelta?: number;
-  metric?: number;
-}
-
-interface BufNMFOptions {
-  components?: number;
-  iterations?: number;
-  fftSize?: number;
-  hopSize?: number;
-  windowSize?: number;
-  seed?: number;
-}
-
-interface FeatureOptions {
-  threshold?: number;
-  [key: string]: unknown;
-}
-
 ipcMain.handle(
   "analyze-onset-slice",
   async (_event, audioDataArray: number[], options?: OnsetSliceOptions) => {
@@ -179,17 +162,6 @@ ipcMain.handle(
     }
   },
 );
-
-interface MFCCOptions {
-  numCoeffs?: number;
-  numBands?: number;
-  minFreq?: number;
-  maxFreq?: number;
-  windowSize?: number;
-  fftSize?: number;
-  hopSize?: number;
-  sampleRate?: number;
-}
 
 ipcMain.handle(
   "analyze-mfcc",
@@ -422,6 +394,22 @@ ipcMain.handle("get-sample-by-hash", async (_event, hash: string) => {
     return null;
   }
 });
+
+ipcMain.handle(
+  "granularize-sample",
+  async (_event, sourceHash: string, options?: GranularizeOptions) => {
+    try {
+      if (!dbManager) {
+        throw new Error("Database not initialized");
+      }
+      return dbManager.granularize(sourceHash, options ?? {});
+    } catch (error) {
+      throw new Error(
+        `Failed to granularize sample: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+);
 
 ipcMain.handle("analyze-nmf", async (_event, args: string[]) => {
   try {

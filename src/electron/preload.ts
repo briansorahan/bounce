@@ -1,47 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
-
-interface OnsetSliceOptions {
-  threshold?: number;
-  minSliceLength?: number;
-  filterSize?: number;
-  frameDelta?: number;
-  metric?: number;
-}
-
-interface BufNMFOptions {
-  components?: number;
-  iterations?: number;
-  fftSize?: number;
-  hopSize?: number;
-  windowSize?: number;
-  seed?: number;
-}
-
-interface MFCCOptions {
-  numCoeffs?: number;
-  numBands?: number;
-  minFreq?: number;
-  maxFreq?: number;
-  windowSize?: number;
-  fftSize?: number;
-  hopSize?: number;
-  sampleRate?: number;
-}
-
-interface FeatureOptions {
-  threshold?: number;
-  [key: string]: unknown;
-}
-
-interface NMFVisualizationData {
-  sampleHash: string;
-  nmfData: {
-    components: number;
-    basis: number[][];
-    activations: number[][];
-  };
-  featureHash: string;
-}
+import type { FeatureOptions, GranularizeOptions } from "./database";
+import type {
+  BufNMFOptions,
+  MFCCOptions,
+  NMFVisualizationData,
+  OnsetSliceOptions,
+} from "./ipc-types";
 
 contextBridge.exposeInMainWorld("electron", {
   version: process.versions.electron,
@@ -112,6 +76,8 @@ contextBridge.exposeInMainWorld("electron", {
       callback(data),
     );
   },
+  granularizeSample: (sourceHash: string, options?: GranularizeOptions) =>
+    ipcRenderer.invoke("granularize-sample", sourceHash, options),
   transpileTypeScript: (source: string): Promise<string> =>
     ipcRenderer.invoke("transpile-typescript", source),
 });
