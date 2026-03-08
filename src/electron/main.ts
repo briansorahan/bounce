@@ -4,7 +4,12 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
-import { DatabaseManager, GranularizeOptions } from "./database";
+import { DatabaseManager, FeatureOptions, GranularizeOptions } from "./database";
+import {
+  BufNMFOptions,
+  MFCCOptions,
+  OnsetSliceOptions,
+} from "./ipc-types";
 import { debugLog, setDatabaseManager } from "./logger";
 
 let dbManager: DatabaseManager | undefined = undefined;
@@ -117,28 +122,6 @@ ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
   }
 });
 
-interface OnsetSliceOptions {
-  threshold?: number;
-  minSliceLength?: number;
-  filterSize?: number;
-  frameDelta?: number;
-  metric?: number;
-}
-
-interface BufNMFOptions {
-  components?: number;
-  iterations?: number;
-  fftSize?: number;
-  hopSize?: number;
-  windowSize?: number;
-  seed?: number;
-}
-
-interface FeatureOptions {
-  threshold?: number;
-  [key: string]: unknown;
-}
-
 ipcMain.handle(
   "analyze-onset-slice",
   async (_event, audioDataArray: number[], options?: OnsetSliceOptions) => {
@@ -179,17 +162,6 @@ ipcMain.handle(
     }
   },
 );
-
-interface MFCCOptions {
-  numCoeffs?: number;
-  numBands?: number;
-  minFreq?: number;
-  maxFreq?: number;
-  windowSize?: number;
-  fftSize?: number;
-  hopSize?: number;
-  sampleRate?: number;
-}
 
 ipcMain.handle(
   "analyze-mfcc",

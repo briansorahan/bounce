@@ -76,17 +76,6 @@ interface BufNMFOptions {
   seed?: number;
 }
 
-interface MFCCOptions {
-  numCoeffs?: number;
-  numBands?: number;
-  minFreq?: number;
-  maxFreq?: number;
-  windowSize?: number;
-  fftSize?: number;
-  hopSize?: number;
-  sampleRate?: number;
-}
-
 interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;

@@ -4,6 +4,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 
 export interface DebugLogEntry {
+  id: number;
   level: string;
   message: string;
   data: string | null;
