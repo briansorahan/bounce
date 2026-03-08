@@ -140,24 +140,94 @@ declare class GrainCollection {
   toString(): string;
 }
 
-declare function display(fileOrHash: string): Promise<AudioResult>;
-declare function play(source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-declare function stop(): BounceResult;
-declare function analyze(source?: AudioResult | Promise<AudioResult> | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
-declare function analyzeNmf(source?: AudioResult | Promise<AudioResult> | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
-declare function slice(source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
-declare function sep(source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
-declare function nx(options?: NxOptions): Promise<BounceResult>;
-declare function list(): Promise<BounceResult>;
-declare function playSlice(index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-declare function playComponent(index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-declare function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult>;
-declare function visualizeNx(options?: VisualizeNxOptions): Promise<BounceResult>;
-declare function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult>;
-declare function nmf(options?: NmfVisOptions): Promise<BounceResult>;
-declare function clearDebug(): Promise<BounceResult>;
-declare function debug(limit?: number): Promise<BounceResult>;
-declare function help(): BounceResult;
-declare function clear(): void;
-declare function analyzeMFCC(sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;
-declare function granularize(source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions, options?: GranularizeOptions): Promise<GrainCollection>;
+declare const display: {
+  (fileOrHash: string): Promise<AudioResult>;
+  hide(): void;
+  help(): BounceResult;
+};
+declare const play: {
+  (source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
+  help(): BounceResult;
+};
+declare const stop: {
+  (): BounceResult;
+  help(): BounceResult;
+};
+declare const analyze: {
+  (source?: AudioResult | Promise<AudioResult> | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
+  help(): BounceResult;
+};
+declare const analyzeNmf: {
+  (source?: AudioResult | Promise<AudioResult> | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
+  help(): BounceResult;
+};
+declare const slice: {
+  (source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const sep: {
+  (source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const nx: {
+  (options?: NxOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const list: {
+  (): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const playSlice: {
+  (index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
+  help(): BounceResult;
+};
+declare const playComponent: {
+  (index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
+  help(): BounceResult;
+};
+declare const visualizeNmf: {
+  (options?: VisualizeNmfOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const visualizeNx: {
+  (options?: VisualizeNxOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const onsetSlice: {
+  (options?: OnsetSliceVisOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const nmf: {
+  (options?: NmfVisOptions): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const clearDebug: {
+  (): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const debug: {
+  (limit?: number): Promise<BounceResult>;
+  help(): BounceResult;
+};
+declare const help: {
+  (): BounceResult;
+  help(): BounceResult;
+};
+declare const clear: {
+  (): void;
+  help(): BounceResult;
+};
+declare const analyzeMFCC: {
+  (sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;
+  help(): BounceResult;
+};
+declare const granularize: {
+  (source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions, options?: GranularizeOptions): Promise<GrainCollection>;
+  help(): BounceResult;
+};
+declare const corpus: {
+  help(): BounceResult;
+  build(source?: string | AudioResult | Promise<AudioResult>, featureHashOverride?: string): Promise<BounceResult>;
+  query(segmentIndex: number, k?: number): Promise<BounceResult>;
+  resynthesize(queryIndices: number[]): Promise<BounceResult>;
+};

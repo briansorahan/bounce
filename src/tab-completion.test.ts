@@ -250,8 +250,68 @@ async function testAcceptWithPriorBufferContent() {
 }
 
 // ---------------------------------------------------------------------------
-// Runner
+// Dot-completion (method completions via setApi)
 // ---------------------------------------------------------------------------
+
+async function testDotCompletionAllMethodsOnDot() {
+  const c = new TabCompletion();
+  const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
+  c.setApi({ display: fakeDisplay });
+  c.update("display.", 8);
+  assert.strictEqual(c.matchCount, 2, "should match both methods");
+}
+
+async function testDotCompletionPartialMethod() {
+  const c = new TabCompletion();
+  const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
+  c.setApi({ display: fakeDisplay });
+  c.update("display.hi", 10);
+  assert.strictEqual(c.matchCount, 1, "should match only 'hide'");
+}
+
+async function testDotCompletionAcceptsMethod() {
+  const c = new TabCompletion();
+  const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
+  c.setApi({ display: fakeDisplay });
+  c.update("display.hi", 10);
+  const action = c.handleTab();
+  assert.ok(action !== null && action.kind === "accept");
+  if (action!.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "display.hide()");
+    assert.strictEqual(action.newCursorPosition, 13); // "display.hide(" length
+  }
+}
+
+async function testDotCompletionAcceptsMethodWithNoPrefixAfterDot() {
+  const c = new TabCompletion();
+  const fakeDisplay = Object.assign(() => {}, { hide: () => {} });
+  c.setApi({ display: fakeDisplay });
+  c.update("display.", 8);
+  const action = c.handleTab();
+  assert.ok(action !== null && action.kind === "accept");
+  if (action!.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "display.hide()");
+    assert.strictEqual(action.newCursorPosition, 13);
+  }
+}
+
+async function testDotCompletionNoMatchForUnknownObject() {
+  const c = new TabCompletion();
+  c.setApi({});
+  c.update("foo.", 4);
+  assert.strictEqual(c.matchCount, 0);
+}
+
+async function testDotCompletionGhostTextShowsSuffix() {
+  const c = new TabCompletion();
+  const fakeDisplay = Object.assign(() => {}, { hide: () => {} });
+  c.setApi({ display: fakeDisplay });
+  c.update("display.hi", 10);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("de()"), "ghost should show 'de()' suffix for 'hide'");
+}
+
+
 
 const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
@@ -278,6 +338,12 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["eraseGhostText resets ghostLines", testEraseGhostTextResetsGhostLines],
   ["reset clears all state", testResetClearsAllState],
   ["accept with prior buffer content", testAcceptWithPriorBufferContent],
+  ["dot-completion: all methods on bare dot", testDotCompletionAllMethodsOnDot],
+  ["dot-completion: partial method prefix", testDotCompletionPartialMethod],
+  ["dot-completion: accept inserts method call", testDotCompletionAcceptsMethod],
+  ["dot-completion: accept with no prefix after dot", testDotCompletionAcceptsMethodWithNoPrefixAfterDot],
+  ["dot-completion: no match for unknown object", testDotCompletionNoMatchForUnknownObject],
+  ["dot-completion: ghost text shows suffix", testDotCompletionGhostTextShowsSuffix],
 ];
 
 async function main() {
