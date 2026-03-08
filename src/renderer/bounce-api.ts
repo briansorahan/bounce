@@ -992,6 +992,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[33mvisualizeNx(options?)\x1b[0m            Overlay NX cross-synthesis on waveform",
         "  \x1b[33monsetSlice(options?)\x1b[0m             Draw onset slice markers on waveform",
         "  \x1b[33mnmf(options?)\x1b[0m                    Show NMF bases/activations panel",
+        "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
         "",
@@ -1000,7 +1001,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  sep(play(\"path\")) → playComponent(0)                     \x1b[90m# NMF separation\x1b[0m",
         "  corpus.build(slice(analyze())) → corpus.query(0, 5)      \x1b[90m# corpus search\x1b[0m",
         "",
-        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mfn.help()\x1b[0m  \x1b[90me.g. analyze.help(), corpus.help()\x1b[0m",
+        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mfn.help()\x1b[0m  \x1b[90me.g. analyze.help(), corpus.help(), fs.help()\x1b[0m",
       ].join("\n"));
     },
     {
@@ -1181,59 +1182,180 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const fs = {
     FileType,
 
-    async ls(dirPath?: string): Promise<BounceResult> {
-      const { entries, truncated, total } = await window.electron.fsLs(dirPath);
-      const msg = formatLsEntries(entries, truncated, total);
-      terminal.writeln(msg);
-      return new BounceResult(msg);
+    help(): BounceResult {
+      return new BounceResult([
+        "\x1b[1;36mfs\x1b[0m — Filesystem utilities",
+        "",
+        "  fs.\x1b[33mls\x1b[0m(path?)              List directory contents (dotfiles hidden)",
+        "  fs.\x1b[33mla\x1b[0m(path?)              List directory contents including dotfiles",
+        "  fs.\x1b[33mcd\x1b[0m(path)               Change working directory (persists across restarts)",
+        "  fs.\x1b[33mpwd\x1b[0m()                  Print current working directory",
+        "  fs.\x1b[33mglob\x1b[0m(pattern)          Find files matching a glob pattern (e.g. **/*.wav)",
+        "  fs.\x1b[33mwalk\x1b[0m(path, handler)    Recursively walk a directory; handler fires per entry",
+        "",
+        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mfs.ls.help()\x1b[0m, \x1b[33mfs.walk.help()\x1b[0m, etc.",
+      ].join("\n"));
     },
 
-    async la(dirPath?: string): Promise<BounceResult> {
-      const { entries, truncated, total } = await window.electron.fsLa(dirPath);
-      const msg = formatLsEntries(entries, truncated, total);
-      terminal.writeln(msg);
-      return new BounceResult(msg);
-    },
+    ls: Object.assign(
+      async function ls(dirPath?: string): Promise<BounceResult> {
+        const { entries, truncated, total } = await window.electron.fsLs(dirPath);
+        const msg = formatLsEntries(entries, truncated, total);
+        terminal.writeln(msg);
+        return new BounceResult(msg);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.ls(path?)\x1b[0m",
+          "",
+          "  List the contents of a directory. Dotfiles and hidden entries are",
+          "  omitted. Use fs.la() to show everything.",
+          "",
+          "  Directories are shown in \x1b[34mblue\x1b[0m; audio files in \x1b[32mgreen\x1b[0m.",
+          "  Output is capped at 200 entries.",
+          "",
+          "  \x1b[33mpath\x1b[0m  Optional path (absolute, relative, or ~). Defaults to cwd.",
+          "",
+          "  \x1b[90mExamples:\x1b[0m  await fs.ls()",
+          "            await fs.ls('~/samples')",
+          "            await fs.ls('../other')",
+        ].join("\n")),
+      },
+    ),
 
-    async cd(dirPath: string): Promise<BounceResult> {
-      const newCwd = await window.electron.fsCd(dirPath);
-      const msg = `\x1b[32m${newCwd}\x1b[0m`;
-      terminal.writeln(msg);
-      return new BounceResult(newCwd);
-    },
+    la: Object.assign(
+      async function la(dirPath?: string): Promise<BounceResult> {
+        const { entries, truncated, total } = await window.electron.fsLa(dirPath);
+        const msg = formatLsEntries(entries, truncated, total);
+        terminal.writeln(msg);
+        return new BounceResult(msg);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.la(path?)\x1b[0m",
+          "",
+          "  Like fs.ls(), but includes dotfiles and hidden entries.",
+          "",
+          "  \x1b[33mpath\x1b[0m  Optional path (absolute, relative, or ~). Defaults to cwd.",
+          "",
+          "  \x1b[90mExamples:\x1b[0m  await fs.la()",
+          "            await fs.la('~/samples')",
+        ].join("\n")),
+      },
+    ),
 
-    async pwd(): Promise<BounceResult> {
-      const cwd = await window.electron.fsPwd();
-      terminal.writeln(cwd);
-      return new BounceResult(cwd);
-    },
+    cd: Object.assign(
+      async function cd(dirPath: string): Promise<BounceResult> {
+        const newCwd = await window.electron.fsCd(dirPath);
+        const msg = `\x1b[32m${newCwd}\x1b[0m`;
+        terminal.writeln(msg);
+        return new BounceResult(newCwd);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.cd(path)\x1b[0m",
+          "",
+          "  Change the REPL's current working directory. The new cwd is persisted",
+          "  to disk and restored on the next app launch. Supports ~ expansion and",
+          "  relative paths.",
+          "",
+          "  \x1b[33mpath\x1b[0m  Target directory (absolute, relative, or starting with ~).",
+          "",
+          "  \x1b[90mExamples:\x1b[0m  await fs.cd('~/samples')",
+          "            await fs.cd('../other')",
+          "            await fs.cd('/Volumes/SampleDrive')",
+        ].join("\n")),
+      },
+    ),
 
-    async glob(pattern: string): Promise<string[]> {
-      const paths = await window.electron.fsGlob(pattern);
-      paths.forEach((p: string) => terminal.writeln(p));
-      return paths;
-    },
+    pwd: Object.assign(
+      async function pwd(): Promise<BounceResult> {
+        const cwd = await window.electron.fsPwd();
+        terminal.writeln(cwd);
+        return new BounceResult(cwd);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.pwd()\x1b[0m",
+          "",
+          "  Print the current working directory. Relative paths in display()",
+          "  and other commands resolve against this path.",
+          "",
+          "  \x1b[90mExample:\x1b[0m  await fs.pwd()",
+        ].join("\n")),
+      },
+    ),
 
-    async walk(
-      dirPath: string,
-      handler: WalkCatchAll | WalkHandlers,
-    ): Promise<void> {
-      const { entries, truncated } = await window.electron.fsWalk(dirPath);
-      const typedEntries = entries as WalkEntry[];
-      if (truncated) {
-        terminal.writeln(
-          `\x1b[33mWarning: walk truncated at 10,000 entries\x1b[0m`,
-        );
-      }
-      for (const entry of typedEntries) {
-        if (typeof handler === "function") {
-          await handler(entry.path, entry.type);
-        } else {
-          const cb = handler[entry.type];
-          if (cb) await cb(entry.path);
+    glob: Object.assign(
+      async function glob(pattern: string): Promise<string[]> {
+        const paths = await window.electron.fsGlob(pattern);
+        paths.forEach((p: string) => terminal.writeln(p));
+        return paths;
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.glob(pattern)\x1b[0m",
+          "",
+          "  Find files matching a glob pattern relative to the current working",
+          "  directory. Supports full glob syntax including ** for recursive search.",
+          "  Returns a sorted string[] of absolute paths and prints each match.",
+          "",
+          "  \x1b[33mpattern\x1b[0m  Glob pattern string.",
+          "",
+          "  \x1b[90mExamples:\x1b[0m  await fs.glob('*.wav')",
+          "            await fs.glob('**/*.{wav,flac}')",
+          "            await fs.glob('drums/**/*.wav')",
+        ].join("\n")),
+      },
+    ),
+
+    walk: Object.assign(
+      async function walk(
+        dirPath: string,
+        handler: WalkCatchAll | WalkHandlers,
+      ): Promise<void> {
+        const { entries, truncated } = await window.electron.fsWalk(dirPath);
+        const typedEntries = entries as WalkEntry[];
+        if (truncated) {
+          terminal.writeln(
+            `\x1b[33mWarning: walk truncated at 10,000 entries\x1b[0m`,
+          );
         }
-      }
-    },
+        for (const entry of typedEntries) {
+          if (typeof handler === "function") {
+            await handler(entry.path, entry.type);
+          } else {
+            const cb = handler[entry.type];
+            if (cb) await cb(entry.path);
+          }
+        }
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mfs.walk(path, handler)\x1b[0m",
+          "",
+          "  Recursively walk a directory, calling handler for each entry.",
+          "  Walk is capped at 10,000 entries.",
+          "",
+          "  \x1b[33mpath\x1b[0m     Directory to walk (absolute, relative, or ~).",
+          "  \x1b[33mhandler\x1b[0m  Either a catch-all callback or a handler-map keyed by fs.FileType.",
+          "",
+          "  Catch-all — receives every entry:",
+          "    \x1b[90mawait fs.walk('~/samples', async (filePath, type) => {\x1b[0m",
+          "    \x1b[90m  if (type === fs.FileType.File) await display(filePath);\x1b[0m",
+          "    \x1b[90m});\x1b[0m",
+          "",
+          "  Handler map — only listed types fire, rest are silently skipped:",
+          "    \x1b[90mawait fs.walk('~/samples', {\x1b[0m",
+          "    \x1b[90m  [fs.FileType.File]: async (p) => { await display(p); },\x1b[0m",
+          "    \x1b[90m  [fs.FileType.Directory]: async (p) => { console.log(p); },\x1b[0m",
+          "    \x1b[90m});\x1b[0m",
+          "",
+          "  fs.FileType values: File · Directory · Symlink · BlockDevice",
+          "                      CharDevice · FIFO · Socket · Unknown",
+        ].join("\n")),
+      },
+    ),
   };
 
   return {

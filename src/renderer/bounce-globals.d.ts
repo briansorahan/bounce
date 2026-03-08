@@ -257,12 +257,31 @@ interface FsApi {
     readonly Socket: "socket";
     readonly Unknown: "unknown";
   };
-  ls(dirPath?: string): Promise<BounceResult>;
-  la(dirPath?: string): Promise<BounceResult>;
-  cd(dirPath: string): Promise<BounceResult>;
-  pwd(): Promise<BounceResult>;
-  glob(pattern: string): Promise<string[]>;
-  walk(dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void>;
+  help(): BounceResult;
+  ls: {
+    (dirPath?: string): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  la: {
+    (dirPath?: string): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  cd: {
+    (dirPath: string): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  pwd: {
+    (): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  glob: {
+    (pattern: string): Promise<string[]>;
+    help(): BounceResult;
+  };
+  walk: {
+    (dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void>;
+    help(): BounceResult;
+  };
 }
 
 declare const fs: FsApi;
