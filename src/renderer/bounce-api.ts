@@ -5,8 +5,9 @@ import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
 import { BounceResult, AudioResult, FeatureResult } from "./bounce-result.js";
+import { GrainCollection } from "./grain-collection.js";
 
-export { BounceResult, AudioResult, FeatureResult };
+export { BounceResult, AudioResult, FeatureResult, GrainCollection };
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -615,6 +616,54 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     return new BounceResult(lines.join("\n"));
   }
 
+  async function granularize(
+    source?: string | AudioResult | Promise<AudioResult>,
+    options?: GranularizeOptions,
+  ): Promise<GrainCollection> {
+    let hash: string;
+
+    if (typeof source === "string") {
+      const loaded = await display(source);
+      hash = loaded.hash;
+    } else if (source !== undefined) {
+      const resolved = await resolveAudio(source);
+      hash = resolved.hash;
+    } else {
+      const audio = audioManager.getCurrentAudio();
+      if (!audio?.hash) {
+        throw new Error('No audio loaded. Use display("path/to/file") first.');
+      }
+      hash = audio.hash;
+    }
+
+    terminal.writeln("\x1b[36mGranularizing...\x1b[0m");
+
+    const result = await window.electron.granularizeSample(hash, options);
+
+    const storedCount = result.grainHashes.filter((h: string | null) => h !== null).length;
+    const totalCount = result.grainHashes.length;
+    const silentCount = totalCount - storedCount;
+    const silentNote = silentCount > 0 ? `, ${silentCount} silent` : "";
+    terminal.writeln(
+      `\x1b[32mGranularized ${hash.substring(0, 8)} → ${storedCount} grains${silentNote}\x1b[0m`,
+    );
+
+    const grains: Array<AudioResult | null> = result.grainHashes.map(
+      (grainHash: string | null) => {
+        if (grainHash === null) return null;
+        return new AudioResult(
+          `\x1b[32mGrain: ${grainHash.substring(0, 8)}\x1b[0m`,
+          grainHash,
+          undefined,
+          result.sampleRate,
+          result.grainDuration,
+        );
+      },
+    );
+
+    return new GrainCollection(grains, options?.normalize ?? false, hash);
+  }
+
   function help(): BounceResult {
     return new BounceResult([
       "\x1b[1;36mBounce REPL — Available Functions:\x1b[0m",
@@ -634,6 +683,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       '  \x1b[33mvisualizeNx(options?)\x1b[0m            Show NX cross-synthesis overlay',
       '  \x1b[33monsetSlice(options?)\x1b[0m             Show onset slice markers on waveform',
       '  \x1b[33mnmf(options?)\x1b[0m                    Show NMF visualization panel',
+      '  \x1b[33mgranularize(source?, options?)\x1b[0m       Break a sample into grains (grainSize, hopSize, jitter, silenceThreshold…)',
       '  \x1b[33mclearDebug()\x1b[0m                     Clear debug logs',
       '  \x1b[33mdebug(limit?)\x1b[0m                    Show last N debug log entries (default: 20)',
       '  \x1b[33mhelp()\x1b[0m                           Show this help message',
@@ -669,5 +719,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     help,
     clear,
     analyzeMFCC,
+    granularize,
   };
 }

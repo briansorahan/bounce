@@ -70,6 +70,16 @@ export interface FeatureOptions {
   [key: string]: unknown;
 }
 
+export interface GranularizeOptions {
+  grainSize?: number;
+  hopSize?: number;
+  jitter?: number;
+  startTime?: number;
+  endTime?: number;
+  normalize?: boolean;
+  silenceThreshold?: number;
+}
+
 export class DatabaseManager {
   public db: Database.Database;
 
@@ -462,20 +472,25 @@ export class DatabaseManager {
     return stmt.get(filePath) as SampleRecord | undefined;
   }
 
+  private computeFeatureHash(
+    featureType: string,
+    featureData: number[],
+    options?: FeatureOptions,
+  ): string {
+    const dataStr = JSON.stringify(featureData);
+    const optionsStr = options ? JSON.stringify(options) : "";
+    const featureContent = `${featureType}:${dataStr}:${optionsStr}`;
+    return crypto.createHash("sha256").update(featureContent).digest("hex");
+  }
+
   storeFeature(
     sampleHash: string,
     featureType: string,
     featureData: number[],
     options?: FeatureOptions,
   ): number {
-    // Compute hash of feature data and options
+    const featureHash = this.computeFeatureHash(featureType, featureData, options);
     const dataStr = JSON.stringify(featureData);
-    const optionsStr = options ? JSON.stringify(options) : "";
-    const featureContent = `${featureType}:${dataStr}:${optionsStr}`;
-    const featureHash = crypto
-      .createHash("sha256")
-      .update(featureContent)
-      .digest("hex");
 
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO features (sample_hash, feature_hash, feature_type, feature_data, options) 
@@ -621,6 +636,122 @@ export class DatabaseManager {
     }
 
     return results;
+  }
+
+  granularize(
+    sourceHash: string,
+    options: GranularizeOptions,
+  ): { grainHashes: Array<string | null>; featureHash: string; sampleRate: number; grainDuration: number } {
+    const sample = this.getSampleByHash(sourceHash);
+    if (!sample) {
+      throw new Error(`Sample not found: ${sourceHash}`);
+    }
+
+    const MAX_DURATION = 20;
+    if (sample.duration > MAX_DURATION) {
+      throw new Error(
+        `Sample duration ${sample.duration.toFixed(2)}s exceeds the ${MAX_DURATION}s limit for granularize`,
+      );
+    }
+
+    const grainSizeMs = options.grainSize ?? 20;
+    const hopSizeMs = options.hopSize ?? grainSizeMs;
+    const startTimeMs = options.startTime ?? 0;
+    const endTimeMs = options.endTime ?? sample.duration * 1000;
+    const jitter = options.jitter ?? 0;
+    const silenceThresholdDb = options.silenceThreshold ?? -60;
+
+    const { sample_rate: sampleRate, channels } = sample;
+
+    const grainSizeSamples = Math.round((grainSizeMs * sampleRate) / 1000);
+    const hopSizeSamples = Math.round((hopSizeMs * sampleRate) / 1000);
+    const startSample = Math.round((startTimeMs * sampleRate) / 1000);
+    const totalFrames =
+      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT;
+    const endSample = Math.min(
+      Math.round((endTimeMs * sampleRate) / 1000),
+      totalFrames,
+    );
+
+    // Compute grain start positions (in samples/frames)
+    const grainStartPositions: number[] = [];
+    let pos = startSample;
+    while (pos + grainSizeSamples <= endSample) {
+      if (jitter > 0) {
+        const maxOffset = Math.round(jitter * hopSizeSamples);
+        const offset = Math.round((Math.random() * 2 - 1) * maxOffset);
+        const jitteredPos = Math.max(
+          startSample,
+          Math.min(endSample - grainSizeSamples, pos + offset),
+        );
+        grainStartPositions.push(jitteredPos);
+      } else {
+        grainStartPositions.push(pos);
+      }
+      pos += hopSizeSamples;
+    }
+
+    // Store grain start positions as the feature, preserving all options for reproducibility
+    this.storeFeature(
+      sample.hash,
+      "granularize",
+      grainStartPositions,
+      options as FeatureOptions,
+    );
+    const featureHash = this.computeFeatureHash(
+      "granularize",
+      grainStartPositions,
+      options as FeatureOptions,
+    );
+
+    const audioData = new Float32Array(
+      sample.audio_data.buffer,
+      sample.audio_data.byteOffset,
+      totalFrames,
+    );
+
+    // Convert dBFS silence threshold to linear RMS
+    const silenceThresholdLinear =
+      silenceThresholdDb === -Infinity
+        ? 0
+        : Math.pow(10, silenceThresholdDb / 20);
+
+    const grainDuration = grainSizeSamples / sampleRate;
+    const grainHashes: Array<string | null> = [];
+
+    for (let i = 0; i < grainStartPositions.length; i++) {
+      const start = grainStartPositions[i];
+      const grainAudio = audioData.slice(start, start + grainSizeSamples);
+
+      // Compute RMS and skip silent grains
+      let sumSq = 0;
+      for (let j = 0; j < grainAudio.length; j++) {
+        sumSq += grainAudio[j] * grainAudio[j];
+      }
+      const rms = Math.sqrt(sumSq / grainAudio.length);
+      if (rms < silenceThresholdLinear) {
+        grainHashes.push(null);
+        continue;
+      }
+
+      const grainBuffer = Buffer.from(
+        grainAudio.buffer,
+        grainAudio.byteOffset,
+        grainAudio.byteLength,
+      );
+      const hash = this.createDerivedSample(
+        sample.hash,
+        featureHash,
+        i,
+        grainBuffer,
+        sampleRate,
+        channels,
+        grainDuration,
+      );
+      grainHashes.push(hash);
+    }
+
+    return { grainHashes, featureHash, sampleRate, grainDuration };
   }
 
   getDerivedSamples(

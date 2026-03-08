@@ -87,6 +87,23 @@ interface MFCCOptions {
   sampleRate?: number;
 }
 
+interface GranularizeOptions {
+  /** Duration of each grain in milliseconds. Defaults to 20. */
+  grainSize?: number;
+  /** Distance between grain start positions in ms. Defaults to grainSize (non-overlapping). */
+  hopSize?: number;
+  /** Random offset (0–1) applied to grain starts as a fraction of hopSize. Defaults to 0. */
+  jitter?: number;
+  /** Process from this time offset in ms. Defaults to 0. */
+  startTime?: number;
+  /** Stop processing at this time offset in ms. Defaults to end of sample. */
+  endTime?: number;
+  /** Normalize each grain's peak amplitude at playback time. Defaults to false. */
+  normalize?: boolean;
+  /** Skip grains whose RMS falls below this dBFS level. Defaults to -60. Use -Infinity to disable. */
+  silenceThreshold?: number;
+}
+
 interface Sample {
   id: number;
   hash: string;
@@ -115,6 +132,14 @@ declare class FeatureResult extends BounceResult {
   readonly featureType: string;
 }
 
+declare class GrainCollection {
+  length(): number;
+  forEach(callback: (grain: AudioResult, index: number) => void | Promise<void>): Promise<void>;
+  map<T>(callback: (grain: AudioResult, index: number) => T): T[];
+  filter(predicate: (grain: AudioResult, index: number) => boolean): GrainCollection;
+  toString(): string;
+}
+
 declare function display(fileOrHash: string): Promise<AudioResult>;
 declare function play(source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
 declare function stop(): BounceResult;
@@ -135,3 +160,4 @@ declare function debug(limit?: number): Promise<BounceResult>;
 declare function help(): BounceResult;
 declare function clear(): void;
 declare function analyzeMFCC(sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;
+declare function granularize(source?: string | AudioResult | Promise<AudioResult>, options?: GranularizeOptions): Promise<GrainCollection>;

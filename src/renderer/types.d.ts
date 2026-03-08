@@ -181,5 +181,22 @@ interface Window {
     nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
     transpileTypeScript: (source: string) => Promise<string>;
+    granularizeSample: (
+      sourceHash: string,
+      options?: {
+        grainSize?: number;
+        hopSize?: number;
+        jitter?: number;
+        startTime?: number;
+        endTime?: number;
+        normalize?: boolean;
+        silenceThreshold?: number;
+      },
+    ) => Promise<{
+      grainHashes: Array<string | null>;
+      featureHash: string;
+      sampleRate: number;
+      grainDuration: number;
+    }>;
   };
 }

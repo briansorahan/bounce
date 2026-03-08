@@ -33,6 +33,16 @@ interface FeatureOptions {
   [key: string]: unknown;
 }
 
+interface GranularizeOptions {
+  grainSize?: number;
+  hopSize?: number;
+  jitter?: number;
+  startTime?: number;
+  endTime?: number;
+  normalize?: boolean;
+  silenceThreshold?: number;
+}
+
 interface NMFVisualizationData {
   sampleHash: string;
   nmfData: {
@@ -112,6 +122,8 @@ contextBridge.exposeInMainWorld("electron", {
       callback(data),
     );
   },
+  granularizeSample: (sourceHash: string, options?: GranularizeOptions) =>
+    ipcRenderer.invoke("granularize-sample", sourceHash, options),
   transpileTypeScript: (source: string): Promise<string> =>
     ipcRenderer.invoke("transpile-typescript", source),
 });

@@ -423,6 +423,34 @@ ipcMain.handle("get-sample-by-hash", async (_event, hash: string) => {
   }
 });
 
+ipcMain.handle(
+  "granularize-sample",
+  async (
+    _event,
+    sourceHash: string,
+    options?: {
+      grainSize?: number;
+      hopSize?: number;
+      jitter?: number;
+      startTime?: number;
+      endTime?: number;
+      normalize?: boolean;
+      silenceThreshold?: number;
+    },
+  ) => {
+    try {
+      if (!dbManager) {
+        throw new Error("Database not initialized");
+      }
+      return dbManager.granularize(sourceHash, options ?? {});
+    } catch (error) {
+      throw new Error(
+        `Failed to granularize sample: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+);
+
 ipcMain.handle("analyze-nmf", async (_event, args: string[]) => {
   try {
     const { analyzeNmfCommand } = await import("./commands/analyze-nmf.js");
