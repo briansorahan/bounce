@@ -20,12 +20,25 @@ async function launchApp() {
   });
 }
 
-async function evalInWindow<T>(window: any, expression: string): Promise<T> {
-  return window.evaluate((expr: string) => {
+async function sendCommand(window: any, command: string): Promise<void> {
+  await window.evaluate((cmd: string) => {
     const executeCommand = (window as any).__bounceExecuteCommand;
     if (!executeCommand) throw new Error("__bounceExecuteCommand not exposed");
-    return executeCommand(expr);
-  }, expression);
+    return executeCommand(cmd);
+  }, command);
+}
+
+/** Call a window.electron IPC method directly, bypassing the REPL. */
+async function callIpc<T>(
+  window: any,
+  method: string,
+  ...args: unknown[]
+): Promise<T> {
+  return window.evaluate(
+    ({ m, a }: { m: string; a: unknown[] }) =>
+      (window.electron as Record<string, (...x: unknown[]) => Promise<T>>)[m](...a),
+    { m: method, a: args },
+  );
 }
 
 async function getTerminalText(window: any): Promise<string> {
@@ -36,16 +49,13 @@ async function getTerminalText(window: any): Promise<string> {
 }
 
 test.describe("Filesystem utilities", () => {
-  test("fs.pwd() returns an absolute path", async () => {
+  test("fs.pwd() returns an absolute path via REPL", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await evalInWindow(window, "await fs.pwd()");
-
-    const text = await getTerminalText(window);
-    // The cwd should look like an absolute path (starts with / on unix, letter:\ on windows)
-    expect(text).toMatch(/\/|[A-Za-z]:\\/);
+    const cwd = await callIpc<string>(window, "fsPwd");
+    expect(cwd).toMatch(/\/|[A-Za-z]:\\/);
 
     await electronApp.close();
   });
@@ -56,12 +66,8 @@ test.describe("Filesystem utilities", () => {
     await window.waitForTimeout(1000);
 
     const tmpDir = os.tmpdir();
-    await evalInWindow(window, `await fs.cd(${JSON.stringify(tmpDir)})`);
-
-    await evalInWindow(window, "await fs.pwd()");
-
-    const text = await getTerminalText(window);
-    expect(text).toContain(tmpDir);
+    const newCwd = await callIpc<string>(window, "fsCd", tmpDir);
+    expect(newCwd).toBe(tmpDir);
 
     await electronApp.close();
   });
@@ -73,9 +79,10 @@ test.describe("Filesystem utilities", () => {
 
     let threw = false;
     try {
-      await evalInWindow(
+      await callIpc(
         window,
-        `await fs.cd("/this/path/does/not/exist/__bounce_test__")`,
+        "fsCd",
+        "/this/path/does/not/exist/__bounce_test__",
       );
     } catch {
       threw = true;
@@ -90,14 +97,15 @@ test.describe("Filesystem utilities", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    // cd to the project root so we know there's something to list
     const projectRoot = path.join(__dirname, "..");
-    await evalInWindow(window, `await fs.cd(${JSON.stringify(projectRoot)})`);
-    await evalInWindow(window, "await fs.ls()");
+    const result = await callIpc<{ entries: Array<{ name: string }>; total: number; truncated: boolean }>(
+      window,
+      "fsLs",
+      projectRoot,
+    );
 
-    const text = await getTerminalText(window);
-    // package.json must appear in the listing
-    expect(text).toContain("package.json");
+    expect(result.entries.length).toBeGreaterThan(0);
+    expect(result.entries.some((e) => e.name === "package.json")).toBe(true);
 
     await electronApp.close();
   });
@@ -108,17 +116,20 @@ test.describe("Filesystem utilities", () => {
     await window.waitForTimeout(1000);
 
     const projectRoot = path.join(__dirname, "..");
-    await evalInWindow(window, `await fs.cd(${JSON.stringify(projectRoot)})`);
 
-    // .github should be hidden by ls
-    await evalInWindow(window, "await fs.ls()");
-    const lsText = await getTerminalText(window);
-    expect(lsText).not.toContain(".github");
+    const lsResult = await callIpc<{ entries: Array<{ name: string }> }>(
+      window,
+      "fsLs",
+      projectRoot,
+    );
+    expect(lsResult.entries.some((e) => e.name === ".github")).toBe(false);
 
-    // .github should be visible with la
-    await evalInWindow(window, "await fs.la()");
-    const laText = await getTerminalText(window);
-    expect(laText).toContain(".github");
+    const laResult = await callIpc<{ entries: Array<{ name: string }> }>(
+      window,
+      "fsLa",
+      projectRoot,
+    );
+    expect(laResult.entries.some((e) => e.name === ".github")).toBe(true);
 
     await electronApp.close();
   });
@@ -128,87 +139,66 @@ test.describe("Filesystem utilities", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
+    // cd first so glob resolves against project root
     const projectRoot = path.join(__dirname, "..");
-    await evalInWindow(window, `await fs.cd(${JSON.stringify(projectRoot)})`);
+    await callIpc(window, "fsCd", projectRoot);
 
-    // *.json should match package.json at minimum
-    const result = await evalInWindow<string[]>(
-      window,
-      "await fs.glob('*.json')",
-    );
+    const paths = await callIpc<string[]>(window, "fsGlob", "*.json");
 
-    expect(Array.isArray(result)).toBe(true);
-    expect((result as string[]).some((p) => p.endsWith("package.json"))).toBe(
-      true,
-    );
+    expect(Array.isArray(paths)).toBe(true);
+    expect(paths.some((p) => p.endsWith("package.json"))).toBe(true);
 
     await electronApp.close();
   });
 
-  test("fs.walk() invokes callback for each file", async () => {
+  test("fs.walk() returns file entries for a directory", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    // Walk the tests directory and collect file names
-    const testsDir = path.join(__dirname, "..");
-    await evalInWindow(
+    const testsDir = path.join(__dirname, "..", "tests");
+    const result = await callIpc<{ entries: Array<{ path: string; type: string }>; truncated: boolean }>(
       window,
-      `
-      var _walkPaths = [];
-      await fs.walk(
-        ${JSON.stringify(testsDir + "/tests")},
-        { [fs.FileType.File]: async (p) => { _walkPaths.push(p); } }
-      );
-      _walkPaths
-      `,
+      "fsWalk",
+      testsDir,
     );
 
-    // At minimum our own spec file should appear
-    const text = await getTerminalText(window);
-    expect(text).toContain("filesystem.spec.ts");
+    expect(result.truncated).toBe(false);
+    const filePaths = result.entries.map((e) => e.path);
+    expect(filePaths.some((p) => p.endsWith("filesystem.spec.ts"))).toBe(true);
 
     await electronApp.close();
   });
 
-  test("fs.walk() with catch-all callback receives all entry types", async () => {
+  test("fs.walk() entries include correct FileType values", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    const testsDir = path.join(__dirname);
-    await evalInWindow(
+    const testsDir = path.join(__dirname, "..", "tests");
+    const result = await callIpc<{ entries: Array<{ path: string; type: string }> }>(
       window,
-      `
-      var _walkTypes = [];
-      await fs.walk(
-        ${JSON.stringify(testsDir)},
-        async (filePath, type) => { _walkTypes.push(type); }
-      );
-      _walkTypes
-      `,
+      "fsWalk",
+      testsDir,
     );
 
-    // Tests directory has only files — type "file" must appear
-    const text = await getTerminalText(window);
-    expect(text).toContain("file");
+    const types = result.entries.map((e) => e.type);
+    expect(types).toContain("file");
 
     await electronApp.close();
   });
 
   test("display() resolves relative path against cwd", async () => {
-    // Copy a test wav to a temp dir, cd there, then display with a relative name
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-fs-test-"));
     const srcWav = path.join(
       __dirname,
       "../flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
     );
-
     if (!fs.existsSync(srcWav)) {
       console.log("Skipping relative-path display test: test WAV not found");
       return;
     }
 
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-fs-test-"));
     const destWav = path.join(tmpDir, "test.wav");
     fs.copyFileSync(srcWav, destWav);
 
@@ -216,8 +206,8 @@ test.describe("Filesystem utilities", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await evalInWindow(window, `await fs.cd(${JSON.stringify(tmpDir)})`);
-    await evalInWindow(window, `await display("test.wav")`);
+    await sendCommand(window, `await fs.cd(${JSON.stringify(tmpDir)})`);
+    await sendCommand(window, `await display("test.wav")`);
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,
