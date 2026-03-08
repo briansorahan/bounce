@@ -68,6 +68,25 @@ interface NmfVisOptions {
   featureHash?: string;
 }
 
+interface MFCCOptions {
+  /** Number of cepstral coefficients per frame. Default: 13 */
+  numCoeffs?: number;
+  /** Number of Mel filter bands. Default: 40 */
+  numBands?: number;
+  /** Low frequency bound in Hz. Default: 20 */
+  minFreq?: number;
+  /** High frequency bound in Hz. Default: 20000 */
+  maxFreq?: number;
+  /** Analysis window size in samples. Default: 1024 */
+  windowSize?: number;
+  /** FFT size in samples. Default: 1024 */
+  fftSize?: number;
+  /** Hop size between frames in samples. Default: 512 */
+  hopSize?: number;
+  /** Sample rate in Hz. Default: 44100 */
+  sampleRate?: number;
+}
+
 interface Sample {
   id: number;
   hash: string;
@@ -97,16 +116,16 @@ declare class FeatureResult extends BounceResult {
 }
 
 declare function display(fileOrHash: string): Promise<AudioResult>;
-declare function play(source?: string | AudioResult): Promise<AudioResult>;
+declare function play(source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
 declare function stop(): BounceResult;
-declare function analyze(source?: AudioResult | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
-declare function analyzeNmf(source?: AudioResult | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
-declare function slice(source?: FeatureResult | AudioResult | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
-declare function sep(source?: AudioResult | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
+declare function analyze(source?: AudioResult | Promise<AudioResult> | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
+declare function analyzeNmf(source?: AudioResult | Promise<AudioResult> | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
+declare function slice(source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
+declare function sep(source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
 declare function nx(options?: NxOptions): Promise<BounceResult>;
 declare function list(): Promise<BounceResult>;
-declare function playSlice(index?: number, source?: FeatureResult | AudioResult): Promise<AudioResult>;
-declare function playComponent(index?: number, source?: FeatureResult | AudioResult): Promise<AudioResult>;
+declare function playSlice(index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
+declare function playComponent(index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
 declare function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult>;
 declare function visualizeNx(options?: VisualizeNxOptions): Promise<BounceResult>;
 declare function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult>;
@@ -115,3 +134,4 @@ declare function clearDebug(): Promise<BounceResult>;
 declare function debug(limit?: number): Promise<BounceResult>;
 declare function help(): BounceResult;
 declare function clear(): void;
+declare function analyzeMFCC(sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;

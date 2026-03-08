@@ -626,7 +626,8 @@ export class BounceApp {
     this.searchResultIndex = -1;
     this.matchedCommands = [];
     this.savedCommandBuffer = "";
-    this.printPrompt();
+    this.cursorPosition = this.commandBuffer.length;
+    this.redrawCommandLine();
   }
 
   // History persistence methods

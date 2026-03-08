@@ -17,6 +17,17 @@ interface BufNMFOptions {
   seed?: number;
 }
 
+interface MFCCOptions {
+  numCoeffs?: number;
+  numBands?: number;
+  minFreq?: number;
+  maxFreq?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+  sampleRate?: number;
+}
+
 interface FeatureOptions {
   threshold?: number;
   [key: string]: unknown;
@@ -42,6 +53,8 @@ contextBridge.exposeInMainWorld("electron", {
     sampleRate: number,
     options?: BufNMFOptions,
   ) => ipcRenderer.invoke("analyze-buf-nmf", audioData, sampleRate, options),
+  analyzeMFCC: (audioData: Float32Array, options?: MFCCOptions) =>
+    ipcRenderer.invoke("analyze-mfcc", audioData, options),
   saveCommand: (command: string) => ipcRenderer.invoke("save-command", command),
   getCommandHistory: (limit?: number) =>
     ipcRenderer.invoke("get-command-history", limit),
