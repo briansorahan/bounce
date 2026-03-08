@@ -195,14 +195,14 @@ test.describe("Audio Commands", () => {
 
     await sendCommand(window, "help()");
     await expect(window.locator(".xterm-rows")).toContainText(
-      "granularize",
+      "clearDebug",
       { timeout: 5000 },
     );
 
     await sendCommand(window, "clear()");
 
     await expect(window.locator(".xterm-rows")).not.toContainText(
-      "granularize",
+      "clearDebug",
       { timeout: 5000 },
     );
 
