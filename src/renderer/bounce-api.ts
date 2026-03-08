@@ -987,8 +987,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[33mvisualizeNx(options?)\x1b[0m            Overlay NX cross-synthesis on waveform",
         "  \x1b[33monsetSlice(options?)\x1b[0m             Draw onset slice markers on waveform",
         "  \x1b[33mnmf(options?)\x1b[0m                    Show NMF bases/activations panel",
-        "  \x1b[33mdebug(limit?)\x1b[0m                    Show recent debug log entries (default: 20)",
-        "  \x1b[33mclearDebug()\x1b[0m                     Clear debug logs",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
         "",
