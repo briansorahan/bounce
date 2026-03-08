@@ -994,7 +994,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[33mnmf(options?)\x1b[0m                    Show NMF bases/activations panel",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
-        "  \x1b[33mclearDebug()\x1b[0m                     Clear the debug log store",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
         "  slice(analyze()) → playSlice(0)                          \x1b[90m# onset workflow\x1b[0m",

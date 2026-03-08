@@ -14,8 +14,6 @@ export const BOUNCE_GLOBALS = new Set([
   "visualizeNx",
   "onsetSlice",
   "nmf",
-  "clearDebug",
-  "debug",
   "help",
   "clear",
   "analyzeMFCC",
