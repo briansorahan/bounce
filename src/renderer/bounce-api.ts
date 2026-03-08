@@ -4,10 +4,10 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
-import { BounceResult, AudioResult, FeatureResult } from "./bounce-result.js";
+import { BounceResult, AudioResult, FeatureResult, LsResult } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 
-export { BounceResult, AudioResult, FeatureResult, GrainCollection };
+export { BounceResult, AudioResult, FeatureResult, LsResult, GrainCollection };
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -1198,11 +1198,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
 
     ls: Object.assign(
-      async function ls(dirPath?: string): Promise<BounceResult> {
+      async function ls(dirPath?: string): Promise<LsResult> {
         const { entries, truncated, total } = await window.electron.fsLs(dirPath);
         const msg = formatLsEntries(entries, truncated, total);
         terminal.writeln(msg);
-        return new BounceResult(msg);
+        return new LsResult(msg, entries, total, truncated);
       },
       {
         help: (): BounceResult => new BounceResult([
@@ -1224,11 +1224,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
 
     la: Object.assign(
-      async function la(dirPath?: string): Promise<BounceResult> {
+      async function la(dirPath?: string): Promise<LsResult> {
         const { entries, truncated, total } = await window.electron.fsLa(dirPath);
         const msg = formatLsEntries(entries, truncated, total);
         terminal.writeln(msg);
-        return new BounceResult(msg);
+        return new LsResult(msg, entries, total, truncated);
       },
       {
         help: (): BounceResult => new BounceResult([

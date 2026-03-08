@@ -132,6 +132,20 @@ declare class FeatureResult extends BounceResult {
   readonly featureType: string;
 }
 
+declare class LsResult extends BounceResult {
+  readonly entries: FsLsEntry[];
+  readonly total: number;
+  readonly truncated: boolean;
+  readonly length: number;
+  filter(fn: (entry: FsLsEntry) => boolean): FsLsEntry[];
+  map<T>(fn: (entry: FsLsEntry) => T): T[];
+  find(fn: (entry: FsLsEntry) => boolean): FsLsEntry | undefined;
+  forEach(fn: (entry: FsLsEntry) => void): void;
+  some(fn: (entry: FsLsEntry) => boolean): boolean;
+  every(fn: (entry: FsLsEntry) => boolean): boolean;
+  [Symbol.iterator](): Iterator<FsLsEntry>;
+}
+
 declare class GrainCollection {
   length(): number;
   forEach(callback: (grain: AudioResult, index: number) => void | Promise<void>): Promise<void>;
@@ -259,11 +273,11 @@ interface FsApi {
   };
   help(): BounceResult;
   ls: {
-    (dirPath?: string): Promise<BounceResult>;
+    (dirPath?: string): Promise<LsResult>;
     help(): BounceResult;
   };
   la: {
-    (dirPath?: string): Promise<BounceResult>;
+    (dirPath?: string): Promise<LsResult>;
     help(): BounceResult;
   };
   cd: {

@@ -28,6 +28,58 @@ export class AudioResult extends BounceResult {
 }
 
 /**
+ * Returned by fs.ls() and fs.la().
+ * Displays as unix-style ls output, but is filterable/iterable as a collection of entries.
+ */
+export class LsResult extends BounceResult {
+  readonly total: number;
+  readonly truncated: boolean;
+
+  constructor(
+    display: string,
+    public readonly entries: FsLsEntry[],
+    total: number,
+    truncated: boolean,
+  ) {
+    super(display);
+    this.total = total;
+    this.truncated = truncated;
+  }
+
+  get length(): number {
+    return this.entries.length;
+  }
+
+  filter(fn: (entry: FsLsEntry) => boolean): FsLsEntry[] {
+    return this.entries.filter(fn);
+  }
+
+  map<T>(fn: (entry: FsLsEntry) => T): T[] {
+    return this.entries.map(fn);
+  }
+
+  find(fn: (entry: FsLsEntry) => boolean): FsLsEntry | undefined {
+    return this.entries.find(fn);
+  }
+
+  forEach(fn: (entry: FsLsEntry) => void): void {
+    this.entries.forEach(fn);
+  }
+
+  some(fn: (entry: FsLsEntry) => boolean): boolean {
+    return this.entries.some(fn);
+  }
+
+  every(fn: (entry: FsLsEntry) => boolean): boolean {
+    return this.entries.every(fn);
+  }
+
+  [Symbol.iterator](): Iterator<FsLsEntry> {
+    return this.entries[Symbol.iterator]();
+  }
+}
+
+/**
  * Returned by analyze() and analyzeNmf().
  * Carries source + feature hashes so it can be passed to slice(), sep(), playSlice(), etc.
  */
