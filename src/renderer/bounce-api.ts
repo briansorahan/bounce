@@ -1142,6 +1142,100 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
   };
 
+  // ---------------------------------------------------------------------------
+  // Filesystem utilities
+  // ---------------------------------------------------------------------------
+
+  const FileType = {
+    File:        "file",
+    Directory:   "directory",
+    Symlink:     "symlink",
+    BlockDevice: "blockDevice",
+    CharDevice:  "charDevice",
+    FIFO:        "fifo",
+    Socket:      "socket",
+    Unknown:     "unknown",
+  } as const;
+
+  type FileTypeValue = typeof FileType[keyof typeof FileType];
+  type WalkEntry = { path: string; type: FileTypeValue };
+  type WalkCatchAll = (filePath: string, type: FileTypeValue) => Promise<void>;
+  type WalkHandlers = Partial<Record<FileTypeValue, (filePath: string) => Promise<void>>>;
+
+  function formatLsEntries(
+    entries: Array<{ name: string; type: string; isAudio: boolean }>,
+    truncated: boolean,
+    total: number,
+  ): string {
+    const lines = entries.map((e) => {
+      if (e.type === "directory") return `\x1b[34m${e.name}/\x1b[0m`;
+      if (e.isAudio) return `\x1b[32m${e.name}\x1b[0m`;
+      return e.name;
+    });
+    if (truncated) {
+      lines.push(`\x1b[33m... ${total - 200} more items\x1b[0m`);
+    }
+    return lines.join("\n");
+  }
+
+  const fs = {
+    FileType,
+
+    async ls(dirPath?: string): Promise<BounceResult> {
+      const { entries, truncated, total } = await window.electron.fsLs(dirPath);
+      const msg = formatLsEntries(entries, truncated, total);
+      terminal.writeln(msg);
+      return new BounceResult(msg);
+    },
+
+    async la(dirPath?: string): Promise<BounceResult> {
+      const { entries, truncated, total } = await window.electron.fsLa(dirPath);
+      const msg = formatLsEntries(entries, truncated, total);
+      terminal.writeln(msg);
+      return new BounceResult(msg);
+    },
+
+    async cd(dirPath: string): Promise<BounceResult> {
+      const newCwd = await window.electron.fsCd(dirPath);
+      const msg = `\x1b[32m${newCwd}\x1b[0m`;
+      terminal.writeln(msg);
+      return new BounceResult(newCwd);
+    },
+
+    async pwd(): Promise<BounceResult> {
+      const cwd = await window.electron.fsPwd();
+      terminal.writeln(cwd);
+      return new BounceResult(cwd);
+    },
+
+    async glob(pattern: string): Promise<string[]> {
+      const paths = await window.electron.fsGlob(pattern);
+      paths.forEach((p: string) => terminal.writeln(p));
+      return paths;
+    },
+
+    async walk(
+      dirPath: string,
+      handler: WalkCatchAll | WalkHandlers,
+    ): Promise<void> {
+      const { entries, truncated } = await window.electron.fsWalk(dirPath);
+      const typedEntries = entries as WalkEntry[];
+      if (truncated) {
+        terminal.writeln(
+          `\x1b[33mWarning: walk truncated at 10,000 entries\x1b[0m`,
+        );
+      }
+      for (const entry of typedEntries) {
+        if (typeof handler === "function") {
+          await handler(entry.path, entry.type);
+        } else {
+          const cb = handler[entry.type];
+          if (cb) await cb(entry.path);
+        }
+      }
+    },
+  };
+
   return {
     display,
     play,
@@ -1165,5 +1259,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     analyzeMFCC,
     granularize,
     corpus,
+    fs,
   };
 }

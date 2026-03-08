@@ -231,3 +231,38 @@ declare const corpus: {
   query(segmentIndex: number, k?: number): Promise<BounceResult>;
   resynthesize(queryIndices: number[]): Promise<BounceResult>;
 };
+
+declare const enum FileType {
+  File        = "file",
+  Directory   = "directory",
+  Symlink     = "symlink",
+  BlockDevice = "blockDevice",
+  CharDevice  = "charDevice",
+  FIFO        = "fifo",
+  Socket      = "socket",
+  Unknown     = "unknown",
+}
+
+type WalkCatchAll = (filePath: string, type: FileType) => Promise<void>;
+type WalkHandlers = Partial<Record<FileType, (filePath: string) => Promise<void>>>;
+
+interface FsApi {
+  readonly FileType: {
+    readonly File: "file";
+    readonly Directory: "directory";
+    readonly Symlink: "symlink";
+    readonly BlockDevice: "blockDevice";
+    readonly CharDevice: "charDevice";
+    readonly FIFO: "fifo";
+    readonly Socket: "socket";
+    readonly Unknown: "unknown";
+  };
+  ls(dirPath?: string): Promise<BounceResult>;
+  la(dirPath?: string): Promise<BounceResult>;
+  cd(dirPath: string): Promise<BounceResult>;
+  pwd(): Promise<BounceResult>;
+  glob(pattern: string): Promise<string[]>;
+  walk(dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<void>;
+}
+
+declare const fs: FsApi;

@@ -100,6 +100,29 @@ interface NMFVisualizationData {
   featureHash: string;
 }
 
+interface FsLsEntry {
+  name: string;
+  path: string;
+  type: string;
+  isAudio: boolean;
+}
+
+interface FsLsResult {
+  entries: FsLsEntry[];
+  total: number;
+  truncated: boolean;
+}
+
+interface FsWalkEntry {
+  path: string;
+  type: string;
+}
+
+interface FsWalkResult {
+  entries: FsWalkEntry[];
+  truncated: boolean;
+}
+
 interface Window {
   electron: {
     version: string;
@@ -190,5 +213,11 @@ interface Window {
     corpusResynthesize: (
       indices: number[],
     ) => Promise<{ audio: Float32Array; sampleRate: number }>;
+    fsLs: (dirPath?: string) => Promise<FsLsResult>;
+    fsLa: (dirPath?: string) => Promise<FsLsResult>;
+    fsCd: (dirPath: string) => Promise<string>;
+    fsPwd: () => Promise<string>;
+    fsGlob: (pattern: string) => Promise<string[]>;
+    fsWalk: (dirPath: string) => Promise<FsWalkResult>;
   };
 }
