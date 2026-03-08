@@ -80,4 +80,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("granularize-sample", sourceHash, options),
   transpileTypeScript: (source: string): Promise<string> =>
     ipcRenderer.invoke("transpile-typescript", source),
+  corpusBuild: (sourceHash: string, featureHash: string) =>
+    ipcRenderer.invoke("corpus-build", sourceHash, featureHash),
+  corpusQuery: (segmentIndex: number, k?: number) =>
+    ipcRenderer.invoke("corpus-query", segmentIndex, k),
+  corpusResynthesize: (indices: number[]) =>
+    ipcRenderer.invoke("corpus-resynthesize", indices),
 });

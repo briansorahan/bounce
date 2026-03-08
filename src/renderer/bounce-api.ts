@@ -706,6 +706,90 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     terminal.clear();
   }
 
+  const corpus = {
+    /**
+     * Build the corpus from the slices of the currently loaded audio.
+     * Looks up the most recent onset-slice feature automatically.
+     * Can also be called with an AudioResult or explicit (sourceHash, featureHash) strings.
+     */
+    async build(
+      source?: string | AudioResult | Promise<AudioResult>,
+      featureHashOverride?: string,
+    ): Promise<BounceResult> {
+      let sourceHash: string;
+      let featureHash: string;
+
+      if (typeof source === "string") {
+        sourceHash = source;
+        if (!featureHashOverride) throw new Error("featureHash required when passing sourceHash as string.");
+        featureHash = featureHashOverride;
+      } else {
+        let resolved: AudioResult | undefined;
+        if (source !== undefined) resolved = await resolveAudio(source as AudioResult | Promise<AudioResult>);
+        const hash = resolved?.hash ?? audioManager.getCurrentAudio()?.hash;
+        if (!hash) throw new Error('No audio loaded. Use display("path/to/file") first.');
+        sourceHash = hash;
+
+        if (featureHashOverride) {
+          featureHash = featureHashOverride;
+        } else {
+          const feature = await window.electron.getMostRecentFeature(sourceHash, "onset-slice");
+          if (!feature) throw new Error("No onset-slice feature found. Run analyze() then slice() first.");
+          featureHash = feature.feature_hash;
+        }
+      }
+
+      terminal.writeln("\x1b[36mBuilding corpus…\x1b[0m");
+
+      const result = await window.electron.corpusBuild(sourceHash, featureHash);
+
+      const msg = `\x1b[32mBuilt corpus: ${result.segmentCount} segments, ${result.featureDims}-dim features, KDTree ready\x1b[0m`;
+      terminal.writeln(msg);
+      return new BounceResult(msg);
+    },
+
+    /**
+     * Find the k nearest corpus segments to the segment at segmentIndex.
+     * @param segmentIndex  Index of the query segment (0-based)
+     * @param k             Number of neighbors to return (default 5)
+     */
+    async query(segmentIndex: number, k = 5): Promise<BounceResult> {
+      terminal.writeln(`\x1b[36mQuerying corpus for segment ${segmentIndex}, k=${k}…\x1b[0m`);
+
+      const results = await window.electron.corpusQuery(segmentIndex, k);
+
+      const lines: string[] = [
+        `\x1b[1;36mNearest neighbors for segment ${segmentIndex}:\x1b[0m`,
+        `${"Rank".padEnd(6)}${"Index".padEnd(8)}${"Distance".padEnd(12)}`,
+        "─".repeat(26),
+      ];
+      results.forEach((r: { index: number; distance: number }, i: number) => {
+        lines.push(`${String(i + 1).padEnd(6)}${String(r.index).padEnd(8)}${r.distance.toFixed(4)}`);
+      });
+
+      const msg = lines.join("\n");
+      terminal.writeln(msg);
+      return new BounceResult(msg);
+    },
+
+    /**
+     * Concatenate and play the matched corpus segments from a previous query.
+     * @param queryIndices  Array of segment indices (e.g. from corpus.query())
+     */
+    async resynthesize(queryIndices: number[]): Promise<BounceResult> {
+      terminal.writeln(`\x1b[36mResynthesizing ${queryIndices.length} segments…\x1b[0m`);
+
+      const { audio, sampleRate } = await window.electron.corpusResynthesize(queryIndices);
+
+      audioManager.clearSlices();
+      await audioManager.playAudio(audio, sampleRate);
+
+      const msg = `\x1b[32mResynthesis complete: ${queryIndices.length} segments, ${(audio.length / sampleRate).toFixed(2)}s\x1b[0m`;
+      terminal.writeln(msg);
+      return new BounceResult(msg);
+    },
+  };
+
   return {
     display,
     play,
@@ -728,5 +812,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     clear,
     analyzeMFCC,
     granularize,
+    corpus,
   };
 }

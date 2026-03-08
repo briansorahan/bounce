@@ -173,3 +173,41 @@ export class MFCCFeature {
    */
   reset(): void;
 }
+
+export class SpectralShapeFeature {
+  constructor(options?: {
+    windowSize?: number;
+    fftSize?: number;
+    hopSize?: number;
+    sampleRate?: number;
+    minFreq?: number;
+    maxFreq?: number;
+    rolloffTarget?: number;
+    logFreq?: boolean;
+    usePower?: boolean;
+  });
+  /** Returns [centroid, spread, skewness, kurtosis, rolloff, flatness(dB), crest(dB)] */
+  process(audioBuffer: Float32Array | Float64Array): number[];
+  reset(): void;
+}
+
+export class Normalization {
+  constructor();
+  fit(data: number[][], min?: number, max?: number): void;
+  transform(data: number[][]): number[][];
+  transformFrame(frame: number[]): number[];
+  clear(): void;
+}
+
+export interface KDTreeNativeResult {
+  id: string;
+  distance: number;
+}
+
+export class KDTree {
+  constructor();
+  addPoint(id: string, point: number[]): void;
+  kNearest(point: number[], k: number, radius?: number): KDTreeNativeResult[];
+  size(): number;
+  clear(): void;
+}
