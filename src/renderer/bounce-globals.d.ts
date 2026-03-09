@@ -146,6 +146,19 @@ declare class LsResult extends BounceResult {
   [Symbol.iterator](): Iterator<FsLsEntry>;
 }
 
+declare class LsResultPromise implements PromiseLike<LsResult> {
+  then<TResult1 = LsResult, TResult2 = never>(
+    onfulfilled?: ((value: LsResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+  filter(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry[]>;
+  map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]>;
+  find(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry | undefined>;
+  forEach(fn: (entry: FsLsEntry) => void): Promise<void>;
+  some(fn: (entry: FsLsEntry) => boolean): Promise<boolean>;
+  every(fn: (entry: FsLsEntry) => boolean): Promise<boolean>;
+}
+
 declare class GlobResult extends BounceResult {
   readonly paths: string[];
   readonly length: number;
@@ -156,6 +169,19 @@ declare class GlobResult extends BounceResult {
   some(fn: (path: string) => boolean): boolean;
   every(fn: (path: string) => boolean): boolean;
   [Symbol.iterator](): Iterator<string>;
+}
+
+declare class GlobResultPromise implements PromiseLike<GlobResult> {
+  then<TResult1 = GlobResult, TResult2 = never>(
+    onfulfilled?: ((value: GlobResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+  filter(fn: (path: string) => boolean): Promise<string[]>;
+  map<T>(fn: (path: string) => T): Promise<T[]>;
+  find(fn: (path: string) => boolean): Promise<string | undefined>;
+  forEach(fn: (path: string) => void): Promise<void>;
+  some(fn: (path: string) => boolean): Promise<boolean>;
+  every(fn: (path: string) => boolean): Promise<boolean>;
 }
 
 declare class GrainCollection extends BounceResult {
@@ -284,11 +310,11 @@ interface FsApi {
   };
   help(): BounceResult;
   ls: {
-    (dirPath?: string): Promise<LsResult>;
+    (dirPath?: string): LsResultPromise;
     help(): BounceResult;
   };
   la: {
-    (dirPath?: string): Promise<LsResult>;
+    (dirPath?: string): LsResultPromise;
     help(): BounceResult;
   };
   cd: {
@@ -300,7 +326,7 @@ interface FsApi {
     help(): BounceResult;
   };
   glob: {
-    (pattern: string): Promise<GlobResult>;
+    (pattern: string): GlobResultPromise;
     help(): BounceResult;
   };
   walk: {

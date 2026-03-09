@@ -125,6 +125,96 @@ export class GlobResult extends BounceResult {
 }
 
 /**
+ * A thenable wrapper around Promise<LsResult> that exposes LsResult's array methods
+ * directly, so users can chain without await: fs.ls().filter(f => f.isAudio)
+ */
+export class LsResultPromise implements PromiseLike<LsResult> {
+  constructor(private readonly _promise: Promise<LsResult>) {}
+
+  then<TResult1 = LsResult, TResult2 = never>(
+    onfulfilled?: ((value: LsResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this._promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<LsResult | TResult> {
+    return this._promise.catch(onrejected);
+  }
+
+  filter(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry[]> {
+    return this._promise.then((r) => r.filter(fn));
+  }
+
+  map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]> {
+    return this._promise.then((r) => r.map(fn));
+  }
+
+  find(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry | undefined> {
+    return this._promise.then((r) => r.find(fn));
+  }
+
+  forEach(fn: (entry: FsLsEntry) => void): Promise<void> {
+    return this._promise.then((r) => r.forEach(fn));
+  }
+
+  some(fn: (entry: FsLsEntry) => boolean): Promise<boolean> {
+    return this._promise.then((r) => r.some(fn));
+  }
+
+  every(fn: (entry: FsLsEntry) => boolean): Promise<boolean> {
+    return this._promise.then((r) => r.every(fn));
+  }
+}
+
+/**
+ * A thenable wrapper around Promise<GlobResult> that exposes GlobResult's array methods
+ * directly, so users can chain without await: fs.glob("**\/*.wav").filter(p => p.includes("drum"))
+ */
+export class GlobResultPromise implements PromiseLike<GlobResult> {
+  constructor(private readonly _promise: Promise<GlobResult>) {}
+
+  then<TResult1 = GlobResult, TResult2 = never>(
+    onfulfilled?: ((value: GlobResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this._promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<GlobResult | TResult> {
+    return this._promise.catch(onrejected);
+  }
+
+  filter(fn: (path: string) => boolean): Promise<string[]> {
+    return this._promise.then((r) => r.filter(fn));
+  }
+
+  map<T>(fn: (path: string) => T): Promise<T[]> {
+    return this._promise.then((r) => r.map(fn));
+  }
+
+  find(fn: (path: string) => boolean): Promise<string | undefined> {
+    return this._promise.then((r) => r.find(fn));
+  }
+
+  forEach(fn: (path: string) => void): Promise<void> {
+    return this._promise.then((r) => r.forEach(fn));
+  }
+
+  some(fn: (path: string) => boolean): Promise<boolean> {
+    return this._promise.then((r) => r.some(fn));
+  }
+
+  every(fn: (path: string) => boolean): Promise<boolean> {
+    return this._promise.then((r) => r.every(fn));
+  }
+}
+
+/**
  * Returned by analyze() and analyzeNmf().
  * Carries source + feature hashes so it can be passed to slice(), sep(), playSlice(), etc.
  */

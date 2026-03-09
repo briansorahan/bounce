@@ -4,10 +4,10 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
-import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult } from "./bounce-result.js";
+import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 
-export { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, GrainCollection };
+export { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise, GrainCollection };
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -1182,10 +1182,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
 
     ls: Object.assign(
-      async function ls(dirPath?: string): Promise<LsResult> {
-        const { entries, truncated, total } = await window.electron.fsLs(dirPath);
-        const msg = formatLsEntries(entries, truncated, total);
-        return new LsResult(msg, entries, total, truncated);
+      function ls(dirPath?: string): LsResultPromise {
+        return new LsResultPromise(
+          (async () => {
+            const { entries, truncated, total } = await window.electron.fsLs(dirPath);
+            const msg = formatLsEntries(entries, truncated, total);
+            return new LsResult(msg, entries, total, truncated);
+          })(),
+        );
       },
       {
         help: (): BounceResult => new BounceResult([
@@ -1207,10 +1211,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
 
     la: Object.assign(
-      async function la(dirPath?: string): Promise<LsResult> {
-        const { entries, truncated, total } = await window.electron.fsLa(dirPath);
-        const msg = formatLsEntries(entries, truncated, total);
-        return new LsResult(msg, entries, total, truncated);
+      function la(dirPath?: string): LsResultPromise {
+        return new LsResultPromise(
+          (async () => {
+            const { entries, truncated, total } = await window.electron.fsLa(dirPath);
+            const msg = formatLsEntries(entries, truncated, total);
+            return new LsResult(msg, entries, total, truncated);
+          })(),
+        );
       },
       {
         help: (): BounceResult => new BounceResult([
@@ -1266,9 +1274,13 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
 
     glob: Object.assign(
-      async function glob(pattern: string): Promise<GlobResult> {
-        const paths = await window.electron.fsGlob(pattern);
-        return new GlobResult(paths);
+      function glob(pattern: string): GlobResultPromise {
+        return new GlobResultPromise(
+          (async () => {
+            const paths = await window.electron.fsGlob(pattern);
+            return new GlobResult(paths);
+          })(),
+        );
       },
       {
         help: (): BounceResult => new BounceResult([
