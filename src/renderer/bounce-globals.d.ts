@@ -151,7 +151,7 @@ declare class LsResultPromise implements PromiseLike<LsResult> {
     onfulfilled?: ((value: LsResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2>;
-  filter(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry[]>;
+  filter(fn: (entry: FsLsEntry) => boolean): LsResultPromise;
   map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]>;
   find(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry | undefined>;
   forEach(fn: (entry: FsLsEntry) => void): Promise<void>;
@@ -176,7 +176,7 @@ declare class GlobResultPromise implements PromiseLike<GlobResult> {
     onfulfilled?: ((value: GlobResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2>;
-  filter(fn: (path: string) => boolean): Promise<string[]>;
+  filter(fn: (path: string) => boolean): GlobResultPromise;
   map<T>(fn: (path: string) => T): Promise<T[]>;
   find(fn: (path: string) => boolean): Promise<string | undefined>;
   forEach(fn: (path: string) => void): Promise<void>;

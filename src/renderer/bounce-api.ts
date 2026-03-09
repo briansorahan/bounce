@@ -4,7 +4,7 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
-import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise } from "./bounce-result.js";
+import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise, formatLsEntries } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 
 export { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise, GrainCollection };
@@ -1147,21 +1147,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   type WalkCatchAll = (filePath: string, type: FileTypeValue) => Promise<void>;
   type WalkHandlers = Partial<Record<FileTypeValue, (filePath: string) => Promise<void>>>;
 
-  function formatLsEntries(
-    entries: Array<{ name: string; type: string; isAudio: boolean }>,
-    truncated: boolean,
-    total: number,
-  ): string {
-    const lines = entries.map((e) => {
-      if (e.type === "directory") return `\x1b[34m${e.name}/\x1b[0m`;
-      if (e.isAudio) return `\x1b[32m${e.name}\x1b[0m`;
-      return e.name;
-    });
-    if (truncated) {
-      lines.push(`\x1b[33m... ${total - 200} more items\x1b[0m`);
-    }
-    return lines.join("\n");
-  }
 
   const fs = {
     FileType,

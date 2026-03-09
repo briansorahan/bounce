@@ -11,6 +11,23 @@ export class BounceResult {
   }
 }
 
+/** Formats FsLsEntry array into an ANSI-colored ls-style string. */
+export function formatLsEntries(
+  entries: Array<{ name: string; type: string; isAudio: boolean }>,
+  truncated: boolean,
+  total: number,
+): string {
+  const lines = entries.map((e) => {
+    if (e.type === "directory") return `\x1b[34m${e.name}/\x1b[0m`;
+    if (e.isAudio) return `\x1b[32m${e.name}\x1b[0m`;
+    return e.name;
+  });
+  if (truncated) {
+    lines.push(`\x1b[33m... ${total - 200} more items\x1b[0m`);
+  }
+  return lines.join("\n");
+}
+
 /**
  * Returned by display() and play().
  * Carries the audio hash so it can be passed directly to analysis / separation commands.
@@ -144,8 +161,13 @@ export class LsResultPromise implements PromiseLike<LsResult> {
     return this._promise.catch(onrejected);
   }
 
-  filter(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry[]> {
-    return this._promise.then((r) => r.filter(fn));
+  filter(fn: (entry: FsLsEntry) => boolean): LsResultPromise {
+    return new LsResultPromise(
+      this._promise.then((r) => {
+        const filtered = r.entries.filter(fn);
+        return new LsResult(formatLsEntries(filtered, false, filtered.length), filtered, filtered.length, false);
+      }),
+    );
   }
 
   map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]> {
@@ -189,8 +211,8 @@ export class GlobResultPromise implements PromiseLike<GlobResult> {
     return this._promise.catch(onrejected);
   }
 
-  filter(fn: (path: string) => boolean): Promise<string[]> {
-    return this._promise.then((r) => r.filter(fn));
+  filter(fn: (path: string) => boolean): GlobResultPromise {
+    return new GlobResultPromise(this._promise.then((r) => new GlobResult(r.paths.filter(fn))));
   }
 
   map<T>(fn: (path: string) => T): Promise<T[]> {
