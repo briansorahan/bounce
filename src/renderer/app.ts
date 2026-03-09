@@ -529,6 +529,7 @@ export class BounceApp {
 
     document.body.classList.add("waveform-visible");
     container.classList.add("active");
+    this.terminal.fit();
 
     if (!this.waveformVisualizer) {
       this.waveformVisualizer = new WaveformVisualizer("waveform-canvas");
