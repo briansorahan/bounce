@@ -42,6 +42,7 @@ export class BounceApp {
   private inputLines: string[] = [];
   private replEvaluator!: ReplEvaluator;
   private completion: TabCompletion;
+  private redrawVersion: number = 0;
 
   constructor() {
     this.terminal = new BounceTerminal();
@@ -147,11 +148,11 @@ export class BounceApp {
 
   private setupEventHandlers(): void {
     this.terminal.onData((data) => {
-      this.handleInput(data);
+      void this.handleInput(data);
     });
   }
 
-  private handleInput(data: string): void {
+  private async handleInput(data: string): Promise<void> {
     const code = data.charCodeAt(0);
 
     if (code === ControlCode.CTRL_R) {
@@ -187,7 +188,7 @@ export class BounceApp {
       if (completionAction !== null && completionAction.kind === "accept") {
         this.commandBuffer = completionAction.newBuffer;
         this.cursorPosition = completionAction.newCursorPosition;
-        this.redrawCommandLine();
+        void this.redrawCommandLine();
         return;
       }
       this.terminal.write("\r\n");
@@ -217,7 +218,7 @@ export class BounceApp {
           this.commandBuffer.slice(0, this.cursorPosition - 1) +
           this.commandBuffer.slice(this.cursorPosition);
         this.cursorPosition--;
-        this.redrawCommandLine();
+        void this.redrawCommandLine();
       }
     } else if (code === ControlCode.CTRL_A) {
       this.cursorPosition = 0;
@@ -238,7 +239,7 @@ export class BounceApp {
     } else if (code === ControlCode.CTRL_K) {
       if (this.cursorPosition < this.commandBuffer.length) {
         this.commandBuffer = this.commandBuffer.slice(0, this.cursorPosition);
-        this.redrawCommandLine();
+        void this.redrawCommandLine();
       }
     } else if (code === ControlCode.CTRL_P) {
       this.navigateHistory(1);
@@ -248,10 +249,24 @@ export class BounceApp {
       // ESC sequences (arrows, Alt+f, Alt+b)
       if (data === "\x1b[A") {
         // Up arrow
-        this.navigateHistory(1);
+        await this.completion.update(this.commandBuffer, this.cursorPosition);
+        const action = this.completion.handleUp();
+        if (action !== null) {
+          this.terminal.write(this.completion.eraseGhostText());
+          this.terminal.write(this.completion.ghostText());
+        } else {
+          this.navigateHistory(1);
+        }
       } else if (data === "\x1b[B") {
         // Down arrow
-        this.navigateHistory(-1);
+        await this.completion.update(this.commandBuffer, this.cursorPosition);
+        const action = this.completion.handleDown();
+        if (action !== null) {
+          this.terminal.write(this.completion.eraseGhostText());
+          this.terminal.write(this.completion.ghostText());
+        } else {
+          this.navigateHistory(-1);
+        }
       } else if (data === "\x1b[C") {
         // Right arrow
         if (this.cursorPosition < this.commandBuffer.length) {
@@ -277,12 +292,13 @@ export class BounceApp {
         // Unknown escape sequence - ignore it
       }
     } else if (data === "\t") {
+      await this.completion.update(this.commandBuffer, this.cursorPosition);
       const action = this.completion.handleTab();
       if (action === null) return;
       if (action.kind === "accept") {
         this.commandBuffer = action.newBuffer;
         this.cursorPosition = action.newCursorPosition;
-        this.redrawCommandLine();
+        await this.redrawCommandLine();
       } else {
         // Cycle multi-match list: erase old ghost text, render updated selection
         this.terminal.write(this.completion.eraseGhostText());
@@ -294,7 +310,7 @@ export class BounceApp {
         data +
         this.commandBuffer.slice(this.cursorPosition);
       this.cursorPosition += data.length;
-      this.redrawCommandLine();
+      await this.redrawCommandLine();
     }
   }
 
@@ -364,15 +380,19 @@ export class BounceApp {
       this.commandBuffer.slice(0, this.cursorPosition) +
       this.commandBuffer.slice(originalPosition);
 
-    this.redrawCommandLine();
+    void this.redrawCommandLine();
   }
 
-  private redrawCommandLine(): void {
+  private async redrawCommandLine(): Promise<void> {
+    const redrawVersion = ++this.redrawVersion;
     // Erase multi-match ghost lines below the prompt (single-match inline ghost
     // is on the same line and will be cleared by the \r\x1b[K below)
     this.terminal.write(this.completion.eraseGhostText());
     // Update completion state for the current buffer and cursor position
-    this.completion.update(this.commandBuffer, this.cursorPosition);
+    await this.completion.update(this.commandBuffer, this.cursorPosition);
+    if (redrawVersion !== this.redrawVersion) {
+      return;
+    }
     // Clear the current line and redraw with cursor at correct position
     this.terminal.write("\r\x1b[K");
     this.terminal.write(`\x1b[32m>\x1b[0m ${this.commandBuffer}`);
@@ -384,7 +404,7 @@ export class BounceApp {
   }
 
   private updateCursorPosition(): void {
-    this.redrawCommandLine();
+    void this.redrawCommandLine();
   }
 
   private navigateHistory(direction: number): void {
@@ -407,7 +427,7 @@ export class BounceApp {
       }
 
       this.cursorPosition = this.commandBuffer.length;
-      this.redrawCommandLine();
+      void this.redrawCommandLine();
     }
   }
 
@@ -680,7 +700,7 @@ export class BounceApp {
     this.matchedCommands = [];
     this.savedCommandBuffer = "";
     this.cursorPosition = this.commandBuffer.length;
-    this.redrawCommandLine();
+    void this.redrawCommandLine();
   }
 
   // History persistence methods

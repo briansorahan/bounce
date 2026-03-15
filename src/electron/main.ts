@@ -598,6 +598,8 @@ export interface WalkEntry {
   type: FileType;
 }
 
+type FsCompletionMethod = "ls" | "la" | "cd" | "walk";
+
 function direntToFileType(d: fs.Dirent): FileType {
   if (d.isFile()) return "file";
   if (d.isDirectory()) return "directory";
@@ -607,6 +609,47 @@ function direntToFileType(d: fs.Dirent): FileType {
   if (d.isFIFO()) return "fifo";
   if (d.isSocket()) return "socket";
   return "unknown";
+}
+
+function normalizeCompletionPath(inputPath: string): string {
+  return inputPath.replace(/\\/g, "/");
+}
+
+function splitCompletionInput(inputPath: string): { parentPath: string; namePrefix: string } {
+  if (inputPath === "~") {
+    return { parentPath: "~/", namePrefix: "" };
+  }
+
+  const lastSlash = Math.max(inputPath.lastIndexOf("/"), inputPath.lastIndexOf("\\"));
+  if (lastSlash === -1) {
+    return { parentPath: "", namePrefix: inputPath };
+  }
+
+  return {
+    parentPath: inputPath.slice(0, lastSlash + 1),
+    namePrefix: inputPath.slice(lastSlash + 1),
+  };
+}
+
+async function completeFsPath(method: FsCompletionMethod, inputPath: string): Promise<string[]> {
+  const normalizedInput = normalizeCompletionPath(inputPath);
+  const { parentPath, namePrefix } = splitCompletionInput(normalizedInput);
+  const resolvedParent = parentPath
+    ? resolvePath(parentPath)
+    : (settingsStore?.getCwd() ?? os.homedir());
+  const includeHidden =
+    method === "la" ||
+    method === "cd" ||
+    method === "walk" ||
+    namePrefix.startsWith(".");
+  const dirents = await fs.promises.readdir(resolvedParent, { withFileTypes: true });
+
+  return dirents
+    .filter((d) => d.isDirectory())
+    .filter((d) => includeHidden || !d.name.startsWith("."))
+    .filter((d) => d.name.startsWith(namePrefix))
+    .map((d) => `${parentPath}${d.name}/`)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 ipcMain.handle(
@@ -643,6 +686,10 @@ ipcMain.handle("fs-cd", async (_event, dirPath: string) => {
 });
 
 ipcMain.handle("fs-pwd", () => settingsStore?.getCwd() ?? os.homedir());
+
+ipcMain.handle("fs-complete-path", async (_event, method: FsCompletionMethod, inputPath: string) => {
+  return completeFsPath(method, inputPath);
+});
 
 ipcMain.handle("fs-glob", async (_event, pattern: string) => {
   const cwd = settingsStore?.getCwd() ?? os.homedir();
