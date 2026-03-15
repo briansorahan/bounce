@@ -41,6 +41,13 @@ Bounce is an experimental audio editor for exploring audio corpus analysis and r
 - When adding features, consider terminal visualization requirements
 - Audio analysis results should be displayable in the terminal
 
+### REPL Interface Consistency
+- Treat all REPL-exposed namespaces, functions, and returned types as user-facing interfaces
+- Every REPL-exposed object or namespace should provide a `help()` method with a short explanation and usage examples
+- Every custom object returned from an evaluated REPL expression should print a useful terminal summary when displayed
+- Returned summaries should emphasize the highest-value properties for that type (for example duration, channels, sample rate, feature dimensions, counts, or workflow-relevant next steps)
+- When planning or implementing REPL-facing features, include automated coverage for both `help()` output and returned-object display behavior using unit tests and/or Playwright tests
+
 ### Minimal Dependencies
 - Be conservative about adding new npm packages
 - FluCoMa is the primary audio analysis library
@@ -71,6 +78,8 @@ Bounce is an experimental audio editor for exploring audio corpus analysis and r
 
 ### Spec-Driven Development
 For any work beyond simple fixes (more than a couple lines), use the spec workflow documented in `.github/skills/create-new-spec/SKILL.md`.
+
+For REPL-facing work, specs should explicitly document the REPL interface contract: what gets a `help()` method, what each returned object prints to the terminal, and which unit and/or Playwright tests will verify those behaviors.
 
 **Simple changes that don't need specs:**
 - Typos and formatting fixes

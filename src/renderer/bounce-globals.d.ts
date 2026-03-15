@@ -1,11 +1,5 @@
-// Type declarations for the Bounce TypeScript REPL global functions.
-// These are injected into the REPL evaluation context by ReplEvaluator
-// and available to users without any import.
-
-interface PlayOptions {
-  loop?: boolean;
-  offset?: number;
-}
+// Type declarations for the Bounce TypeScript REPL globals.
+// These are injected into the REPL evaluation context by ReplEvaluator.
 
 interface AnalyzeOptions {
   threshold?: number;
@@ -15,11 +9,6 @@ interface AnalyzeOptions {
   metric?: number;
 }
 
-interface OnsetResult {
-  slices: number[];
-  count: number;
-}
-
 interface NmfOptions {
   components?: number;
   iterations?: number;
@@ -27,14 +16,6 @@ interface NmfOptions {
   hopSize?: number;
   windowSize?: number;
   seed?: number;
-}
-
-interface NmfResult {
-  components: number;
-  iterations: number;
-  converged: boolean;
-  bases: number[][];
-  activations: number[][];
 }
 
 interface SliceOptions {
@@ -69,67 +50,225 @@ interface NmfVisOptions {
 }
 
 interface MFCCOptions {
-  /** Number of cepstral coefficients per frame. Default: 13 */
   numCoeffs?: number;
-  /** Number of Mel filter bands. Default: 40 */
   numBands?: number;
-  /** Low frequency bound in Hz. Default: 20 */
   minFreq?: number;
-  /** High frequency bound in Hz. Default: 20000 */
   maxFreq?: number;
-  /** Analysis window size in samples. Default: 1024 */
   windowSize?: number;
-  /** FFT size in samples. Default: 1024 */
   fftSize?: number;
-  /** Hop size between frames in samples. Default: 512 */
   hopSize?: number;
-  /** Sample rate in Hz. Default: 44100 */
   sampleRate?: number;
 }
 
 interface GranularizeOptions {
-  /** Duration of each grain in milliseconds. Defaults to 20. */
   grainSize?: number;
-  /** Distance between grain start positions in ms. Defaults to grainSize (non-overlapping). */
   hopSize?: number;
-  /** Random offset (0–1) applied to grain starts as a fraction of hopSize. Defaults to 0. */
   jitter?: number;
-  /** Process from this time offset in ms. Defaults to 0. */
   startTime?: number;
-  /** Stop processing at this time offset in ms. Defaults to end of sample. */
   endTime?: number;
-  /** Normalize each grain's peak amplitude at playback time. Defaults to false. */
   normalize?: boolean;
-  /** Skip grains whose RMS falls below this dBFS level. Defaults to -60. Use -Infinity to disable. */
   silenceThreshold?: number;
-}
-
-interface Sample {
-  id: number;
-  hash: string;
-  file_path: string | null;
-  sample_rate: number;
-  channels: number;
-  duration: number;
-  data_size: number;
-  created_at: string;
 }
 
 declare class BounceResult {
   toString(): string;
 }
 
-declare class AudioResult extends BounceResult {
+type ReplValue<T> = T extends PromiseLike<infer U> ? U : T;
+
+declare class Sample extends BounceResult {
   readonly hash: string;
   readonly filePath: string | undefined;
   readonly sampleRate: number;
+  readonly channels: number;
   readonly duration: number;
+  readonly id: number | undefined;
+
+  help(): BounceResult;
+  play(): ReplValue<Promise<Sample>>;
+  stop(): BounceResult;
+  display(): ReplValue<Promise<Sample>>;
+  slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
+  sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
+  granularize(options?: GranularizeOptions): ReplValue<Promise<GrainCollection>>;
+  onsets(options?: AnalyzeOptions): ReplValue<Promise<OnsetFeature>>;
+  nmf(options?: NmfOptions): ReplValue<Promise<NmfFeature>>;
+  mfcc(options?: MFCCOptions): ReplValue<Promise<MfccFeature>>;
 }
 
 declare class FeatureResult extends BounceResult {
+  readonly source: Sample | undefined;
   readonly sourceHash: string;
   readonly featureHash: string;
   readonly featureType: string;
+  readonly options: Record<string, unknown> | undefined;
+  help(): BounceResult;
+}
+
+declare class OnsetFeature extends FeatureResult {
+  readonly slices: number[];
+  readonly count: number;
+  slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
+  playSlice(index?: number): ReplValue<Promise<Sample>>;
+}
+
+declare class NmfFeature extends FeatureResult {
+  readonly components: number | undefined;
+  readonly iterations: number | undefined;
+  readonly converged: boolean | undefined;
+  sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
+  playComponent(index?: number): ReplValue<Promise<Sample>>;
+}
+
+declare class MfccFeature extends FeatureResult {
+  readonly numFrames: number;
+  readonly numCoeffs: number;
+}
+
+interface SampleSummaryFeature {
+  sampleHash: string;
+  featureHash: string | undefined;
+  featureType: string;
+  featureCount: number;
+  filePath: string | undefined;
+  options: string | null;
+}
+
+declare class SampleListResult extends BounceResult {
+  readonly samples: Sample[];
+  readonly features: SampleSummaryFeature[];
+  readonly length: number;
+  help(): BounceResult;
+  [Symbol.iterator](): Iterator<Sample>;
+}
+
+declare class GrainCollection extends BounceResult {
+  length(): number;
+  forEach(callback: (grain: Sample, index: number) => void | Promise<void>): Promise<void>;
+  map<T>(callback: (grain: Sample, index: number) => T): T[];
+  filter(predicate: (grain: Sample, index: number) => boolean): GrainCollection;
+}
+
+interface SampleNamespace {
+  help(): BounceResult;
+  read: {
+    (pathOrHash: string): ReplValue<Promise<Sample>>;
+    help(): BounceResult;
+  };
+  list: {
+    (): ReplValue<Promise<SampleListResult>>;
+    help(): BounceResult;
+  };
+  current: {
+    (): ReplValue<Promise<Sample | null>>;
+    help(): BounceResult;
+  };
+}
+
+declare const sn: SampleNamespace;
+
+declare const nx: {
+  (options?: NxOptions): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const visualizeNmf: {
+  (options?: VisualizeNmfOptions): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const visualizeNx: {
+  (options?: VisualizeNxOptions): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const onsetSlice: {
+  (options?: OnsetSliceVisOptions): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const nmf: {
+  (options?: NmfVisOptions): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const clearDebug: {
+  (): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const debug: {
+  (limit?: number): ReplValue<Promise<BounceResult>>;
+  help(): BounceResult;
+};
+
+declare const help: {
+  (): BounceResult;
+  help(): BounceResult;
+};
+
+declare const clear: {
+  (): void;
+  help(): BounceResult;
+};
+
+declare const corpus: {
+  help(): BounceResult;
+  build(source?: string | Sample | Promise<Sample>, featureHashOverride?: string): ReplValue<Promise<BounceResult>>;
+  query(segmentIndex: number, k?: number): ReplValue<Promise<BounceResult>>;
+  resynthesize(queryIndices: number[]): ReplValue<Promise<BounceResult>>;
+};
+
+declare const enum FileType {
+  File = "file",
+  Directory = "directory",
+  Symlink = "symlink",
+  BlockDevice = "blockDevice",
+  CharDevice = "charDevice",
+  FIFO = "fifo",
+  Socket = "socket",
+  Unknown = "unknown",
+}
+
+type WalkCatchAll = (filePath: string, type: FileType) => Promise<void>;
+type WalkHandlers = Partial<Record<FileType, (filePath: string) => Promise<void>>>;
+
+interface FsApi {
+  readonly FileType: {
+    readonly File: "file";
+    readonly Directory: "directory";
+    readonly Symlink: "symlink";
+    readonly BlockDevice: "blockDevice";
+    readonly CharDevice: "charDevice";
+    readonly FIFO: "fifo";
+    readonly Socket: "socket";
+    readonly Unknown: "unknown";
+  };
+  help(): BounceResult;
+  ls: {
+    (dirPath?: string): ReplValue<LsResultPromise>;
+    help(): BounceResult;
+  };
+  la: {
+    (dirPath?: string): ReplValue<LsResultPromise>;
+    help(): BounceResult;
+  };
+  cd: {
+    (dirPath: string): ReplValue<Promise<BounceResult>>;
+    help(): BounceResult;
+  };
+  pwd: {
+    (): ReplValue<Promise<BounceResult>>;
+    help(): BounceResult;
+  };
+  glob: {
+    (pattern: string): ReplValue<GlobResultPromise>;
+    help(): BounceResult;
+  };
+  walk: {
+    (dirPath: string, handler: WalkCatchAll | WalkHandlers): ReplValue<Promise<BounceResult | undefined>>;
+    help(): BounceResult;
+  };
 }
 
 declare class LsResult extends BounceResult {
@@ -182,157 +321,6 @@ declare class GlobResultPromise implements PromiseLike<GlobResult> {
   forEach(fn: (path: string) => void): Promise<void>;
   some(fn: (path: string) => boolean): Promise<boolean>;
   every(fn: (path: string) => boolean): Promise<boolean>;
-}
-
-declare class GrainCollection extends BounceResult {
-  length(): number;
-  forEach(callback: (grain: AudioResult, index: number) => void | Promise<void>): Promise<void>;
-  map<T>(callback: (grain: AudioResult, index: number) => T): T[];
-  filter(predicate: (grain: AudioResult, index: number) => boolean): GrainCollection;
-}
-
-declare const display: {
-  (fileOrHash: string): Promise<AudioResult>;
-  hide(): void;
-  help(): BounceResult;
-};
-declare const play: {
-  (source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-  help(): BounceResult;
-};
-declare const stop: {
-  (): BounceResult;
-  help(): BounceResult;
-};
-declare const analyze: {
-  (source?: AudioResult | Promise<AudioResult> | AnalyzeOptions, options?: AnalyzeOptions): Promise<FeatureResult>;
-  help(): BounceResult;
-};
-declare const analyzeNmf: {
-  (source?: AudioResult | Promise<AudioResult> | NmfOptions, options?: NmfOptions): Promise<FeatureResult>;
-  help(): BounceResult;
-};
-declare const slice: {
-  (source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions, options?: SliceOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const sep: {
-  (source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions, options?: SepOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const nx: {
-  (options?: NxOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const list: {
-  (): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const playSlice: {
-  (index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-  help(): BounceResult;
-};
-declare const playComponent: {
-  (index?: number, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult>;
-  help(): BounceResult;
-};
-declare const visualizeNmf: {
-  (options?: VisualizeNmfOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const visualizeNx: {
-  (options?: VisualizeNxOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const onsetSlice: {
-  (options?: OnsetSliceVisOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const nmf: {
-  (options?: NmfVisOptions): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const clearDebug: {
-  (): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const debug: {
-  (limit?: number): Promise<BounceResult>;
-  help(): BounceResult;
-};
-declare const help: {
-  (): BounceResult;
-  help(): BounceResult;
-};
-declare const clear: {
-  (): void;
-  help(): BounceResult;
-};
-declare const analyzeMFCC: {
-  (sample: AudioResult | Promise<AudioResult>, options?: MFCCOptions): Promise<FeatureResult>;
-  help(): BounceResult;
-};
-declare const granularize: {
-  (source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions, options?: GranularizeOptions): Promise<GrainCollection>;
-  help(): BounceResult;
-};
-declare const corpus: {
-  help(): BounceResult;
-  build(source?: string | AudioResult | Promise<AudioResult>, featureHashOverride?: string): Promise<BounceResult>;
-  query(segmentIndex: number, k?: number): Promise<BounceResult>;
-  resynthesize(queryIndices: number[]): Promise<BounceResult>;
-};
-
-declare const enum FileType {
-  File        = "file",
-  Directory   = "directory",
-  Symlink     = "symlink",
-  BlockDevice = "blockDevice",
-  CharDevice  = "charDevice",
-  FIFO        = "fifo",
-  Socket      = "socket",
-  Unknown     = "unknown",
-}
-
-type WalkCatchAll = (filePath: string, type: FileType) => Promise<void>;
-type WalkHandlers = Partial<Record<FileType, (filePath: string) => Promise<void>>>;
-
-interface FsApi {
-  readonly FileType: {
-    readonly File: "file";
-    readonly Directory: "directory";
-    readonly Symlink: "symlink";
-    readonly BlockDevice: "blockDevice";
-    readonly CharDevice: "charDevice";
-    readonly FIFO: "fifo";
-    readonly Socket: "socket";
-    readonly Unknown: "unknown";
-  };
-  help(): BounceResult;
-  ls: {
-    (dirPath?: string): LsResultPromise;
-    help(): BounceResult;
-  };
-  la: {
-    (dirPath?: string): LsResultPromise;
-    help(): BounceResult;
-  };
-  cd: {
-    (dirPath: string): Promise<BounceResult>;
-    help(): BounceResult;
-  };
-  pwd: {
-    (): Promise<BounceResult>;
-    help(): BounceResult;
-  };
-  glob: {
-    (pattern: string): GlobResultPromise;
-    help(): BounceResult;
-  };
-  walk: {
-    (dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<BounceResult | undefined>;
-    help(): BounceResult;
-  };
 }
 
 declare const fs: FsApi;

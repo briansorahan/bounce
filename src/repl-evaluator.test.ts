@@ -4,6 +4,7 @@ import {
   promoteDeclarations,
   getTopLevelVarNames,
   checkReservedNames,
+  autoAwaitTopLevel,
   ReplEvaluator,
 } from "./renderer/repl-evaluator.js";
 
@@ -86,24 +87,24 @@ function testGetTopLevelVarNames() {
 function testCheckReservedNames() {
   // Should throw for Bounce globals
   assert.throws(
-    () => checkReservedNames("var display = 1;"),
-    /display.*Bounce built-in/,
-    "var display throws",
+    () => checkReservedNames("var sn = 1;"),
+    /sn.*Bounce built-in/,
+    "var sn throws",
   );
   assert.throws(
-    () => checkReservedNames("const play = () => {};"),
-    /play.*Bounce built-in/,
-    "const play throws",
+    () => checkReservedNames("const nx = () => {};"),
+    /nx.*Bounce built-in/,
+    "const nx throws",
   );
   assert.throws(
-    () => checkReservedNames("let stop = true;"),
-    /stop.*Bounce built-in/,
-    "let stop throws",
+    () => checkReservedNames("let help = true;"),
+    /help.*Bounce built-in/,
+    "let help throws",
   );
   assert.throws(
-    () => checkReservedNames("function analyze() {}"),
-    /analyze.*Bounce built-in/,
-    "function analyze throws",
+    () => checkReservedNames("function corpus() {}"),
+    /corpus.*Bounce built-in/,
+    "function corpus throws",
   );
   assert.throws(
     () => checkReservedNames("class clear {}"),
@@ -111,9 +112,9 @@ function testCheckReservedNames() {
     "class clear throws",
   );
   assert.throws(
-    () => checkReservedNames("const { list } = obj;"),
-    /list.*Bounce built-in/,
-    "destructured list throws",
+    () => checkReservedNames("const { sn } = obj;"),
+    /sn.*Bounce built-in/,
+    "destructured sn throws",
   );
   assert.throws(
     () => checkReservedNames("const fs = {};"),
@@ -135,6 +136,35 @@ function testCheckReservedNames() {
 }
 
 // ---------------------------------------------------------------------------
+// autoAwaitTopLevel
+// ---------------------------------------------------------------------------
+
+function testAutoAwaitTopLevel() {
+  assert.strictEqual(
+    autoAwaitTopLevel("var samp = sn.read('abc');"),
+    "var samp = await (sn.read('abc'));",
+    "variable initializers are awaited",
+  );
+  assert.strictEqual(
+    autoAwaitTopLevel("samp = sn.read('abc');"),
+    "samp = await (sn.read('abc'));",
+    "assignments are awaited",
+  );
+  assert.strictEqual(
+    autoAwaitTopLevel("sn.read('abc');\nsamp.play();"),
+    "await (sn.read('abc'));\nawait (samp.play());",
+    "expression statements are awaited",
+  );
+  assert.strictEqual(
+    autoAwaitTopLevel("if (ok) { sn.read('abc'); }"),
+    "if (ok) { sn.read('abc'); }",
+    "control statements are left untouched",
+  );
+
+  console.log("  autoAwaitTopLevel: all tests passed");
+}
+
+// ---------------------------------------------------------------------------
 // ReplEvaluator — integration tests (no actual window.electron needed
 // for pure logic tests; we mock transpileTypeScript as a pass-through)
 // ---------------------------------------------------------------------------
@@ -149,7 +179,25 @@ async function testReplEvaluator() {
     },
   };
 
-  const evaluator = new ReplEvaluator({});
+  const events: string[] = [];
+  const evaluator = new ReplEvaluator({
+    delayedValue: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      events.push("delayed");
+      return 7;
+    },
+    makeSample: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return {
+        hash: "sample-123",
+        play: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          events.push("played");
+          return "played";
+        },
+      };
+    },
+  });
 
   // Simple expression
   const r1 = await evaluator.evaluate("1 + 2");
@@ -175,7 +223,7 @@ async function testReplEvaluator() {
 
   // Transpile error surfaces
   await assert.rejects(
-    () => evaluator.evaluate("const display = 1;"),
+    () => evaluator.evaluate("const sn = 1;"),
     /Bounce built-in/,
     "reserved name error thrown",
   );
@@ -189,6 +237,24 @@ async function testReplEvaluator() {
   await evaluator.evaluate(multiLine);
   const r7 = await evaluator.evaluate("a + b");
   assert.strictEqual(r7, 30, "multi-line eval works");
+
+  const r8 = await evaluator.evaluate("delayedValue()");
+  assert.strictEqual(r8, 7, "single expressions are auto-awaited");
+
+  await evaluator.evaluate("let samp = makeSample();");
+  const r9 = await evaluator.evaluate("samp.hash");
+  assert.strictEqual(r9, "sample-123", "variable initializers store awaited values");
+
+  await evaluator.evaluate("samp = makeSample();");
+  const r10 = await evaluator.evaluate("samp.hash");
+  assert.strictEqual(r10, "sample-123", "assignments store awaited values");
+
+  await evaluator.evaluate("delayedValue();\nsamp.play();");
+  assert.deepStrictEqual(
+    events,
+    ["delayed", "delayed", "played"],
+    "top-level expression statements are awaited in order",
+  );
 
   console.log("  ReplEvaluator: all tests passed");
 
@@ -206,6 +272,7 @@ async function main() {
   testPromoteDeclarations();
   testGetTopLevelVarNames();
   testCheckReservedNames();
+  testAutoAwaitTopLevel();
   await testReplEvaluator();
   console.log("All repl-evaluator tests passed ✓");
 }
