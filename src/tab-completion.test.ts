@@ -7,18 +7,21 @@ type TestWindow = Window & {
   };
 };
 
-const testGlobal = globalThis as typeof globalThis & { window?: TestWindow };
-
 function mockFsCompletePath(
   fn: (method: "ls" | "la" | "cd" | "walk", inputPath: string) => Promise<string[]>,
 ): void {
-  testGlobal.window = {
-    ...(testGlobal.window ?? ({} as TestWindow)),
+  const currentWindow = (globalThis as { window?: { electron?: Partial<TestWindow["electron"]> } }).window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: {
+      ...(currentWindow ?? {}),
     electron: {
-      ...(testGlobal.window?.electron ?? ({} as TestWindow["electron"])),
+        ...(currentWindow?.electron ?? {}),
       fsCompletePath: fn,
     },
-  } as TestWindow;
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
