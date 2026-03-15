@@ -35,6 +35,7 @@ class HelpableResult extends BounceResult {
 export interface SampleMethodBindings {
   help: HelpFactory;
   play: () => Promise<Sample>;
+  loop: () => Promise<Sample>;
   stop: () => BounceResult;
   display: () => Promise<Sample>;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
@@ -50,6 +51,9 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
     help: () => defaultHelp(name),
     play: async () => {
       throw new Error(`${name} cannot be played in this context.`);
+    },
+    loop: async () => {
+      throw new Error(`${name} cannot be looped in this context.`);
     },
     stop: () => new BounceResult("\x1b[33mPlayback is not available for this object\x1b[0m"),
     display: async () => {
@@ -95,6 +99,10 @@ export class Sample extends HelpableResult {
 
   play(): Promise<Sample> {
     return this.bindings.play();
+  }
+
+  loop(): Promise<Sample> {
+    return this.bindings.loop();
   }
 
   stop(): BounceResult {

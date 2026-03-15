@@ -11,20 +11,20 @@ Replace Bounce's current top-level sample API with an object-oriented model cent
 Target usage:
 
 ```ts
-const samp = await sn.read("HASH");
-await samp.play();
-const onsets = await samp.onsets();
-await samp.slice();
-const nmf = await samp.nmf({ components: 4 });
-await samp.sep();
-const mfcc = await samp.mfcc();
+const samp = sn.read("HASH");
+samp.play();
+const onsets = samp.onsets();
+samp.slice();
+const nmf = samp.nmf({ components: 4 });
+samp.sep();
+const mfcc = samp.mfcc();
 ```
 
 Visualization remains top-level:
 
 ```ts
-await visualizeNmf();
-await onsetSlice();
+visualizeNmf();
+onsetSlice();
 ```
 
 ## Architecture
@@ -34,9 +34,9 @@ await onsetSlice();
 Introduce a top-level `sn` namespace, parallel to `fs`, with:
 
 - `sn.help()`
-- `sn.read(pathOrHash): Promise<Sample>`
-- `sn.list(): Promise<SampleListResult | BounceResult>`
-- `sn.current(): Sample | null` or `Promise<Sample | null>` depending on implementation convenience
+- `sn.read(pathOrHash): Sample`
+- `sn.list(): SampleListResult | BounceResult`
+- `sn.current(): Sample | null`
 
 The help system should be available uniformly across the new object model. At minimum:
 
@@ -57,15 +57,15 @@ Introduce a new `Sample` class as the primary domain object for persisted audio 
 Expected methods on `Sample`:
 
 - `help(): BounceResult`
-- `play(): Promise<Sample>`
+- `play(): Sample`
 - `stop(): BounceResult`
-- `display(): Promise<Sample>` if separate from `play()`, otherwise explicitly document `play()` as display+play
-- `slice(options?): Promise<SliceFeature | SliceCollection | BounceResult>` depending on final derived-object design
-- `sep(options?): Promise<NmfComponentCollection | BounceResult>`
-- `granularize(options?): Promise<GrainCollection>`
-- `onsets(options?): Promise<OnsetFeature>`
-- `nmf(options?): Promise<NmfFeature>`
-- `mfcc(options?): Promise<MfccFeature>`
+- `display(): Sample` if separate from `play()`, otherwise explicitly document `play()` as display+play
+- `slice(options?): SliceFeature | SliceCollection | BounceResult` depending on final derived-object design
+- `sep(options?): NmfComponentCollection | BounceResult`
+- `granularize(options?): GrainCollection`
+- `onsets(options?): OnsetFeature`
+- `nmf(options?): NmfFeature`
+- `mfcc(options?): MfccFeature`
 
 Introduce rich feature objects instead of keeping plain `FeatureResult` as the primary user-facing result:
 
@@ -85,7 +85,7 @@ Each feature object should carry:
 
 Examples of likely methods:
 
-- `OnsetFeature.slice(): Promise<SliceCollection | BounceResult>`
+- `OnsetFeature.slice(): SliceCollection | BounceResult`
 - `OnsetFeature.show(): never` is **not** planned because visualization stays top-level
 - `NmfFeature.sep(): Promise<NmfComponentCollection | BounceResult>`
 - collection/result accessors for derived samples where appropriate
@@ -226,17 +226,17 @@ This spec assumes **immediate replacement** of the old top-level sample API:
 
 Manual verification checklist:
 
-- `const samp = await sn.read("hash")` returns a usable object
+- `const samp = sn.read("hash")` returns a usable object
 - evaluating `sn` directly prints a useful summary instead of crashing
 - evaluating `samp` directly prints a useful summary instead of crashing
-- `await samp.play()` loads waveform and plays audio
+- `samp.play()` loads waveform and plays audio
 - `samp.stop()` stops playback
-- `await samp.onsets()` returns an `OnsetFeature`
+- `samp.onsets()` returns an `OnsetFeature`
 - evaluating an `OnsetFeature`, `NmfFeature`, or `MfccFeature` directly prints useful summary info
 - `sn.help()`, `samp.help()`, and each feature object's `help()` return useful guidance
-- `await samp.nmf()` returns an `NmfFeature`
-- `await samp.mfcc()` returns an `MfccFeature`
-- `await samp.slice()` and `await samp.sep()` still produce usable derived audio workflows
+- `samp.nmf()` returns an `NmfFeature`
+- `samp.mfcc()` returns an `MfccFeature`
+- `samp.slice()` and `samp.sep()` still produce usable derived audio workflows
 - top-level visualization utilities still work with the shared current-audio context
 - removed globals no longer appear in help or completion
 

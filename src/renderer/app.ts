@@ -56,6 +56,7 @@ export class BounceApp {
     });
     this.replEvaluator = new ReplEvaluator(bounceApi);
     this.completion.setApi(bounceApi);
+    this.completion.setBindingsProvider(() => this.replEvaluator.getCompletionBindings());
 
     this.setupEventHandlers();
     this.loadHistoryFromStorage().catch((err) => {

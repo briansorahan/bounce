@@ -16,14 +16,18 @@ function makeTerminal(): { lines: string[]; cleared: boolean } & object {
 function makeAudioManager() {
   let currentAudio: Record<string, unknown> | null = null;
   let currentSlices: number[] | null = null;
+  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean }> = [];
   return {
     getCurrentAudio: () => currentAudio,
     setCurrentAudio: (audio: Record<string, unknown>) => { currentAudio = audio; },
     getCurrentSlices: () => currentSlices,
     setCurrentSlices: (slices: number[]) => { currentSlices = slices; },
     clearSlices: () => { currentSlices = null; },
-    playAudio: async () => {},
+    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false) => {
+      playCalls.push({ audioData, sampleRate, loop });
+    },
     stopAudio: () => {},
+    getPlayCalls: () => playCalls,
   };
 }
 
@@ -144,10 +148,17 @@ async function main() {
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
   assert.equal(waveformUpdated, true, "sn.read updates waveform");
   assert.ok(sample.help().toString().includes("sample.onsets()"));
+  assert.ok(sample.help().toString().includes("sample.loop()"));
   assert.ok(sample.toString().includes("Loaded"));
 
   const played = await sample.play();
   assert.ok(played instanceof Sample, "sample.play returns Sample");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loop, false, "sample.play uses non-looping playback");
+
+  const looped = await sample.loop();
+  assert.ok(looped instanceof Sample, "sample.loop returns Sample");
+  assert.ok(looped.toString().includes("Looping"), "sample.loop indicates looping playback");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loop, true, "sample.loop uses looping playback");
 
   const stopped = sample.stop();
   assert.ok(stopped.toString().includes("stopped"));

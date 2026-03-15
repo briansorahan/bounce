@@ -6,9 +6,9 @@
 
 ## Problem Statement
 
-Bounce's REPL currently exposes sample-oriented behavior through a mix of top-level functions and typed result objects. Typical usage today looks like `await play("kick.wav")`, `await analyze()`, `await slice()`, or `await sep(audio)`. That works, but the API shape is inconsistent with the newer `fs` namespace, and it forces the user to think in terms of hashes and ambient "current audio" rather than persistent sample objects.
+Bounce's REPL currently exposes sample-oriented behavior through a mix of top-level functions and typed result objects. Typical usage today looks like `play("kick.wav")`, `analyze()`, `slice()`, or `sep(audio)`. That works, but the API shape is inconsistent with the newer `fs` namespace, and it forces the user to think in terms of hashes and ambient "current audio" rather than persistent sample objects.
 
-The proposed direction is to move toward an object-oriented sample API that starts from a top-level namespace, e.g. `const samp = await sn.read("HASH")`, and then exposes behavior on the returned object: `await samp.play()`, `samp.stop()`, `await samp.slice()`, `await samp.sep()`, `await samp.granularize()`, `await samp.nmf()`, `await samp.mfcc()`, and `await samp.onsets()`.
+The proposed direction is to move toward an object-oriented sample API that starts from a top-level namespace, e.g. `const samp = sn.read("HASH")`, and then exposes behavior on the returned object: `samp.play()`, `samp.stop()`, `samp.slice()`, `samp.sep()`, `samp.granularize()`, `samp.nmf()`, `samp.mfcc()`, and `samp.onsets()`.
 
 ## Background
 
@@ -47,8 +47,8 @@ That means the refactor is not starting from zero. The system already has stable
 Current composition is function-based:
 
 - `sep(play("..."))`
-- `const a = await display("loop.wav"); await analyzeMFCC(a)`
-- `await analyze(); await slice(); await playSlice(0)`
+- `const a = display("loop.wav"); analyzeMFCC(a)`
+- `analyze(); slice(); playSlice(0)`
 
 This is flexible, but less discoverable than instance methods and still exposes workflow seams like "use current audio if omitted" or "pass sample hash as the first argument."
 
@@ -136,10 +136,10 @@ Bounce is REPL-first, so discoverability matters as much as type correctness. A 
 - `sn.read.help()` should explain how samples are acquired
 - `Sample` methods should each have `.help()` where practical, or at minimum be discoverable through typings/tab completion
 - help text should show end-to-end examples like:
-  - `const samp = await sn.read("hash")`
-  - `await samp.play()`
-  - `const f = await samp.onsets()`
-  - `await samp.slice()`
+  - `const samp = sn.read("hash")`
+  - `samp.play()`
+  - `const f = samp.onsets()`
+  - `samp.slice()`
 
 One caution: instance methods are harder to describe in static globals help than top-level functions, so the REPL completion/help system will need to expose method members well.
 

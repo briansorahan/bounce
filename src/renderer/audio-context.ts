@@ -37,6 +37,7 @@ export class AudioManager {
   private sourceNode: AudioBufferSourceNode | null = null;
   private startTime: number = 0;
   private isPlaying: boolean = false;
+  private isLooping: boolean = false;
   private onPlaybackUpdate: ((position: number) => void) | null = null;
   private animationFrameId: number | null = null;
 
@@ -48,7 +49,7 @@ export class AudioManager {
     this.onPlaybackUpdate = callback;
   }
 
-  async playAudio(audioData: Float32Array, sampleRate: number): Promise<void> {
+  async playAudio(audioData: Float32Array, sampleRate: number, loop = false): Promise<void> {
     this.stopAudio();
 
     if (!this.audioContext) {
@@ -72,6 +73,7 @@ export class AudioManager {
 
     this.sourceNode = this.audioContext.createBufferSource();
     this.sourceNode.buffer = buffer;
+    this.sourceNode.loop = loop;
     this.sourceNode.connect(this.audioContext.destination);
 
     this.sourceNode.onended = () => {
@@ -87,6 +89,7 @@ export class AudioManager {
 
     this.startTime = this.audioContext.currentTime;
     this.isPlaying = true;
+    this.isLooping = loop;
     this.sourceNode.start(0);
 
     this.updatePlaybackPosition();
@@ -98,7 +101,11 @@ export class AudioManager {
     }
 
     const elapsed = this.audioContext.currentTime - this.startTime;
-    const samplePosition = elapsed * this.currentAudio.sampleRate;
+    const totalSamples = this.currentAudio.audioData.length;
+    let samplePosition = elapsed * this.currentAudio.sampleRate;
+    if (this.isLooping && totalSamples > 0) {
+      samplePosition %= totalSamples;
+    }
 
     if (this.onPlaybackUpdate) {
       this.onPlaybackUpdate(samplePosition);
@@ -120,6 +127,7 @@ export class AudioManager {
     }
 
     this.isPlaying = false;
+    this.isLooping = false;
 
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);

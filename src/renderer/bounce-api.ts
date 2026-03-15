@@ -89,6 +89,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "",
       "  Methods:",
       "    sample.play()",
+      "    sample.loop()",
       "    sample.stop()",
       "    sample.display()",
       "    sample.onsets()",
@@ -178,6 +179,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       {
         help: (): BounceResult => sampleHelpText(bound),
         play: () => play(bound),
+        loop: () => loop(bound),
         stop: () => stop(),
         display: () => display(bound.hash),
         slice: (options) => slice(bound, options),
@@ -307,7 +309,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     return new BounceResult("\x1b[32mPlayback stopped\x1b[0m");
   }
 
-  async function play(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+  async function startPlayback(
+    source: string | Sample | Promise<Sample> | undefined,
+    loopPlayback: boolean,
+  ): Promise<Sample> {
     let loadedSample: Sample | undefined;
 
     if (typeof source === "string") {
@@ -326,7 +331,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
     }
 
-    await audioManager.playAudio(audio.audioData, audio.sampleRate);
+    await audioManager.playAudio(audio.audioData, audio.sampleRate, loopPlayback);
     const activeSample =
       loadedSample ??
       bindSample({
@@ -348,9 +353,17 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       },
       [
         loadedSample ? loadedSample.toString() : makeSampleDisplayText(activeSample),
-        `\x1b[32mPlaying: ${sampleLabel(activeSample.filePath, activeSample.hash)}\x1b[0m`,
+        `\x1b[32m${loopPlayback ? "Looping" : "Playing"}: ${sampleLabel(activeSample.filePath, activeSample.hash)}\x1b[0m`,
       ].join("\n"),
     );
+  }
+
+  async function play(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+    return startPlayback(source, false);
+  }
+
+  async function loop(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+    return startPlayback(source, true);
   }
 
   async function analyze(
@@ -1169,7 +1182,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  playback, analysis, resynthesis, and help.",
         "",
         "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
-        "           samp.play()",
+        "           samp.loop()",
         "           const feature = samp.nmf()",
         "           feature.sep()",
       ].join("\n")),
@@ -1221,7 +1234,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "\x1b[1;36m── Sample API ──\x1b[0m",
         "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .help()",
-        "  \x1b[33mSample\x1b[0m                           .play() .stop() .display() .onsets() .nmf() .mfcc()",
+        "  \x1b[33mSample\x1b[0m                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()",
         "                                   .slice() .sep() .granularize() .help()",
         "  \x1b[33mnx(options)\x1b[0m                      NMF cross-synthesis",
         "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",

@@ -108,6 +108,45 @@ async function testDotCompletionPartialPrototypeMethod() {
   }
 }
 
+async function testDotCompletionUsesScopeVariableBindings() {
+  class SampleStub {
+    help() {}
+    play() {}
+    display() {}
+    onsets() {}
+  }
+
+  const c = new TabCompletion();
+  c.setBindingsProvider(() => ({
+    contact_mic_on_plate: new SampleStub(),
+  }));
+  await c.update("contact_mic_on_plate.pl", 23);
+  assert.strictEqual(c.matchCount, 1);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("ay()"));
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "contact_mic_on_plate.play()");
+  }
+}
+
+async function testDotCompletionPrefersMergedBindingsOverStaticApiOnly() {
+  class SampleStub {
+    play() {}
+  }
+
+  const c = new TabCompletion();
+  c.setApi({ sn: { help() {} } });
+  c.setBindingsProvider(() => ({
+    sn: { help() {} },
+    sample_with_underscore: new SampleStub(),
+  }));
+  await c.update("sample_with_underscore.", 23);
+  assert.strictEqual(c.matchCount, 1);
+  assert.ok(c.ghostText().includes("play()"));
+}
+
 async function testFsCompletionStillScoped() {
   const c = new TabCompletion();
   c.setApi({
@@ -147,6 +186,8 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["reset clears state", testResetClearsState],
   ["dot completion uses prototype methods", testDotCompletionUsesPrototypeMethods],
   ["dot completion partial prototype method", testDotCompletionPartialPrototypeMethod],
+  ["dot completion uses scope variable bindings", testDotCompletionUsesScopeVariableBindings],
+  ["dot completion uses merged bindings", testDotCompletionPrefersMergedBindingsOverStaticApiOnly],
   ["fs completion still scoped", testFsCompletionStillScoped],
   ["path completion scopes to fs string", testPathCompletionScopesToFsString],
 ];
