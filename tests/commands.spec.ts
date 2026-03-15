@@ -15,7 +15,7 @@ async function sendCommand(window: any, command: string) {
 }
 
 test.describe("Audio Commands", () => {
-  test("display command should load and visualize WAV file", async () => {
+  test("sn.read should load and visualize WAV file", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -41,7 +41,7 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `await display("${testFile}")`);
+    await sendCommand(window, `sn.read("${testFile}")`);
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,
@@ -50,7 +50,7 @@ test.describe("Audio Commands", () => {
     await electronApp.close();
   });
 
-  test("display command should reject non-audio files", async () => {
+  test("sn.read should reject non-audio files", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -67,7 +67,7 @@ test.describe("Audio Commands", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, 'await display("file.txt")');
+    await sendCommand(window, 'sn.read("file.txt")');
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "Unsupported file format",
@@ -77,7 +77,7 @@ test.describe("Audio Commands", () => {
     await electronApp.close();
   });
 
-  test("play command should load file if not already displayed", async () => {
+  test("sample.play should load file if not already displayed", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -103,7 +103,8 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `await play("${testFile}")`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.play()");
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,
@@ -112,7 +113,7 @@ test.describe("Audio Commands", () => {
     await electronApp.close();
   });
 
-  test("stop command should stop playback", async () => {
+  test("sample.stop should stop playback", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -138,9 +139,9 @@ test.describe("Audio Commands", () => {
       throw new Error(`Test file not found: ${testFile}`);
     }
 
-    await sendCommand(window, `await play("${testFile}")`);
-
-    await sendCommand(window, "stop()");
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.play()");
+    await sendCommand(window, "samp.stop()");
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "Playback stopped",
@@ -169,7 +170,7 @@ test.describe("Audio Commands", () => {
 
     await sendCommand(window, "help()");
 
-    await expect(window.locator(".xterm-rows")).toContainText("play", {
+    await expect(window.locator(".xterm-rows")).toContainText("sn", {
       timeout: 5000,
     });
 

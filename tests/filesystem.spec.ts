@@ -188,13 +188,13 @@ test.describe("Filesystem utilities", () => {
     await electronApp.close();
   });
 
-  test("display() resolves relative path against cwd", async () => {
+  test("sn.read() resolves relative path against cwd", async () => {
     const srcWav = path.join(
       __dirname,
       "../flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
     );
     if (!fs.existsSync(srcWav)) {
-      console.log("Skipping relative-path display test: test WAV not found");
+      console.log("Skipping relative-path sn.read test: test WAV not found");
       return;
     }
 
@@ -206,8 +206,8 @@ test.describe("Filesystem utilities", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `await fs.cd(${JSON.stringify(tmpDir)})`);
-    await sendCommand(window, `await display("test.wav")`);
+    await sendCommand(window, `fs.cd(${JSON.stringify(tmpDir)})`);
+    await sendCommand(window, `sn.read("test.wav")`);
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,

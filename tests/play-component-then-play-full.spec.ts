@@ -12,6 +12,16 @@ const electronPath = require("electron") as string;
 let electronApp: ElectronApplication;
 let window: Page;
 
+async function sendCommand(command: string) {
+  await window.evaluate((cmd: string) => {
+    const executeCommand = (window as unknown as { __bounceExecuteCommand?: (source: string) => Promise<void> }).__bounceExecuteCommand;
+    if (!executeCommand) {
+      throw new Error("Execute command function not exposed");
+    }
+    return executeCommand(cmd);
+  }, command);
+}
+
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     executablePath: electronPath,
@@ -39,52 +49,23 @@ test.afterAll(async () => {
 test.describe("Play Component Then Play Full", () => {
   test("should reload full audio after playing component", async () => {
     const testAudioPath = path.join(__dirname, "test-multi-viz.wav");
+    const expectedHash = await window.evaluate(async (audioPath) => {
+      const audio = await window.electron.readAudioFile(audioPath);
+      return audio.hash;
+    }, testAudioPath);
 
-    // Type commands directly in terminal (more realistic test)
-    const terminal = await window.locator(".xterm-screen");
-    
-    // Load audio
-    await window.keyboard.type(`await play("${testAudioPath}")`);
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(2000);
+    await sendCommand(`const samp = sn.read("${testAudioPath}")`);
+    await sendCommand("const feature = samp.nmf({ components: 3 })");
+    await window.evaluate(async (hash) => {
+      await window.electron.sep([hash]);
+    }, expectedHash);
+    await sendCommand("feature.playComponent(1)");
+    await sendCommand("samp.play()");
+    await sendCommand("const current = sn.current()");
+    await sendCommand("current?.hash");
 
-    // Get the hash from output
-    const terminalText = await terminal.textContent();
-    const hashMatch = terminalText?.match(/Hash: ([0-9a-f]{8})/);
-    expect(hashMatch).toBeTruthy();
-    const sampleHash = hashMatch![1];
-
-    // Analyze with NMF
-    await window.keyboard.type("await analyzeNmf({ components: 3 })");
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(3000);
-
-    // Sep command
-    await window.keyboard.type(`sep ${sampleHash}`);
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(1000);
-
-    // Play component 1
-    await window.keyboard.type(`play-component ${sampleHash} 1`);
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(2000);
-
-    // Get current audio data length (should be modulated component)
-    const componentAudioLength = await window.evaluate(() => {
-      // Access through the app's audioManager if possible
-      return null; // We'll check via terminal output
+    await expect(window.locator(".xterm-rows")).toContainText(expectedHash, {
+      timeout: 5000,
     });
-
-    // Now play full audio by hash
-    await window.keyboard.type(`await play("${sampleHash}")`);
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(2000);
-
-    // Check terminal output - should say "Loaded" not just "Playing"
-    const terminalAfterPlay = await terminal.textContent();
-    
-    // If it reloaded, we should see "Loaded:" message
-    // If it just replayed cached, we'd only see "Playing:"
-    expect(terminalAfterPlay).toContain("Loaded:");
   });
 });
