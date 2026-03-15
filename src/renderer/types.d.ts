@@ -217,6 +217,10 @@ interface Window {
     fsLa: (dirPath?: string) => Promise<FsLsResult>;
     fsCd: (dirPath: string) => Promise<string>;
     fsPwd: () => Promise<string>;
+    fsCompletePath: (
+      method: "ls" | "la" | "cd" | "walk",
+      inputPath: string,
+    ) => Promise<string[]>;
     fsGlob: (pattern: string) => Promise<string[]>;
     fsWalk: (dirPath: string) => Promise<FsWalkResult>;
   };

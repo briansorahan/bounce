@@ -90,6 +90,8 @@ contextBridge.exposeInMainWorld("electron", {
   fsLa: (dirPath?: string) => ipcRenderer.invoke("fs-ls", dirPath, true),
   fsCd: (dirPath: string) => ipcRenderer.invoke("fs-cd", dirPath),
   fsPwd: (): Promise<string> => ipcRenderer.invoke("fs-pwd"),
+  fsCompletePath: (method: "ls" | "la" | "cd" | "walk", inputPath: string): Promise<string[]> =>
+    ipcRenderer.invoke("fs-complete-path", method, inputPath),
   fsGlob: (pattern: string): Promise<string[]> =>
     ipcRenderer.invoke("fs-glob", pattern),
   fsWalk: (dirPath: string) => ipcRenderer.invoke("fs-walk", dirPath),

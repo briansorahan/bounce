@@ -1,51 +1,69 @@
 import * as assert from "assert";
 import { TabCompletion } from "./renderer/tab-completion.js";
 
+type TestWindow = Window & {
+  electron: Window["electron"] & {
+    fsCompletePath: (method: "ls" | "la" | "cd" | "walk", inputPath: string) => Promise<string[]>;
+  };
+};
+
+const testGlobal = globalThis as typeof globalThis & { window?: TestWindow };
+
+function mockFsCompletePath(
+  fn: (method: "ls" | "la" | "cd" | "walk", inputPath: string) => Promise<string[]>,
+): void {
+  testGlobal.window = {
+    ...(testGlobal.window ?? ({} as TestWindow)),
+    electron: {
+      ...(testGlobal.window?.electron ?? ({} as TestWindow["electron"])),
+      fsCompletePath: fn,
+    },
+  } as TestWindow;
+}
+
 // ---------------------------------------------------------------------------
 // update() — state transitions
 // ---------------------------------------------------------------------------
 
 async function testIdleOnEmptyBuffer() {
   const c = new TabCompletion();
-  c.update("", 0);
+  await c.update("", 0);
   assert.strictEqual(c.matchCount, 0);
 }
 
 async function testIdleOnNoMatch() {
   const c = new TabCompletion();
-  c.update("xyz", 3);
+  await c.update("xyz", 3);
   assert.strictEqual(c.matchCount, 0);
 }
 
 async function testSingleMatchDisplay() {
   const c = new TabCompletion();
-  c.update("dis", 3);
+  await c.update("dis", 3);
   assert.strictEqual(c.matchCount, 1);
 }
 
 async function testMultiMatchAnalyze() {
   const c = new TabCompletion();
-  c.update("an", 2);
+  await c.update("an", 2);
   assert.strictEqual(c.matchCount, 3);
 }
 
 async function testAllMatchOnSingleChar() {
-  // "p" matches play, playComponent, playSlice — at least 3
   const c = new TabCompletion();
-  c.update("p", 1);
+  await c.update("p", 1);
   assert.ok(c.matchCount >= 3, `expected >=3 matches for "p", got ${c.matchCount}`);
 }
 
 async function testNoCompletionWhenCursorNotAtEnd() {
   const c = new TabCompletion();
-  // cursor is in the middle of the buffer — should not complete
-  c.update("display", 2);
+  await c.update("display", 2);
   assert.strictEqual(c.matchCount, 0);
 }
 
 async function testNoCompletionAfterOpenParen() {
   const c = new TabCompletion();
-  c.update("display(", 8);
+  await c.update("display(", 8);
   assert.strictEqual(c.matchCount, 0);
 }
 
@@ -55,31 +73,72 @@ async function testNoCompletionAfterOpenParen() {
 
 async function testHandleTabSingleMatchReturnsAccept() {
   const c = new TabCompletion();
-  c.update("dis", 3);
+  await c.update("dis", 3);
   const action = c.handleTab();
   assert.ok(action !== null);
   assert.strictEqual(action!.kind, "accept");
   if (action!.kind === "accept") {
     assert.strictEqual(action.newBuffer, "display()");
-    assert.strictEqual(action.newCursorPosition, 8); // between parens: "display(" is 8 chars
+    assert.strictEqual(action.newCursorPosition, 8);
   }
 }
 
 async function testHandleTabMultiMatchReturnsRedrawAndCycles() {
   const c = new TabCompletion();
-  c.update("an", 2);
-  // First Tab — advances selectedIndex from 0 to 1
+  await c.update("an", 2);
   const action1 = c.handleTab();
   assert.ok(action1 !== null);
   assert.strictEqual(action1!.kind, "redraw");
-  // Second Tab — wraps back to 0
   const action2 = c.handleTab();
   assert.strictEqual(action2!.kind, "redraw");
 }
 
+async function testHandleTabContinuesCyclingAfterRefresh() {
+  const c = new TabCompletion();
+  await c.update("an", 2);
+  c.handleTab(); // selectedIndex -> 1
+  await c.update("an", 2); // simulate app refresh before next Tab
+  c.handleTab(); // should advance to 2, not reset back to 1
+  const action = c.handleEnter();
+  assert.ok(action !== null);
+  assert.strictEqual(action!.kind, "accept");
+  if (action!.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "analyzeNmf()");
+    assert.strictEqual(action.newCursorPosition, 11);
+  }
+}
+
+async function testHandleUpCyclesBackwardThroughMatches() {
+  const c = new TabCompletion();
+  await c.update("an", 2);
+  const action = c.handleUp();
+  assert.ok(action !== null);
+  assert.strictEqual(action!.kind, "redraw");
+  const accept = c.handleEnter();
+  assert.ok(accept !== null && accept.kind === "accept");
+  if (accept!.kind === "accept") {
+    assert.strictEqual(accept.newBuffer, "analyzeNmf()");
+    assert.strictEqual(accept.newCursorPosition, 11);
+  }
+}
+
+async function testHandleDownCyclesForwardThroughMatches() {
+  const c = new TabCompletion();
+  await c.update("an", 2);
+  const action = c.handleDown();
+  assert.ok(action !== null);
+  assert.strictEqual(action!.kind, "redraw");
+  const accept = c.handleEnter();
+  assert.ok(accept !== null && accept.kind === "accept");
+  if (accept!.kind === "accept") {
+    assert.strictEqual(accept.newBuffer, "analyzeMFCC()");
+    assert.strictEqual(accept.newCursorPosition, 12);
+  }
+}
+
 async function testHandleTabIdleReturnsNull() {
   const c = new TabCompletion();
-  c.update("xyz", 3);
+  await c.update("xyz", 3);
   const action = c.handleTab();
   assert.strictEqual(action, null);
 }
@@ -90,12 +149,11 @@ async function testHandleTabIdleReturnsNull() {
 
 async function testHandleEnterMultiMatchReturnsAccept() {
   const c = new TabCompletion();
-  c.update("an", 2);
+  await c.update("an", 2);
   const action = c.handleEnter();
   assert.ok(action !== null);
   assert.strictEqual(action!.kind, "accept");
   if (action!.kind === "accept") {
-    // selectedIndex is 0 at first — first sorted match of "an" is "analyze"
     assert.strictEqual(action.newBuffer, "analyze()");
     assert.strictEqual(action.newCursorPosition, 8);
   }
@@ -103,8 +161,8 @@ async function testHandleEnterMultiMatchReturnsAccept() {
 
 async function testHandleEnterMultiMatchAfterTabCycle() {
   const c = new TabCompletion();
-  c.update("an", 2);
-  c.handleTab(); // advance to index 1 → "analyzeMFCC" (alphabetical: analyze, analyzeMFCC, analyzeNmf)
+  await c.update("an", 2);
+  c.handleTab();
   const action = c.handleEnter();
   assert.ok(action !== null);
   assert.strictEqual(action!.kind, "accept");
@@ -116,14 +174,14 @@ async function testHandleEnterMultiMatchAfterTabCycle() {
 
 async function testHandleEnterSingleMatchReturnsNull() {
   const c = new TabCompletion();
-  c.update("dis", 3);
+  await c.update("dis", 3);
   const action = c.handleEnter();
   assert.strictEqual(action, null);
 }
 
 async function testHandleEnterIdleReturnsNull() {
   const c = new TabCompletion();
-  c.update("", 0);
+  await c.update("", 0);
   const action = c.handleEnter();
   assert.strictEqual(action, null);
 }
@@ -134,25 +192,23 @@ async function testHandleEnterIdleReturnsNull() {
 
 async function testGhostTextEmptyOnIdle() {
   const c = new TabCompletion();
-  c.update("xyz", 3);
+  await c.update("xyz", 3);
   assert.strictEqual(c.ghostText(), "");
 }
 
 async function testGhostTextSingleMatchContainsDimSuffix() {
   const c = new TabCompletion();
-  c.update("dis", 3);
+  await c.update("dis", 3);
   const ghost = c.ghostText();
-  // Must contain the dim ANSI code and the suffix
   assert.ok(ghost.includes("\x1b[90m"), "expected dim ANSI code");
   assert.ok(ghost.includes("play()"), "expected suffix 'play()'");
-  // Must use DEC save/restore cursor
   assert.ok(ghost.includes("\x1b7"), "expected \\x1b7 save cursor");
   assert.ok(ghost.includes("\x1b8"), "expected \\x1b8 restore cursor");
 }
 
 async function testGhostTextMultiMatchContainsBothCandidates() {
   const c = new TabCompletion();
-  c.update("an", 2);
+  await c.update("an", 2);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("analyze()"), "expected analyze()");
   assert.ok(ghost.includes("analyzeNmf()"), "expected analyzeNmf()");
@@ -162,8 +218,7 @@ async function testGhostTextMultiMatchContainsBothCandidates() {
 
 async function testGhostTextMultiMatchHighlightsSelected() {
   const c = new TabCompletion();
-  c.update("an", 2);
-  // selectedIndex = 0 → "analyze" is highlighted (bright cyan)
+  await c.update("an", 2);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("\x1b[1;36m"), "expected bright cyan for selected");
   assert.ok(ghost.includes("\x1b[90m"), "expected dim for unselected");
@@ -171,16 +226,13 @@ async function testGhostTextMultiMatchHighlightsSelected() {
 
 async function testGhostTextUpdatesAfterTabCycle() {
   const c = new TabCompletion();
-  c.update("an", 2);
-  c.handleTab(); // advance to index 1 → analyzeNmf selected
+  await c.update("an", 2);
+  c.handleTab();
   const ghost = c.ghostText();
-  // "analyzeNmf" line should be bright cyan, "analyze" dim
   const analyzeNmfIdx = ghost.indexOf("analyzeNmf()");
   const analyzeIdx = ghost.indexOf("analyze()");
-  // analyzeNmf's highlight should precede its text
   const cyanIdx = ghost.lastIndexOf("\x1b[1;36m", analyzeNmfIdx);
   assert.ok(cyanIdx !== -1 && cyanIdx < analyzeNmfIdx, "analyzeNmf should be highlighted");
-  // The analyze() line should be dim (not highlighted)
   const dimBeforeAnalyze = ghost.lastIndexOf("\x1b[90m", analyzeIdx);
   assert.ok(dimBeforeAnalyze !== -1 && dimBeforeAnalyze < analyzeIdx, "analyze should be dim");
 }
@@ -191,17 +243,16 @@ async function testGhostTextUpdatesAfterTabCycle() {
 
 async function testEraseGhostTextEmptyWhenNoGhostLines() {
   const c = new TabCompletion();
-  c.update("dis", 3);
-  c.ghostText(); // single match — ghostLines stays 0
+  await c.update("dis", 3);
+  c.ghostText();
   assert.strictEqual(c.eraseGhostText(), "", "inline ghost has no erase sequence");
 }
 
 async function testEraseGhostTextHasCorrectLineCountForMultiMatch() {
   const c = new TabCompletion();
-  c.update("an", 2);
-  c.ghostText(); // 3 matches → ghostLines = 3
+  await c.update("an", 2);
+  c.ghostText();
   const erase = c.eraseGhostText();
-  // Should contain three \r\n\x1b[2K sequences
   const count = (erase.match(/\r\n\x1b\[2K/g) || []).length;
   assert.strictEqual(count, 3);
   assert.ok(erase.includes("\x1b7"));
@@ -210,10 +261,9 @@ async function testEraseGhostTextHasCorrectLineCountForMultiMatch() {
 
 async function testEraseGhostTextResetsGhostLines() {
   const c = new TabCompletion();
-  c.update("an", 2);
+  await c.update("an", 2);
   c.ghostText();
   c.eraseGhostText();
-  // After erase, eraseGhostText should return ""
   assert.strictEqual(c.eraseGhostText(), "");
 }
 
@@ -223,7 +273,7 @@ async function testEraseGhostTextResetsGhostLines() {
 
 async function testResetClearsAllState() {
   const c = new TabCompletion();
-  c.update("an", 2);
+  await c.update("an", 2);
   c.ghostText();
   c.reset();
   assert.strictEqual(c.matchCount, 0);
@@ -239,13 +289,12 @@ async function testResetClearsAllState() {
 
 async function testAcceptWithPriorBufferContent() {
   const c = new TabCompletion();
-  // Simulate: user typed "foo; dis" and cursor is at end
-  c.update("foo; dis", 8);
+  await c.update("foo; dis", 8);
   const action = c.handleTab();
   assert.ok(action !== null && action.kind === "accept");
   if (action!.kind === "accept") {
     assert.strictEqual(action.newBuffer, "foo; display()");
-    assert.strictEqual(action.newCursorPosition, 13); // "foo; display(" length
+    assert.strictEqual(action.newCursorPosition, 13);
   }
 }
 
@@ -257,7 +306,7 @@ async function testDotCompletionAllMethodsOnDot() {
   const c = new TabCompletion();
   const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
   c.setApi({ display: fakeDisplay });
-  c.update("display.", 8);
+  await c.update("display.", 8);
   assert.strictEqual(c.matchCount, 2, "should match both methods");
 }
 
@@ -265,7 +314,7 @@ async function testDotCompletionPartialMethod() {
   const c = new TabCompletion();
   const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
   c.setApi({ display: fakeDisplay });
-  c.update("display.hi", 10);
+  await c.update("display.hi", 10);
   assert.strictEqual(c.matchCount, 1, "should match only 'hide'");
 }
 
@@ -273,12 +322,12 @@ async function testDotCompletionAcceptsMethod() {
   const c = new TabCompletion();
   const fakeDisplay = Object.assign(() => {}, { hide: () => {}, help: () => {} });
   c.setApi({ display: fakeDisplay });
-  c.update("display.hi", 10);
+  await c.update("display.hi", 10);
   const action = c.handleTab();
   assert.ok(action !== null && action.kind === "accept");
   if (action!.kind === "accept") {
     assert.strictEqual(action.newBuffer, "display.hide()");
-    assert.strictEqual(action.newCursorPosition, 13); // "display.hide(" length
+    assert.strictEqual(action.newCursorPosition, 13);
   }
 }
 
@@ -286,7 +335,7 @@ async function testDotCompletionAcceptsMethodWithNoPrefixAfterDot() {
   const c = new TabCompletion();
   const fakeDisplay = Object.assign(() => {}, { hide: () => {} });
   c.setApi({ display: fakeDisplay });
-  c.update("display.", 8);
+  await c.update("display.", 8);
   const action = c.handleTab();
   assert.ok(action !== null && action.kind === "accept");
   if (action!.kind === "accept") {
@@ -298,7 +347,7 @@ async function testDotCompletionAcceptsMethodWithNoPrefixAfterDot() {
 async function testDotCompletionNoMatchForUnknownObject() {
   const c = new TabCompletion();
   c.setApi({});
-  c.update("foo.", 4);
+  await c.update("foo.", 4);
   assert.strictEqual(c.matchCount, 0);
 }
 
@@ -306,7 +355,7 @@ async function testDotCompletionGhostTextShowsSuffix() {
   const c = new TabCompletion();
   const fakeDisplay = Object.assign(() => {}, { hide: () => {} });
   c.setApi({ display: fakeDisplay });
-  c.update("display.hi", 10);
+  await c.update("display.hi", 10);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("de()"), "ghost should show 'de()' suffix for 'hide'");
 }
@@ -325,7 +374,7 @@ async function testDotCompletionScopesPlainObjectMethods() {
       walk: () => {},
     },
   });
-  c.update("fs.", 3);
+  await c.update("fs.", 3);
   assert.strictEqual(c.matchCount, 7, "should only match callable fs members");
   const ghost = c.ghostText();
   assert.ok(!ghost.includes("granularize()"), "should not fall back to top-level globals");
@@ -346,7 +395,7 @@ async function testDotCompletionScopesPlainObjectPartialMethod() {
       walk: () => {},
     },
   });
-  c.update("fs.gl", 5);
+  await c.update("fs.gl", 5);
   assert.strictEqual(c.matchCount, 1, "should match only 'glob'");
   const action = c.handleTab();
   assert.ok(action !== null && action.kind === "accept");
@@ -356,7 +405,47 @@ async function testDotCompletionScopesPlainObjectPartialMethod() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Path completion inside quoted fs strings
+// ---------------------------------------------------------------------------
 
+async function testPathCompletionScopesToFsLsString() {
+  mockFsCompletePath(async (method, inputPath) => {
+    assert.strictEqual(method, "ls");
+    assert.strictEqual(inputPath, "Insyn");
+    return ["Insync/"];
+  });
+
+  const c = new TabCompletion();
+  await c.update('fs.ls("Insyn', 12);
+  assert.strictEqual(c.matchCount, 1, "should use fs path completion inside quoted strings");
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("c/"), "ghost should show only the remaining path suffix");
+}
+
+async function testPathCompletionAcceptsDirectoryWithoutParens() {
+  mockFsCompletePath(async () => ["Insync/"]);
+
+  const c = new TabCompletion();
+  await c.update('fs.cd("Insyn', 12);
+  const action = c.handleTab();
+  assert.ok(action !== null && action.kind === "accept");
+  if (action!.kind === "accept") {
+    assert.strictEqual(action.newBuffer, 'fs.cd("Insync/');
+    assert.strictEqual(action.newCursorPosition, 14);
+  }
+}
+
+async function testPathCompletionMultiMatchRendersPlainPaths() {
+  mockFsCompletePath(async () => ["alpha/", "alpine/"]);
+
+  const c = new TabCompletion();
+  await c.update('fs.walk("al', 11);
+  assert.strictEqual(c.matchCount, 2);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("alpha/"), "should show plain path matches");
+  assert.ok(!ghost.includes("alpha/()"), "path matches should not render function parens");
+}
 
 const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
@@ -368,6 +457,9 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["no completion after open paren", testNoCompletionAfterOpenParen],
   ["handleTab single match returns accept", testHandleTabSingleMatchReturnsAccept],
   ["handleTab multi match returns redraw and cycles", testHandleTabMultiMatchReturnsRedrawAndCycles],
+  ["handleTab keeps cycling after refresh", testHandleTabContinuesCyclingAfterRefresh],
+  ["handleUp cycles backward through matches", testHandleUpCyclesBackwardThroughMatches],
+  ["handleDown cycles forward through matches", testHandleDownCyclesForwardThroughMatches],
   ["handleTab idle returns null", testHandleTabIdleReturnsNull],
   ["handleEnter multi match returns accept", testHandleEnterMultiMatchReturnsAccept],
   ["handleEnter multi match after Tab cycle", testHandleEnterMultiMatchAfterTabCycle],
@@ -391,6 +483,9 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["dot-completion: ghost text shows suffix", testDotCompletionGhostTextShowsSuffix],
   ["dot-completion: plain object methods stay scoped", testDotCompletionScopesPlainObjectMethods],
   ["dot-completion: plain object partial prefix", testDotCompletionScopesPlainObjectPartialMethod],
+  ["path-completion: fs.ls string stays scoped", testPathCompletionScopesToFsLsString],
+  ["path-completion: accept inserts plain directory", testPathCompletionAcceptsDirectoryWithoutParens],
+  ["path-completion: multi-match renders plain paths", testPathCompletionMultiMatchRendersPlainPaths],
 ];
 
 async function main() {
