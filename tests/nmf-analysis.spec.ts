@@ -66,9 +66,11 @@ test.describe("NMF Analysis", () => {
     // Visualize NMF on the waveform
     await sendCommand("visualizeNmf()");
 
-    // Verify the NMF visualization was applied
-    const finalOutput = await window.locator(".xterm-screen").textContent();
-    expect(finalOutput).toContain("NMF visualization overlaid");
+    // Verify the NMF visualization was applied after the renderer overlay event lands
+    await expect(window.locator(".xterm-screen")).toContainText(
+      "NMF visualization overlaid",
+      { timeout: 5000 },
+    );
   });
 
   test.skip("should handle visualize-nmf without loaded waveform", async () => {
