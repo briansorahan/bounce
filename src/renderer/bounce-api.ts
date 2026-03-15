@@ -12,6 +12,12 @@ import {
   MfccFeature,
   SampleNamespace,
   SampleListResult,
+  SamplePromise,
+  CurrentSamplePromise,
+  OnsetFeaturePromise,
+  NmfFeaturePromise,
+  MfccFeaturePromise,
+  GrainCollectionPromise,
   type SampleSummaryFeature,
   LsResult,
   GlobResult,
@@ -29,6 +35,12 @@ export {
   MfccFeature,
   SampleNamespace,
   SampleListResult,
+  SamplePromise,
+  CurrentSamplePromise,
+  OnsetFeaturePromise,
+  NmfFeaturePromise,
+  MfccFeaturePromise,
+  GrainCollectionPromise,
   LsResult,
   GlobResult,
   LsResultPromise,
@@ -68,6 +80,15 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     if (!supportedExtensions.includes(ext)) {
       throw new Error("Unsupported file format. Supported: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS");
     }
+  }
+
+  function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+    return (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "then" in value &&
+      typeof value.then === "function"
+    );
   }
 
   function getCurrentHash(): string {
@@ -300,8 +321,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
-  async function resolveSample(source: Sample | Promise<Sample>): Promise<Sample> {
-    return source instanceof Promise ? await source : source;
+  async function resolveSample(source: Sample | PromiseLike<Sample>): Promise<Sample> {
+    return isPromiseLike<Sample>(source) ? await source : source;
   }
 
   function stop(): BounceResult {
@@ -310,7 +331,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function startPlayback(
-    source: string | Sample | Promise<Sample> | undefined,
+    source: string | Sample | PromiseLike<Sample> | undefined,
     loopPlayback: boolean,
   ): Promise<Sample> {
     let loadedSample: Sample | undefined;
@@ -358,19 +379,19 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
-  async function play(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+  async function play(source?: string | Sample | PromiseLike<Sample>): Promise<Sample> {
     return startPlayback(source, false);
   }
 
-  async function loop(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+  async function loop(source?: string | Sample | PromiseLike<Sample>): Promise<Sample> {
     return startPlayback(source, true);
   }
 
   async function analyze(
-    source?: Sample | Promise<Sample> | AnalyzeOptions,
+    source?: Sample | PromiseLike<Sample> | AnalyzeOptions,
     options?: AnalyzeOptions,
   ): Promise<OnsetFeature> {
-    const resolvedSource = source instanceof Promise ? await source : source;
+    const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
     const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
     const opts = resolvedSource instanceof Sample ? options : (resolvedSource as AnalyzeOptions | undefined);
 
@@ -398,10 +419,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function analyzeNmf(
-    source?: Sample | Promise<Sample> | NmfOptions,
+    source?: Sample | PromiseLike<Sample> | NmfOptions,
     options?: NmfOptions,
   ): Promise<NmfFeature> {
-    const resolvedSource = source instanceof Promise ? await source : source;
+    const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
     const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
     const opts = resolvedSource instanceof Sample ? options : (resolvedSource as NmfOptions | undefined);
 
@@ -448,7 +469,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   }
 
   async function analyzeMFCC(
-    sampleOrPromise: Sample | Promise<Sample>,
+    sampleOrPromise: Sample | PromiseLike<Sample>,
     options?: MFCCOptions,
   ): Promise<MfccFeature> {
     const sample = await resolveSample(sampleOrPromise);
@@ -495,10 +516,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   const slice = Object.assign(
     async function slice(
-      source?: OnsetFeature | Sample | Promise<Sample> | SliceOptions,
+      source?: OnsetFeature | Sample | PromiseLike<Sample> | SliceOptions,
       options?: SliceOptions,
     ): Promise<BounceResult> {
-      const resolvedSource = source instanceof Promise ? await source : source;
+      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const explicitOptions =
         resolvedSource instanceof OnsetFeature || resolvedSource instanceof Sample
           ? options
@@ -555,13 +576,13 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   const sep = Object.assign(
     async function sep(
-      source?: Sample | Promise<Sample> | NmfFeature | SepOptions,
+      source?: Sample | PromiseLike<Sample> | NmfFeature | SepOptions,
       options?: SepOptions,
     ): Promise<BounceResult> {
       let hash: string;
       let opts: SepOptions | undefined;
 
-      const resolvedSource = source instanceof Promise ? await source : source;
+      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       if (resolvedSource instanceof Sample) {
         hash = resolvedSource.hash;
         opts = options;
@@ -705,10 +726,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const playSlice = Object.assign(
-    async function playSlice(index = 0, source?: OnsetFeature | Sample | Promise<Sample>): Promise<Sample> {
+    async function playSlice(index = 0, source?: OnsetFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
       const currentHash = getCurrentHash();
 
-      const resolvedSource = source instanceof Promise ? await source : source;
+      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
         : resolvedSource instanceof OnsetFeature
@@ -781,10 +802,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const playComponent = Object.assign(
-    async function playComponent(index = 0, source?: NmfFeature | Sample | Promise<Sample>): Promise<Sample> {
+    async function playComponent(index = 0, source?: NmfFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
       const currentHash = getCurrentHash();
 
-      const resolvedSource = source instanceof Promise ? await source : source;
+      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
         : resolvedSource instanceof NmfFeature
@@ -1101,10 +1122,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   const granularize = Object.assign(
     async function granularize(
-      source?: string | Sample | Promise<Sample> | GranularizeOptions,
+      source?: string | Sample | PromiseLike<Sample> | GranularizeOptions,
       options?: GranularizeOptions,
     ): Promise<GrainCollection> {
-      const resolvedSource = source instanceof Promise ? await source : source;
+      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const isOptionsArg =
         resolvedSource !== null &&
         resolvedSource !== undefined &&
@@ -1321,7 +1342,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
      * Can also be called with a Sample or explicit (sourceHash, featureHash) strings.
      */
     async build(
-      source?: string | Sample | Promise<Sample>,
+      source?: string | Sample | PromiseLike<Sample>,
       featureHashOverride?: string,
     ): Promise<BounceResult> {
       let sourceHash: string;
@@ -1333,7 +1354,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         featureHash = featureHashOverride;
       } else {
         let resolved: Sample | undefined;
-        if (source !== undefined) resolved = await resolveSample(source as Sample | Promise<Sample>);
+        if (source !== undefined) resolved = await resolveSample(source as Sample | PromiseLike<Sample>);
         const hash = resolved?.hash ?? audioManager.getCurrentAudio()?.hash;
         if (!hash) throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
         sourceHash = hash;

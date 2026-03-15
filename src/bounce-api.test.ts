@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { buildBounceApi, BounceResult, Sample, OnsetFeature, NmfFeature, MfccFeature } from "./renderer/bounce-api.js";
+import {
+  buildBounceApi,
+  BounceResult,
+  Sample,
+  SamplePromise,
+  CurrentSamplePromise,
+  OnsetFeature,
+  NmfFeature,
+  MfccFeature,
+} from "./renderer/bounce-api.js";
 
 function makeTerminal(): { lines: string[]; cleared: boolean } & object {
   const terminal = { lines: [] as string[], cleared: false };
@@ -136,9 +145,12 @@ async function main() {
 
   const sn = api.sn as {
     help(): BounceResult;
-    read(pathOrHash: string): Promise<Sample>;
-    list(): Promise<unknown>;
-    current(): Promise<Sample | null>;
+    read(pathOrHash: string): SamplePromise;
+    list(): PromiseLike<unknown>;
+    current(): CurrentSamplePromise;
+  };
+  const corpus = api.corpus as {
+    build(source?: string | Sample | PromiseLike<Sample>, featureHashOverride?: string): PromiseLike<BounceResult>;
   };
 
   assert.ok(sn.help().toString().includes("sample namespace"));
@@ -189,6 +201,24 @@ async function main() {
 
   const current = await sn.current();
   assert.ok(current instanceof Sample, "sn.current returns Sample");
+
+  const chainedOnsetFeature = await sn.read("/test.wav").onsets();
+  assert.ok(chainedOnsetFeature instanceof OnsetFeature, "sn.read().onsets() returns OnsetFeature");
+
+  const chainedSliceResult = await sn.read("/test.wav").onsets().slice();
+  assert.ok(chainedSliceResult instanceof BounceResult, "sn.read().onsets().slice() returns BounceResult");
+
+  const chainedComponent = await sn.read("/test.wav").nmf().playComponent(0);
+  assert.ok(chainedComponent instanceof Sample, "sn.read().nmf().playComponent() returns Sample");
+
+  const currentPlayed = await sn.current().play();
+  assert.ok(currentPlayed instanceof Sample, "sn.current().play() returns Sample");
+
+  const grainCount = await sn.read("/test.wav").granularize({ grainSize: 20 }).length();
+  assert.equal(grainCount, 2, "sn.read().granularize().length() counts non-silent grains");
+
+  const corpusBuilt = await corpus.build(sn.read("/test.wav"));
+  assert.ok(corpusBuilt instanceof BounceResult, "corpus.build accepts thenable sample sources");
 }
 
 main().catch((err) => {

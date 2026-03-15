@@ -97,20 +97,20 @@ export class Sample extends HelpableResult {
     super(display, bindings.help);
   }
 
-  play(): Promise<Sample> {
-    return this.bindings.play();
+  play(): SamplePromise {
+    return new SamplePromise(this.bindings.play());
   }
 
-  loop(): Promise<Sample> {
-    return this.bindings.loop();
+  loop(): SamplePromise {
+    return new SamplePromise(this.bindings.loop());
   }
 
   stop(): BounceResult {
     return this.bindings.stop();
   }
 
-  display(): Promise<Sample> {
-    return this.bindings.display();
+  display(): SamplePromise {
+    return new SamplePromise(this.bindings.display());
   }
 
   slice(options?: SliceOptions): Promise<BounceResult> {
@@ -121,20 +121,20 @@ export class Sample extends HelpableResult {
     return this.bindings.sep(options);
   }
 
-  granularize(options?: GranularizeOptions): Promise<GrainCollection> {
-    return this.bindings.granularize(options);
+  granularize(options?: GranularizeOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.bindings.granularize(options));
   }
 
-  onsets(options?: AnalyzeOptions): Promise<OnsetFeature> {
-    return this.bindings.onsets(options);
+  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
+    return new OnsetFeaturePromise(this.bindings.onsets(options));
   }
 
-  nmf(options?: NmfOptions): Promise<NmfFeature> {
-    return this.bindings.nmf(options);
+  nmf(options?: NmfOptions): NmfFeaturePromise {
+    return new NmfFeaturePromise(this.bindings.nmf(options));
   }
 
-  mfcc(options?: MFCCOptions): Promise<MfccFeature> {
-    return this.bindings.mfcc(options);
+  mfcc(options?: MFCCOptions): MfccFeaturePromise {
+    return new MfccFeaturePromise(this.bindings.mfcc(options));
   }
 }
 
@@ -222,8 +222,8 @@ export class OnsetFeature extends FeatureResult {
     return this.bindings.slice(options);
   }
 
-  playSlice(index = 0): Promise<Sample> {
-    return this.bindings.playSlice(index);
+  playSlice(index = 0): SamplePromise {
+    return new SamplePromise(this.bindings.playSlice(index));
   }
 }
 
@@ -245,8 +245,8 @@ export class NmfFeature extends FeatureResult {
     return this.bindings.sep(options);
   }
 
-  playComponent(index = 0): Promise<Sample> {
-    return this.bindings.playComponent(index);
+  playComponent(index = 0): SamplePromise {
+    return new SamplePromise(this.bindings.playComponent(index));
   }
 }
 
@@ -307,16 +307,263 @@ export class SampleNamespace extends HelpableResult {
     super(display, bindings.help);
   }
 
-  read(pathOrHash: string): Promise<Sample> {
-    return this.bindings.read(pathOrHash);
+  read(pathOrHash: string): SamplePromise {
+    return new SamplePromise(this.bindings.read(pathOrHash));
   }
 
   list(): Promise<SampleListResult> {
     return this.bindings.list();
   }
 
-  current(): Promise<Sample | null> {
-    return this.bindings.current();
+  current(): CurrentSamplePromise {
+    return new CurrentSamplePromise(this.bindings.current());
+  }
+}
+
+export class SamplePromise implements PromiseLike<Sample> {
+  constructor(protected readonly promise: Promise<Sample>) {}
+
+  then<TResult1 = Sample, TResult2 = never>(
+    onfulfilled?: ((value: Sample) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<Sample | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  help(): Promise<BounceResult> {
+    return this.promise.then((sample) => sample.help());
+  }
+
+  play(): SamplePromise {
+    return new SamplePromise(this.promise.then((sample) => sample.play()));
+  }
+
+  loop(): SamplePromise {
+    return new SamplePromise(this.promise.then((sample) => sample.loop()));
+  }
+
+  stop(): Promise<BounceResult> {
+    return this.promise.then((sample) => sample.stop());
+  }
+
+  display(): SamplePromise {
+    return new SamplePromise(this.promise.then((sample) => sample.display()));
+  }
+
+  slice(options?: SliceOptions): Promise<BounceResult> {
+    return this.promise.then((sample) => sample.slice(options));
+  }
+
+  sep(options?: SepOptions): Promise<BounceResult> {
+    return this.promise.then((sample) => sample.sep(options));
+  }
+
+  granularize(options?: GranularizeOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.promise.then((sample) => sample.granularize(options)));
+  }
+
+  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
+    return new OnsetFeaturePromise(this.promise.then((sample) => sample.onsets(options)));
+  }
+
+  nmf(options?: NmfOptions): NmfFeaturePromise {
+    return new NmfFeaturePromise(this.promise.then((sample) => sample.nmf(options)));
+  }
+
+  mfcc(options?: MFCCOptions): MfccFeaturePromise {
+    return new MfccFeaturePromise(this.promise.then((sample) => sample.mfcc(options)));
+  }
+}
+
+export class CurrentSamplePromise implements PromiseLike<Sample | null> {
+  constructor(private readonly promise: Promise<Sample | null>) {}
+
+  then<TResult1 = Sample | null, TResult2 = never>(
+    onfulfilled?: ((value: Sample | null) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<Sample | null | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  private requireSample(): Promise<Sample> {
+    return this.promise.then((sample) => {
+      if (!sample) {
+        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+      }
+      return sample;
+    });
+  }
+
+  help(): Promise<BounceResult> {
+    return this.requireSample().then((sample) => sample.help());
+  }
+
+  play(): SamplePromise {
+    return new SamplePromise(this.requireSample().then((sample) => sample.play()));
+  }
+
+  loop(): SamplePromise {
+    return new SamplePromise(this.requireSample().then((sample) => sample.loop()));
+  }
+
+  stop(): Promise<BounceResult> {
+    return this.requireSample().then((sample) => sample.stop());
+  }
+
+  display(): SamplePromise {
+    return new SamplePromise(this.requireSample().then((sample) => sample.display()));
+  }
+
+  slice(options?: SliceOptions): Promise<BounceResult> {
+    return this.requireSample().then((sample) => sample.slice(options));
+  }
+
+  sep(options?: SepOptions): Promise<BounceResult> {
+    return this.requireSample().then((sample) => sample.sep(options));
+  }
+
+  granularize(options?: GranularizeOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.requireSample().then((sample) => sample.granularize(options)));
+  }
+
+  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
+    return new OnsetFeaturePromise(this.requireSample().then((sample) => sample.onsets(options)));
+  }
+
+  nmf(options?: NmfOptions): NmfFeaturePromise {
+    return new NmfFeaturePromise(this.requireSample().then((sample) => sample.nmf(options)));
+  }
+
+  mfcc(options?: MFCCOptions): MfccFeaturePromise {
+    return new MfccFeaturePromise(this.requireSample().then((sample) => sample.mfcc(options)));
+  }
+}
+
+export class OnsetFeaturePromise implements PromiseLike<OnsetFeature> {
+  constructor(private readonly promise: Promise<OnsetFeature>) {}
+
+  then<TResult1 = OnsetFeature, TResult2 = never>(
+    onfulfilled?: ((value: OnsetFeature) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<OnsetFeature | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  help(): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.help());
+  }
+
+  slice(options?: SliceOptions): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.slice(options));
+  }
+
+  playSlice(index = 0): SamplePromise {
+    return new SamplePromise(this.promise.then((feature) => feature.playSlice(index)));
+  }
+}
+
+export class NmfFeaturePromise implements PromiseLike<NmfFeature> {
+  constructor(private readonly promise: Promise<NmfFeature>) {}
+
+  then<TResult1 = NmfFeature, TResult2 = never>(
+    onfulfilled?: ((value: NmfFeature) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<NmfFeature | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  help(): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.help());
+  }
+
+  sep(options?: SepOptions): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.sep(options));
+  }
+
+  playComponent(index = 0): SamplePromise {
+    return new SamplePromise(this.promise.then((feature) => feature.playComponent(index)));
+  }
+}
+
+export class MfccFeaturePromise implements PromiseLike<MfccFeature> {
+  constructor(private readonly promise: Promise<MfccFeature>) {}
+
+  then<TResult1 = MfccFeature, TResult2 = never>(
+    onfulfilled?: ((value: MfccFeature) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<MfccFeature | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  help(): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.help());
+  }
+}
+
+export class GrainCollectionPromise implements PromiseLike<GrainCollection> {
+  constructor(private readonly promise: Promise<GrainCollection>) {}
+
+  then<TResult1 = GrainCollection, TResult2 = never>(
+    onfulfilled?: ((value: GrainCollection) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<GrainCollection | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  length(): Promise<number> {
+    return this.promise.then((collection) => collection.length());
+  }
+
+  forEach(
+    callback: (grain: Sample, index: number) => void | Promise<void>,
+  ): Promise<void> {
+    return this.promise.then((collection) => collection.forEach(callback));
+  }
+
+  map<T>(callback: (grain: Sample, index: number) => T): Promise<T[]> {
+    return this.promise.then((collection) => collection.map(callback));
+  }
+
+  filter(
+    predicate: (grain: Sample, index: number) => boolean,
+  ): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.promise.then((collection) => collection.filter(predicate)));
   }
 }
 

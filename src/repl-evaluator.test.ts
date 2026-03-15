@@ -197,6 +197,35 @@ async function testReplEvaluator() {
         },
       };
     },
+    makeAwaitlessSample: () => ({
+      then: (resolve: (value: { onsets: () => { slice: () => Promise<string> } }) => void) => {
+        Promise.resolve({
+          onsets: () => ({
+            slice: async () => {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 0));
+              events.push("sliced");
+              return "sliced";
+            },
+          }),
+        }).then(resolve);
+      },
+      onsets: () => ({
+        then: (resolve: (value: { slice: () => Promise<string> }) => void) => {
+          Promise.resolve({
+            slice: async () => {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 0));
+              events.push("sliced");
+              return "sliced";
+            },
+          }).then(resolve);
+        },
+        slice: async () => {
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 0));
+          events.push("sliced");
+          return "sliced";
+        },
+      }),
+    }),
   });
 
   // Simple expression
@@ -254,6 +283,14 @@ async function testReplEvaluator() {
     events,
     ["delayed", "delayed", "played"],
     "top-level expression statements are awaited in order",
+  );
+
+  const r11 = await evaluator.evaluate("makeAwaitlessSample().onsets().slice()");
+  assert.strictEqual(r11, "sliced", "thenable wrappers support awaitless chained calls");
+  assert.deepStrictEqual(
+    events,
+    ["delayed", "delayed", "played", "sliced"],
+    "awaitless chained calls execute through thenable wrappers",
   );
 
   console.log("  ReplEvaluator: all tests passed");
