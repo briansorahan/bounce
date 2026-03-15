@@ -60,9 +60,8 @@ export class TabCompletion {
       const methodPrefix = dotMatch[2] ?? "";
       const obj = this.api[objName];
       if (obj && (typeof obj === "function" || typeof obj === "object")) {
-        const methods = Object.keys(obj)
+        const methods = this.getCallablePropertyNames(obj)
           .filter((k) => k.startsWith(methodPrefix))
-          .filter((k) => typeof (obj as Record<string, unknown>)[k] === "function")
           .sort();
         if (methods.length > 0) {
           this.applyMatches(requestId, methods, { kind: "method" });
@@ -248,5 +247,23 @@ export class TabCompletion {
     }
 
     return window.electron.fsCompletePath(method, prefix);
+  }
+
+  private getCallablePropertyNames(obj: object): string[] {
+    const names = new Set<string>();
+    let current: object | null = obj;
+
+    while (current !== null && current !== Object.prototype) {
+      for (const name of Object.getOwnPropertyNames(current)) {
+        if (name === "constructor") continue;
+        const descriptor = Object.getOwnPropertyDescriptor(current, name);
+        if (descriptor && typeof descriptor.value === "function") {
+          names.add(name);
+        }
+      }
+      current = Object.getPrototypeOf(current);
+    }
+
+    return [...names];
   }
 }

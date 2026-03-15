@@ -4,10 +4,37 @@ import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import { VisualizationManager } from "./visualization-manager.js";
-import { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise, formatLsEntries } from "./bounce-result.js";
+import {
+  BounceResult,
+  Sample,
+  OnsetFeature,
+  NmfFeature,
+  MfccFeature,
+  SampleNamespace,
+  SampleListResult,
+  type SampleSummaryFeature,
+  LsResult,
+  GlobResult,
+  LsResultPromise,
+  GlobResultPromise,
+  formatLsEntries,
+} from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 
-export { BounceResult, AudioResult, FeatureResult, LsResult, GlobResult, LsResultPromise, GlobResultPromise, GrainCollection };
+export {
+  BounceResult,
+  Sample,
+  OnsetFeature,
+  NmfFeature,
+  MfccFeature,
+  SampleNamespace,
+  SampleListResult,
+  LsResult,
+  GlobResult,
+  LsResultPromise,
+  GlobResultPromise,
+  GrainCollection,
+};
 
 export interface BounceApiDeps {
   terminal: BounceTerminal;
@@ -21,366 +48,515 @@ export interface BounceApiDeps {
  * Each function closes over the provided deps and the global window.electron IPC bridge.
  */
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
-  const { terminal, audioManager, onUpdateWaveform, onHideWaveform } = deps;
+  const { terminal, audioManager, onUpdateWaveform } = deps;
 
-  const display = Object.assign(
-    async function display(fileOrHash: string): Promise<AudioResult> {
-      const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
-      const isHash =
-        /^[0-9a-f]{8,}$/i.test(fileOrHash) &&
-        !fileOrHash.includes("/") &&
-        !fileOrHash.includes("\\");
+  const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
 
-      if (!isHash) {
-        const ext = fileOrHash.toLowerCase().substring(fileOrHash.lastIndexOf("."));
-        if (!supportedExtensions.includes(ext)) {
-          throw new Error(`Unsupported file format. Supported: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS`);
-        }
-      }
+  function sampleLabel(filePath: string | undefined, hash: string): string {
+    return filePath?.split("/").pop() ?? hash.substring(0, 8);
+  }
 
-      const audioFileData = await window.electron.readAudioFile(fileOrHash);
+  function ensureSupportedInput(fileOrHash: string): void {
+    const isHash =
+      /^[0-9a-f]{8,}$/i.test(fileOrHash) &&
+      !fileOrHash.includes("/") &&
+      !fileOrHash.includes("\\");
 
-      const audio = {
-        audioData: audioFileData.channelData,
-        sampleRate: audioFileData.sampleRate,
-        duration: audioFileData.duration,
-        filePath: fileOrHash,
-        hash: audioFileData.hash,
-        visualize: () => "Visualization updated",
-        analyzeOnsetSlice: async (options?: OnsetSliceOptions) => {
-          const slices = await window.electron.analyzeOnsetSlice(audioFileData.channelData, options);
-          return { slices, visualize: () => "Slice markers updated" };
-        },
-      };
+    if (isHash) return;
 
-      audioManager.setCurrentAudio(audio);
-      onUpdateWaveform();
-      return new AudioResult(
-        [
-          `\x1b[32mLoaded: ${audioFileData.filePath ?? audioFileData.hash.substring(0, 8)}\x1b[0m`,
-          `\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`,
-        ].join("\n"),
-        audioFileData.hash,
-        audioFileData.filePath ?? undefined,
-        audioFileData.sampleRate,
-        audioFileData.duration,
-      );
+    const ext = fileOrHash.toLowerCase().substring(fileOrHash.lastIndexOf("."));
+    if (!supportedExtensions.includes(ext)) {
+      throw new Error("Unsupported file format. Supported: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS");
+    }
+  }
+
+  function getCurrentHash(): string {
+    const hash = audioManager.getCurrentAudio()?.hash;
+    if (!hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+    return hash;
+  }
+
+  function sampleHelpText(sample: Sample): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mSample ${sample.hash.substring(0, 8)}\x1b[0m`,
+      "",
+      `  file:      ${sample.filePath ?? "(derived sample)"}`,
+      `  sampleRate:${sample.sampleRate} Hz`,
+      `  channels:  ${sample.channels}`,
+      `  duration:  ${sample.duration.toFixed(3)}s`,
+      "",
+      "  Methods:",
+      "    sample.play()",
+      "    sample.stop()",
+      "    sample.display()",
+      "    sample.onsets()",
+      "    sample.nmf()",
+      "    sample.mfcc()",
+      "    sample.slice(options?)",
+      "    sample.sep(options?)",
+      "    sample.granularize(options?)",
+    ].join("\n"));
+  }
+
+  function onsetHelpText(feature: OnsetFeature): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mOnsetFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
+      "",
+      `  source: ${feature.sourceHash.substring(0, 8)}`,
+      `  slices: ${feature.count}`,
+      "",
+      "  Methods:",
+      "    feature.slice(options?)",
+      "    feature.playSlice(index?)",
+    ].join("\n"));
+  }
+
+  function nmfHelpText(feature: NmfFeature): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mNmfFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
+      "",
+      `  source:     ${feature.sourceHash.substring(0, 8)}`,
+      `  components: ${feature.components ?? "unknown"}`,
+      `  iterations: ${feature.iterations ?? "unknown"}`,
+      `  converged:  ${feature.converged === undefined ? "unknown" : feature.converged ? "yes" : "no"}`,
+      "",
+      "  Methods:",
+      "    feature.sep(options?)",
+      "    feature.playComponent(index?)",
+    ].join("\n"));
+  }
+
+  function mfccHelpText(feature: MfccFeature): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mMfccFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
+      "",
+      `  source:      ${feature.sourceHash.substring(0, 8)}`,
+      `  numFrames:   ${feature.numFrames}`,
+      `  numCoeffs:   ${feature.numCoeffs}`,
+      "",
+      "  This feature stores MFCC analysis data for corpus and similarity workflows.",
+    ].join("\n"));
+  }
+
+  function makeSampleDisplayText(
+    sample: {
+      hash: string;
+      filePath: string | undefined;
+      sampleRate: number;
+      channels: number;
+      duration: number;
     },
-    {
-      hide: (): void => {
-        onHideWaveform();
+    title = "Sample",
+  ): string {
+    return [
+      `\x1b[32m${title}: ${sampleLabel(sample.filePath, sample.hash)}\x1b[0m`,
+      `\x1b[90mhash ${sample.hash.substring(0, 8)} · ${sample.sampleRate}Hz · ${sample.channels}ch · ${sample.duration.toFixed(3)}s\x1b[0m`,
+    ].join("\n");
+  }
+
+  function bindSample(
+    sample: {
+      hash: string;
+      filePath: string | undefined;
+      sampleRate: number;
+      channels: number;
+      duration: number;
+      id?: number;
+    },
+    displayText = makeSampleDisplayText(sample),
+  ): Sample {
+    const bound: Sample = new Sample(
+      displayText,
+      sample.hash,
+      sample.filePath,
+      sample.sampleRate,
+      sample.channels,
+      sample.duration,
+      sample.id,
+      {
+        help: (): BounceResult => sampleHelpText(bound),
+        play: () => play(bound),
+        stop: () => stop(),
+        display: () => display(bound.hash),
+        slice: (options) => slice(bound, options),
+        sep: (options) => sep(bound, options),
+        granularize: (options) => granularize(bound, options),
+        onsets: (options) => analyze(bound, options),
+        nmf: (options) => analyzeNmf(bound, options),
+        mfcc: (options) => analyzeMFCC(bound, options),
       },
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mdisplay(fileOrHash)\x1b[0m",
-        "",
-        "  Load an audio file or stored sample hash. Renders the waveform in the",
-        "  visualization panel and returns an AudioResult.",
-        "",
-        "  \x1b[33mfileOrHash\x1b[0m  Path to an audio file (WAV, MP3, OGG, FLAC, M4A, AAC, OPUS)",
-        "               or an 8+ character sample hash from list()",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const a = await display(\"kick.wav\")",
-        "           await display(\"a1b2c3d4\")",
-        "           display.hide()",
-      ].join("\n")),
-    },
-  );
+    );
+    return bound;
+  }
 
-  async function resolveAudio(source: AudioResult | Promise<AudioResult>): Promise<AudioResult> {
+  function bindOnsetFeature(
+    source: Sample,
+    featureHash: string,
+    slices: number[],
+    options?: AnalyzeOptions,
+    displayText = `\x1b[32mFound ${slices.length} onset slices (feature: ${featureHash.substring(0, 8)})\x1b[0m`,
+  ): OnsetFeature {
+    const bound: OnsetFeature = new OnsetFeature(
+      displayText,
+      source,
+      featureHash,
+      options,
+      slices,
+      {
+        help: (): BounceResult => onsetHelpText(bound),
+        slice: (sliceOptions) => slice(bound, sliceOptions),
+        playSlice: (index = 0) => playSlice(index, bound),
+      },
+    );
+    return bound;
+  }
+
+  function bindNmfFeature(
+    source: Sample,
+    featureHash: string,
+    options: NmfOptions | undefined,
+    components: number | undefined,
+    iterations: number | undefined,
+    converged: boolean | undefined,
+    displayText: string,
+  ): NmfFeature {
+    const bound: NmfFeature = new NmfFeature(
+      displayText,
+      source,
+      featureHash,
+      options,
+      components,
+      iterations,
+      converged,
+      {
+        help: (): BounceResult => nmfHelpText(bound),
+        sep: (sepOptions) => sep(bound, sepOptions),
+        playComponent: (index = 0) => playComponent(index, bound),
+      },
+    );
+    return bound;
+  }
+
+  function bindMfccFeature(
+    source: Sample,
+    featureHash: string,
+    options: MFCCOptions | undefined,
+    numFrames: number,
+    numCoeffs: number,
+    displayText: string,
+  ): MfccFeature {
+    const bound: MfccFeature = new MfccFeature(
+      displayText,
+      source,
+      featureHash,
+      options,
+      numFrames,
+      numCoeffs,
+      {
+        help: (): BounceResult => mfccHelpText(bound),
+      },
+    );
+    return bound;
+  }
+
+  async function display(fileOrHash: string): Promise<Sample> {
+    ensureSupportedInput(fileOrHash);
+
+    const audioFileData = await window.electron.readAudioFile(fileOrHash);
+    const audio = {
+      audioData: audioFileData.channelData,
+      sampleRate: audioFileData.sampleRate,
+      duration: audioFileData.duration,
+      filePath: audioFileData.filePath ?? fileOrHash,
+      hash: audioFileData.hash,
+      visualize: () => "Visualization updated",
+      analyzeOnsetSlice: async (options?: OnsetSliceOptions) => {
+        const slices = await window.electron.analyzeOnsetSlice(audioFileData.channelData, options);
+        return { slices, visualize: () => "Slice markers updated" };
+      },
+    };
+
+    audioManager.setCurrentAudio(audio);
+    onUpdateWaveform();
+
+    const existing = await window.electron.getSampleByHash(audioFileData.hash);
+    return bindSample(
+      {
+        id: existing?.id,
+        hash: audioFileData.hash,
+        filePath: audioFileData.filePath ?? fileOrHash,
+        sampleRate: audioFileData.sampleRate,
+        channels: existing?.channels ?? 1,
+        duration: audioFileData.duration,
+      },
+      [
+        `\x1b[32mLoaded: ${sampleLabel(audioFileData.filePath ?? fileOrHash, audioFileData.hash)}\x1b[0m`,
+        `\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`,
+      ].join("\n"),
+    );
+  }
+
+  async function resolveSample(source: Sample | Promise<Sample>): Promise<Sample> {
     return source instanceof Promise ? await source : source;
   }
 
-  const play = Object.assign(
-    async function play(source?: string | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
-      let displayResult: AudioResult | undefined;
+  function stop(): BounceResult {
+    audioManager.stopAudio();
+    return new BounceResult("\x1b[32mPlayback stopped\x1b[0m");
+  }
 
-      if (typeof source === "string") {
-        displayResult = await display(source);
-      } else if (source !== undefined) {
-        const resolved = await resolveAudio(source);
-        // Reload only if this isn't already the current audio
-        if (audioManager.getCurrentAudio()?.hash !== resolved.hash) {
-          displayResult = await display(resolved.hash);
-        }
-      }
+  async function play(source?: string | Sample | Promise<Sample>): Promise<Sample> {
+    let loadedSample: Sample | undefined;
 
-      const audio = audioManager.getCurrentAudio();
-      if (!audio) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
-      }
-      await audioManager.playAudio(audio.audioData, audio.sampleRate);
-
-      const playLine = `\x1b[32mPlaying: ${audio.hash?.substring(0, 8) ?? audio.filePath ?? "audio"}\x1b[0m`;
-      const displayStr = displayResult ? `${displayResult.toString()}\n${playLine}` : playLine;
-      return new AudioResult(
-        displayStr,
-        audio.hash!,
-        audio.filePath ?? undefined,
-        audio.sampleRate,
-        audio.duration,
-      );
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mplay(source?)\x1b[0m",
-        "",
-        "  Play audio. Loads and displays the waveform. Accepts a file path, sample",
-        "  hash, AudioResult, or uses the currently loaded audio if called with no argument.",
-        "",
-        "  \x1b[33msource\x1b[0m  File path, hash string, AudioResult, or Promise<AudioResult>",
-        "",
-        "  \x1b[90mExample:\x1b[0m  await play(\"kick.wav\")",
-        "           await play(\"a1b2c3d4\")",
-        "           play(display(\"snare.wav\"))",
-      ].join("\n")),
-    },
-  );
-
-  const stop = Object.assign(
-    function stop(): BounceResult {
-      audioManager.stopAudio();
-      return new BounceResult("\x1b[32mPlayback stopped\x1b[0m");
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mstop()\x1b[0m",
-        "",
-        "  Stop audio playback immediately.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  stop()",
-      ].join("\n")),
-    },
-  );
-
-  const analyze = Object.assign(
-    async function analyze(
-      source?: AudioResult | Promise<AudioResult> | AnalyzeOptions,
-      options?: AnalyzeOptions,
-    ): Promise<FeatureResult> {
-      const resolvedSource = source instanceof Promise ? await source : source;
-      const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as AnalyzeOptions | undefined);
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
-      }
-
-      terminal.writeln("\x1b[36mAnalyzing onset slices...\x1b[0m");
-
-      const slices = await window.electron.analyzeOnsetSlice(audio.audioData, opts);
-      const featureId = await window.electron.storeFeature(audio.hash, "onset-slice", slices, opts as FeatureOptions | undefined);
-
-      audioManager.setCurrentSlices(slices);
-      onUpdateWaveform();
-
-      return new FeatureResult(
-        `\x1b[32mFound ${slices.length} onset slices (feature: ${featureId})\x1b[0m`,
-        audio.hash,
-        String(featureId),
-        "onset-slice",
-      );
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36manalyze(source?, options?)\x1b[0m",
-        "",
-        "  Onset-slice analysis using FluCoMa fluid.onsetslice. Detects transient",
-        "  boundaries in the audio signal and stores the result as a reusable feature.",
-        "",
-        "  \x1b[33msource\x1b[0m   AudioResult from display() or play() — uses current audio if omitted",
-        "  \x1b[33moptions\x1b[0m  threshold (0–1), minSliceLength, filterSize, frameDelta, metric",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const f = await analyze()",
-        "           const f = await analyze({ threshold: 0.3 })",
-        "           slice(f) → playSlice(0)",
-      ].join("\n")),
-    },
-  );
-
-  const analyzeNmf = Object.assign(
-    async function analyzeNmf(
-      source?: AudioResult | Promise<AudioResult> | NmfOptions,
-      options?: NmfOptions,
-    ): Promise<FeatureResult> {
-      const resolvedSource = source instanceof Promise ? await source : source;
-      const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as NmfOptions | undefined);
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
-      }
-
-      terminal.writeln("\x1b[36mPerforming NMF decomposition...\x1b[0m");
-
-      const result = await window.electron.analyzeBufNMF(audio.audioData, audio.sampleRate, opts);
-
-      const flattenedData = [
-        result.components,
-        result.iterations,
-        result.converged ? 1 : 0,
-        ...result.bases.flat(),
-        ...result.activations.flat(),
-      ];
-      const featureId = await window.electron.storeFeature(
-        audio.hash,
-        "nmf",
-        flattenedData,
-        { ...opts, components: result.components },
-      );
-
-      return new FeatureResult(
-        [
-          `\x1b[32mNMF complete: ${result.components} components (feature: ${featureId})\x1b[0m`,
-          `Converged: ${result.converged ? "Yes" : "No"} after ${result.iterations} iterations`,
-        ].join("\n"),
-        audio.hash,
-        String(featureId),
-        "nmf",
-      );
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36manalyzeNmf(source?, options?)\x1b[0m",
-        "",
-        "  Non-Negative Matrix Factorization decomposition using FluCoMa fluid.bufnmf.",
-        "  Decomposes the audio into spectral components (bases) and time-varying",
-        "  activations. Results are stored as a reusable feature.",
-        "",
-        "  \x1b[33msource\x1b[0m   AudioResult — uses current audio if omitted",
-        "  \x1b[33moptions\x1b[0m  components (default 4), iterations, fftSize, hopSize, windowSize, seed",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const f = await analyzeNmf({ components: 6 })",
-        "           sep() → playComponent(0)",
-      ].join("\n")),
-    },
-  );
-
-  const analyzeMFCC = Object.assign(
-    async function analyzeMFCC(
-      sampleOrPromise: AudioResult | Promise<AudioResult>,
-      options?: MFCCOptions,
-    ): Promise<FeatureResult> {
-      const sample = await resolveAudio(sampleOrPromise);
-      let audioData: Float32Array;
-      let sampleRate: number;
-
-      const current = audioManager.getCurrentAudio();
-      if (current?.hash === sample.hash) {
-        audioData = current.audioData;
-        sampleRate = current.sampleRate;
+    if (typeof source === "string") {
+      loadedSample = await display(source);
+    } else if (source !== undefined) {
+      const resolved = await resolveSample(source);
+      if (audioManager.getCurrentAudio()?.hash !== resolved.hash) {
+        loadedSample = await display(resolved.hash);
       } else {
-        const loaded = await window.electron.readAudioFile(sample.hash);
-        audioData = loaded.channelData;
-        sampleRate = loaded.sampleRate;
+        loadedSample = resolved;
       }
+    }
 
-      terminal.writeln("\x1b[36mComputing MFCCs...\x1b[0m");
+    const audio = audioManager.getCurrentAudio();
+    if (!audio) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
 
-      const coefficients = await window.electron.analyzeMFCC(audioData, {
-        sampleRate,
-        ...options,
+    await audioManager.playAudio(audio.audioData, audio.sampleRate);
+    const activeSample =
+      loadedSample ??
+      bindSample({
+        hash: audio.hash!,
+        filePath: audio.filePath ?? undefined,
+        sampleRate: audio.sampleRate,
+        channels: 1,
+        duration: audio.duration,
       });
 
-      const numFrames = coefficients.length;
-      const numCoeffs = coefficients[0]?.length ?? 0;
-      const featureId = await window.electron.storeFeature(
-        sample.hash,
-        "mfcc",
-        coefficients.flat(),
-        { ...options, numFrames, numCoeffs },
-      );
+    return bindSample(
+      {
+        hash: activeSample.hash,
+        filePath: activeSample.filePath,
+        sampleRate: activeSample.sampleRate,
+        channels: activeSample.channels,
+        duration: activeSample.duration,
+        id: activeSample.id,
+      },
+      [
+        loadedSample ? loadedSample.toString() : makeSampleDisplayText(activeSample),
+        `\x1b[32mPlaying: ${sampleLabel(activeSample.filePath, activeSample.hash)}\x1b[0m`,
+      ].join("\n"),
+    );
+  }
 
-      return new FeatureResult(
-        `\x1b[32mMFCC complete: ${numFrames} frames × ${numCoeffs} coefficients (feature: ${featureId})\x1b[0m`,
-        sample.hash,
-        String(featureId),
-        "mfcc",
-      );
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36manalyzeMFCC(sample, options?)\x1b[0m",
-        "",
-        "  Mel-Frequency Cepstral Coefficients analysis. Computes per-frame timbral",
-        "  features useful for similarity matching and corpus construction.",
-        "",
-        "  \x1b[33msample\x1b[0m   AudioResult (required)",
-        "  \x1b[33moptions\x1b[0m  numCoeffs (default 13), numBands (40), minFreq, maxFreq,",
-        "           windowSize, fftSize, hopSize, sampleRate",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const a = await display(\"loop.wav\")",
-        "           const f = await analyzeMFCC(a, { numCoeffs: 20 })",
-      ].join("\n")),
-    },
-  );
+  async function analyze(
+    source?: Sample | Promise<Sample> | AnalyzeOptions,
+    options?: AnalyzeOptions,
+  ): Promise<OnsetFeature> {
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
+    const opts = resolvedSource instanceof Sample ? options : (resolvedSource as AnalyzeOptions | undefined);
+
+    if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
+      await display(sample.hash);
+    }
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mAnalyzing onset slices...\x1b[0m");
+
+    const slices = await window.electron.analyzeOnsetSlice(audio.audioData, opts);
+    await window.electron.storeFeature(audio.hash, "onset-slice", slices, opts as FeatureOptions | undefined);
+    const feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
+    if (!feature) {
+      throw new Error("Failed to load stored onset feature.");
+    }
+
+    audioManager.setCurrentSlices(slices);
+    onUpdateWaveform();
+
+    return bindOnsetFeature(sample, feature.feature_hash, slices, opts);
+  }
+
+  async function analyzeNmf(
+    source?: Sample | Promise<Sample> | NmfOptions,
+    options?: NmfOptions,
+  ): Promise<NmfFeature> {
+    const resolvedSource = source instanceof Promise ? await source : source;
+    const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
+    const opts = resolvedSource instanceof Sample ? options : (resolvedSource as NmfOptions | undefined);
+
+    if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
+      await display(sample.hash);
+    }
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mPerforming NMF decomposition...\x1b[0m");
+    const result = await window.electron.analyzeBufNMF(audio.audioData, audio.sampleRate, opts);
+    const flattenedData = [
+      result.components,
+      result.iterations,
+      result.converged ? 1 : 0,
+      ...result.bases.flat(),
+      ...result.activations.flat(),
+    ];
+    await window.electron.storeFeature(audio.hash, "nmf", flattenedData, {
+      ...opts,
+      components: result.components,
+      iterations: result.iterations,
+      converged: result.converged,
+    } as FeatureOptions);
+    const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
+    if (!feature) {
+      throw new Error("Failed to load stored NMF feature.");
+    }
+
+    return bindNmfFeature(
+      sample,
+      feature.feature_hash,
+      opts,
+      result.components,
+      result.iterations,
+      result.converged,
+      [
+        `\x1b[32mNMF complete: ${result.components} components (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
+        `Converged: ${result.converged ? "Yes" : "No"} after ${result.iterations} iterations`,
+      ].join("\n"),
+    );
+  }
+
+  async function analyzeMFCC(
+    sampleOrPromise: Sample | Promise<Sample>,
+    options?: MFCCOptions,
+  ): Promise<MfccFeature> {
+    const sample = await resolveSample(sampleOrPromise);
+    let audioData: Float32Array;
+    let sampleRate: number;
+
+    const current = audioManager.getCurrentAudio();
+    if (current?.hash === sample.hash) {
+      audioData = current.audioData;
+      sampleRate = current.sampleRate;
+    } else {
+      const loaded = await window.electron.readAudioFile(sample.hash);
+      audioData = loaded.channelData;
+      sampleRate = loaded.sampleRate;
+    }
+
+    terminal.writeln("\x1b[36mComputing MFCCs...\x1b[0m");
+
+    const coefficients = await window.electron.analyzeMFCC(audioData, {
+      sampleRate,
+      ...options,
+    });
+    const numFrames = coefficients.length;
+    const numCoeffs = coefficients[0]?.length ?? 0;
+    await window.electron.storeFeature(sample.hash, "mfcc", coefficients.flat(), {
+      ...options,
+      numFrames,
+      numCoeffs,
+    } as FeatureOptions);
+    const feature = await window.electron.getMostRecentFeature(sample.hash, "mfcc");
+    if (!feature) {
+      throw new Error("Failed to load stored MFCC feature.");
+    }
+
+    return bindMfccFeature(
+      sample,
+      feature.feature_hash,
+      options,
+      numFrames,
+      numCoeffs,
+      `\x1b[32mMFCC complete: ${numFrames} frames × ${numCoeffs} coefficients (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
+    );
+  }
 
   const slice = Object.assign(
     async function slice(
-      source?: FeatureResult | AudioResult | Promise<AudioResult> | SliceOptions,
+      source?: OnsetFeature | Sample | Promise<Sample> | SliceOptions,
       options?: SliceOptions,
     ): Promise<BounceResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
+      const resolvedSource = source instanceof Promise ? await source : source;
+      const explicitOptions =
+        resolvedSource instanceof OnsetFeature || resolvedSource instanceof Sample
+          ? options
+          : (resolvedSource as SliceOptions | undefined);
+      let feature: FeatureData | null;
+      let sampleHash: string;
+      if (resolvedSource instanceof OnsetFeature) {
+        sampleHash = resolvedSource.sourceHash;
+        feature = explicitOptions?.featureHash
+          ? await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice")
+          : await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice");
+      } else if (resolvedSource instanceof Sample) {
+        sampleHash = resolvedSource.hash;
+        feature = await window.electron.getMostRecentFeature(
+          resolvedSource.hash,
+          "onset-slice",
+        );
+      } else {
+        sampleHash = getCurrentHash();
+        feature = await window.electron.getMostRecentFeature(sampleHash, "onset-slice");
       }
 
-      const resolvedSource = source instanceof Promise ? await source : source;
-      let feature: FeatureData | null;
-      if (resolvedSource instanceof FeatureResult) {
-        feature = await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice");
-      } else {
-        const opts = resolvedSource instanceof AudioResult ? options : (resolvedSource as SliceOptions | undefined);
-        void opts;
-        feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
+      if (feature && explicitOptions?.featureHash && !feature.feature_hash.startsWith(explicitOptions.featureHash)) {
+        feature = {
+          ...feature,
+          feature_hash: explicitOptions.featureHash,
+        };
       }
 
       if (!feature) {
-        throw new Error('No onset-slice analysis found. Run analyze() first.');
+        throw new Error("No onset analysis found. Run sample.onsets() first.");
       }
 
       terminal.writeln(`\x1b[36mCreating slices from feature ${feature.feature_hash.substring(0, 8)}...\x1b[0m`);
-
-      const slices = await window.electron.createSliceSamples(audio.hash, feature.feature_hash);
+      const slices = await window.electron.createSliceSamples(sampleHash, feature.feature_hash);
 
       return new BounceResult(`\x1b[32mCreated ${slices.length} slices\x1b[0m`);
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mslice(source?, options?)\x1b[0m",
+        "\x1b[1;36msample.slice(options?)\x1b[0m",
         "",
-        "  Extracts onset-slice segments from the current audio into individual stored",
-        "  samples. Requires analyze() to have been run first. Each slice becomes a",
-        "  sample you can play with playSlice(index).",
+        "  Extract onset-slice segments into individual stored samples. Requires",
+        "  sample.onsets() to have been run first.",
         "",
-        "  \x1b[33msource\x1b[0m   FeatureResult from analyze(), or AudioResult — uses current audio if omitted",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored feature",
         "",
-        "  \x1b[90mExample:\x1b[0m  await analyze()",
-        "           await slice()",
-        "           await playSlice(0)",
+        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+        "           const onsets = samp.onsets()",
+        "           onsets.slice()",
       ].join("\n")),
     },
   );
 
   const sep = Object.assign(
     async function sep(
-      source?: AudioResult | Promise<AudioResult> | FeatureResult | SepOptions,
+      source?: Sample | Promise<Sample> | NmfFeature | SepOptions,
       options?: SepOptions,
     ): Promise<BounceResult> {
       let hash: string;
       let opts: SepOptions | undefined;
 
       const resolvedSource = source instanceof Promise ? await source : source;
-      if (resolvedSource instanceof AudioResult) {
+      if (resolvedSource instanceof Sample) {
         hash = resolvedSource.hash;
         opts = options;
-      } else if (resolvedSource instanceof FeatureResult) {
+      } else if (resolvedSource instanceof NmfFeature) {
         hash = resolvedSource.sourceHash;
         opts = options;
       } else {
-        const audio = audioManager.getCurrentAudio();
-        if (!audio?.hash) {
-          throw new Error('No audio loaded. Use display("path/to/file") first.');
-        }
-        hash = audio.hash;
+        hash = getCurrentHash();
         opts = resolvedSource as SepOptions | undefined;
       }
 
@@ -397,18 +573,16 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36msep(source?, options?)\x1b[0m",
+        "\x1b[1;36msample.sep(options?)\x1b[0m",
         "",
         "  NMF separation — decomposes the audio into individual component samples",
-        "  using a prior analyzeNmf() result. Each component can be played with",
-        "  playComponent(index).",
+        "  using a prior sample.nmf() result.",
         "",
-        "  \x1b[33msource\x1b[0m   AudioResult, FeatureResult, or uses current audio if omitted",
         "  \x1b[33moptions\x1b[0m  components, iterations",
         "",
-        "  \x1b[90mExample:\x1b[0m  await analyzeNmf({ components: 4 })",
-        "           await sep()",
-        "           await playComponent(0)",
+        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+        "           const feature = samp.nmf({ components: 4 })",
+        "           feature.sep()",
       ].join("\n")),
     },
   );
@@ -438,16 +612,34 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  \x1b[33moptions\x1b[0m  targetHash (required), sourceHash (required), components",
         "",
-        "  \x1b[90mExample:\x1b[0m  await nx({ targetHash: \"a1b2c3d4\", sourceHash: \"e5f6a7b8\" })",
+        "  \x1b[90mExample:\x1b[0m  nx({ targetHash: \"a1b2c3d4\", sourceHash: \"e5f6a7b8\" })",
       ].join("\n")),
     },
   );
 
   const list = Object.assign(
-    async function list(): Promise<BounceResult> {
+    async function list(): Promise<SampleListResult> {
       const samples = await window.electron.listSamples();
       const features = await window.electron.listFeatures();
       const lines: string[] = [];
+      const sampleObjects = samples.map((sample) =>
+        bindSample({
+          id: sample.id,
+          hash: sample.hash,
+          filePath: sample.file_path ?? undefined,
+          sampleRate: sample.sample_rate,
+          channels: sample.channels,
+          duration: sample.duration,
+        }),
+      );
+      const featureSummaries: SampleSummaryFeature[] = features.map((feature) => ({
+        sampleHash: feature.sample_hash,
+        featureHash: feature.feature_hash,
+        featureType: feature.feature_type,
+        featureCount: feature.feature_count,
+        filePath: feature.file_path ?? undefined,
+        options: feature.options,
+      }));
 
       if (samples.length === 0) {
         lines.push("\x1b[33mNo samples in database\x1b[0m");
@@ -476,40 +668,46 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         lines.push("", `Total: ${features.length} feature(s)`);
       }
 
-      return new BounceResult(lines.join("\n"));
+      return new SampleListResult(
+        lines.join("\n"),
+        sampleObjects,
+        featureSummaries,
+        () => new BounceResult([
+          "\x1b[1;36msn.list()\x1b[0m",
+          "",
+          "  List stored samples and features. Returns a SampleListResult and prints",
+          "  a formatted summary to the terminal.",
+        ].join("\n")),
+      );
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mlist()\x1b[0m",
+        "\x1b[1;36msn.list()\x1b[0m",
         "",
-        "  Show all stored samples and features in the database. Samples are shown",
-        "  with their hash, filename, sample rate, channels, and duration.",
+        "  Show all stored samples and features in the database.",
         "",
-        "  \x1b[90mExample:\x1b[0m  await list()",
+        "  \x1b[90mExample:\x1b[0m  sn.list()",
       ].join("\n")),
     },
   );
 
   const playSlice = Object.assign(
-    async function playSlice(index = 0, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
-      }
+    async function playSlice(index = 0, source?: OnsetFeature | Sample | Promise<Sample>): Promise<Sample> {
+      const currentHash = getCurrentHash();
 
       const resolvedSource = source instanceof Promise ? await source : source;
-      const lookupHash = resolvedSource instanceof AudioResult
+      const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
-        : resolvedSource instanceof FeatureResult
+        : resolvedSource instanceof OnsetFeature
           ? resolvedSource.sourceHash
-          : audio.hash;
+          : currentHash;
 
-      const feature = resolvedSource instanceof FeatureResult
+      const feature = resolvedSource instanceof OnsetFeature
         ? await window.electron.getMostRecentFeature(lookupHash, "onset-slice")
         : await window.electron.getMostRecentFeature(lookupHash, "onset-slice");
 
       if (!feature) {
-        throw new Error('No onset-slice analysis found. Run analyze() first.');
+        throw new Error("No onset analysis found. Run sample.onsets() first.");
       }
 
       const derivedSample = await window.electron.getDerivedSampleByIndex(
@@ -543,47 +741,46 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       await audioManager.playAudio(audioData, derivedSample.sample_rate);
       onUpdateWaveform();
 
-      return new AudioResult(
+      return bindSample(
+        {
+          id: derivedSample.id,
+          hash: derivedSample.hash,
+          filePath: undefined,
+          sampleRate: derivedSample.sample_rate,
+          channels: derivedSample.channels,
+          duration,
+        },
         `\x1b[32mPlaying slice ${index} (${duration.toFixed(3)}s)\x1b[0m`,
-        derivedSample.hash,
-        undefined,
-        derivedSample.sample_rate,
-        duration,
       );
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mplaySlice(index?, source?)\x1b[0m",
+        "\x1b[1;36mOnsetFeature.playSlice(index?)\x1b[0m",
         "",
-        "  Play a specific onset slice by index. Requires slice() to have been run.",
-        "  Index defaults to 0.",
+        "  Play a specific onset-derived slice by index. Requires feature.slice()",
+        "  to have been run first. Index defaults to 0.",
         "",
-        "  \x1b[33mindex\x1b[0m   Slice index (0-based, default 0)",
-        "  \x1b[33msource\x1b[0m  FeatureResult or AudioResult — uses current audio if omitted",
-        "",
-        "  \x1b[90mExample:\x1b[0m  await playSlice(0)",
-        "           await playSlice(3, featureResult)",
+        "  \x1b[90mExample:\x1b[0m  const feature = samp.onsets()",
+        "           feature.slice()",
+        "           feature.playSlice(0)",
       ].join("\n")),
     },
   );
 
   const playComponent = Object.assign(
-    async function playComponent(index = 0, source?: FeatureResult | AudioResult | Promise<AudioResult>): Promise<AudioResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
-      }
+    async function playComponent(index = 0, source?: NmfFeature | Sample | Promise<Sample>): Promise<Sample> {
+      const currentHash = getCurrentHash();
 
       const resolvedSource = source instanceof Promise ? await source : source;
-      const lookupHash = resolvedSource instanceof AudioResult
+      const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
-        : resolvedSource instanceof FeatureResult
+        : resolvedSource instanceof NmfFeature
           ? resolvedSource.sourceHash
-          : audio.hash;
+          : currentHash;
 
       const feature = await window.electron.getMostRecentFeature(lookupHash, "nmf");
       if (!feature) {
-        throw new Error('No NMF analysis found. Run analyzeNmf() first.');
+        throw new Error("No NMF analysis found. Run sample.nmf() first.");
       }
 
       const nmfData = JSON.parse(feature.feature_data) as { bases: number[][] };
@@ -623,26 +820,28 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       await audioManager.playAudio(componentAudio, derivedSample.sample_rate);
       onUpdateWaveform();
 
-      return new AudioResult(
+      return bindSample(
+        {
+          id: derivedSample.id,
+          hash: derivedSample.hash,
+          filePath: undefined,
+          sampleRate: derivedSample.sample_rate,
+          channels: derivedSample.channels,
+          duration,
+        },
         `\x1b[32mPlaying component ${index} (${duration.toFixed(3)}s)\x1b[0m`,
-        derivedSample.hash,
-        undefined,
-        derivedSample.sample_rate,
-        duration,
       );
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mplayComponent(index?, source?)\x1b[0m",
+        "\x1b[1;36mNmfFeature.playComponent(index?)\x1b[0m",
         "",
-        "  Play a specific NMF component by index. Requires sep() to have been run.",
-        "  Index defaults to 0.",
+        "  Play a specific NMF-derived component by index. Requires feature.sep()",
+        "  to have been run first. Index defaults to 0.",
         "",
-        "  \x1b[33mindex\x1b[0m   Component index (0-based, default 0)",
-        "  \x1b[33msource\x1b[0m  FeatureResult or AudioResult — uses current audio if omitted",
-        "",
-        "  \x1b[90mExample:\x1b[0m  await playComponent(0)",
-        "           await playComponent(2, featureResult)",
+        "  \x1b[90mExample:\x1b[0m  const feature = samp.nmf()",
+        "           feature.sep()",
+        "           feature.playComponent(0)",
       ].join("\n")),
     },
   );
@@ -651,7 +850,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     async function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
+        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
       }
 
       const hash = options?.featureHash ?? audio.hash;
@@ -687,11 +886,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "\x1b[1;36mvisualizeNmf(options?)\x1b[0m",
         "",
         "  Overlay NMF component activations on the current waveform. Requires",
-        "  analyzeNmf() to have been run for the current sample.",
+        "  sample.nmf() to have been run for the current sample.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
         "",
-        "  \x1b[90mExample:\x1b[0m  await visualizeNmf()",
+        "  \x1b[90mExample:\x1b[0m  visualizeNmf()",
       ].join("\n")),
     },
   );
@@ -701,7 +900,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       const audio = audioManager.getCurrentAudio();
       const targetHash = options?.featureHash ?? audio?.hash;
       if (!targetHash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
+        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
       }
 
       const sample = await window.electron.getSampleByHash(targetHash);
@@ -738,7 +937,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored feature",
         "",
-        "  \x1b[90mExample:\x1b[0m  await visualizeNx()",
+        "  \x1b[90mExample:\x1b[0m  visualizeNx()",
       ].join("\n")),
     },
   );
@@ -747,12 +946,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     async function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
+        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
       }
 
       const feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
       if (!feature) {
-        throw new Error('No onset-slice analysis found. Run analyze() first.');
+        throw new Error("No onset analysis found. Run sample.onsets() first.");
       }
 
       const slicesData = JSON.parse(feature.feature_data) as number[];
@@ -767,11 +966,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "\x1b[1;36monsetSlice(options?)\x1b[0m",
         "",
         "  Draw onset slice markers on the waveform display using the most recent",
-        "  analyze() result for the current audio.",
+        "  sample.onsets() result for the current audio.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored onset-slice feature",
         "",
-        "  \x1b[90mExample:\x1b[0m  await onsetSlice()",
+        "  \x1b[90mExample:\x1b[0m  onsetSlice()",
       ].join("\n")),
     },
   );
@@ -780,12 +979,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     async function nmf(options?: NmfVisOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
-        throw new Error('No audio loaded. Use display("path/to/file") first.');
+        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
       }
 
       const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
       if (!feature) {
-        throw new Error('No NMF analysis found. Run analyzeNmf() first.');
+        throw new Error("No NMF analysis found. Run sample.nmf() first.");
       }
 
       const nmfData = JSON.parse(feature.feature_data) as {
@@ -822,11 +1021,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "\x1b[1;36mnmf(options?)\x1b[0m",
         "",
         "  Show a detailed NMF bases and activations visualization panel below",
-        "  the waveform. Requires analyzeNmf() to have been run first.",
+        "  the waveform. Requires sample.nmf() to have been run first.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
         "",
-        "  \x1b[90mExample:\x1b[0m  await nmf()",
+        "  \x1b[90mExample:\x1b[0m  nmf()",
       ].join("\n")),
     },
   );
@@ -842,7 +1041,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  Clear all entries from the debug log store.",
         "",
-        "  \x1b[90mExample:\x1b[0m  await clearDebug()",
+        "  \x1b[90mExample:\x1b[0m  clearDebug()",
       ].join("\n")),
     },
   );
@@ -881,15 +1080,15 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  \x1b[33mlimit\x1b[0m  Number of entries to show (default 20)",
         "",
-        "  \x1b[90mExample:\x1b[0m  await debug()",
-        "           await debug(50)",
+        "  \x1b[90mExample:\x1b[0m  debug()",
+        "           debug(50)",
       ].join("\n")),
     },
   );
 
   const granularize = Object.assign(
     async function granularize(
-      source?: string | AudioResult | Promise<AudioResult> | GranularizeOptions,
+      source?: string | Sample | Promise<Sample> | GranularizeOptions,
       options?: GranularizeOptions,
     ): Promise<GrainCollection> {
       const resolvedSource = source instanceof Promise ? await source : source;
@@ -897,7 +1096,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         resolvedSource !== null &&
         resolvedSource !== undefined &&
         typeof resolvedSource === "object" &&
-        !(resolvedSource instanceof AudioResult);
+        !(resolvedSource instanceof Sample);
       const opts = isOptionsArg
         ? (resolvedSource as GranularizeOptions)
         : options;
@@ -906,29 +1105,29 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       if (typeof resolvedSource === "string") {
         const loaded = await display(resolvedSource);
         hash = loaded.hash;
-      } else if (resolvedSource instanceof AudioResult) {
+      } else if (resolvedSource instanceof Sample) {
         hash = resolvedSource.hash;
       } else {
-        const audio = audioManager.getCurrentAudio();
-        if (!audio?.hash) {
-          throw new Error('No audio loaded. Use display("path/to/file") first.');
-        }
-        hash = audio.hash;
+        hash = getCurrentHash();
       }
 
       terminal.writeln("\x1b[36mGranularizing...\x1b[0m");
 
       const result = await window.electron.granularizeSample(hash, opts);
 
-      const grains: Array<AudioResult | null> = result.grainHashes.map(
+      const grains: Array<Sample | null> = result.grainHashes.map(
         (grainHash: string | null) => {
           if (grainHash === null) return null;
-          return new AudioResult(
+          return bindSample(
+            {
+              hash: grainHash,
+              filePath: undefined,
+              sampleRate: result.sampleRate,
+              channels: 1,
+              duration: result.grainDuration,
+              id: undefined,
+            },
             `\x1b[32mGrain: ${grainHash.substring(0, 8)}\x1b[0m`,
-            grainHash,
-            undefined,
-            result.sampleRate,
-            result.grainDuration,
           );
         },
       );
@@ -937,45 +1136,97 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mgranularize(source?, options?)\x1b[0m",
+        "\x1b[1;36msample.granularize(options?)\x1b[0m",
         "",
         "  Breaks an audio sample into grains and returns a GrainCollection.",
         "  Grains can be iterated, filtered, and played individually.",
         "",
-        "  \x1b[33msource\x1b[0m   File path, AudioResult, or uses current audio if omitted",
         "  \x1b[33moptions\x1b[0m  grainSize (ms, default 20), hopSize (ms), jitter (0–1),",
         "           startTime (ms), endTime (ms), normalize, silenceThreshold (dBFS, default -60)",
         "",
-        "  \x1b[90mExample:\x1b[0m  const g = await granularize({ grainSize: 50, jitter: 0.2 })",
-        "           g.forEach(async (grain) => play(grain))",
+        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+        "           const g = samp.granularize({ grainSize: 50, jitter: 0.2 })",
+        "           g.length()",
       ].join("\n")),
     },
   );
+
+  const sn = new SampleNamespace(
+    [
+      "\x1b[1;36msn\x1b[0m — sample namespace",
+      "",
+      "  sn.read(pathOrHash)   Load a sample and return a Sample object",
+      "  sn.list()             List stored samples and features",
+      "  sn.current()          Return the currently loaded sample, if any",
+      "",
+      "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), const samp = sn.read('x'); samp.help()",
+    ].join("\n"),
+    {
+      help: () => new BounceResult([
+        "\x1b[1;36msn\x1b[0m — sample namespace",
+        "",
+        "  Use sn.read() to create Sample objects. Samples then expose methods for",
+        "  playback, analysis, resynthesis, and help.",
+        "",
+        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+        "           samp.play()",
+        "           const feature = samp.nmf()",
+        "           feature.sep()",
+      ].join("\n")),
+      read: (pathOrHash) => display(pathOrHash),
+      list: () => list(),
+      current: async () => {
+        const hash = audioManager.getCurrentAudio()?.hash;
+        if (!hash) return null;
+        const current = await window.electron.getSampleByHash(hash);
+        if (!current) return null;
+        return bindSample({
+          id: current.id,
+          hash: current.hash,
+          filePath: current.file_path ?? undefined,
+          sampleRate: current.sample_rate,
+          channels: current.channels,
+          duration: current.duration,
+        });
+      },
+    },
+  );
+
+  (sn.read as typeof sn.read & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.read(pathOrHash)\x1b[0m",
+      "",
+      "  Load an audio file or stored sample hash into the shared waveform context",
+      "  and return a Sample object.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"kick.wav\")",
+      "           const samp = sn.read(\"a1b2c3d4\")",
+    ].join("\n"));
+
+  (sn.list as typeof sn.list & { help?: () => BounceResult }).help = () => list.help();
+  (sn.current as typeof sn.current & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.current()\x1b[0m",
+      "",
+      "  Return the currently loaded sample or null if no sample is active.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const current = sn.current()",
+      "           current?.help()",
+    ].join("\n"));
 
   const help = Object.assign(
     function help(): BounceResult {
       return new BounceResult([
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
-        "\x1b[1;36m── Analysis ──\x1b[0m",
-        "  \x1b[33manalyze(source?, options?)\x1b[0m       Onset-slice analysis using FluCoMa",
-        "  \x1b[33manalyzeNmf(source?, options?)\x1b[0m    NMF spectral decomposition",
-        "  \x1b[33manalyzeMFCC(sample, options?)\x1b[0m    Mel-frequency cepstral coefficients",
-        "",
-        "\x1b[1;36m── Resynthesis ──\x1b[0m",
-        "  \x1b[33mplay(source?)\x1b[0m                    Play audio (path, hash, or AudioResult)",
-        "  \x1b[33mstop()\x1b[0m                           Stop playback",
-        "  \x1b[33mslice(source?, options?)\x1b[0m         Extract onset slices as stored samples",
-        "  \x1b[33msep(source?, options?)\x1b[0m           NMF separation into component samples",
+        "\x1b[1;36m── Sample API ──\x1b[0m",
+        "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .help()",
+        "  \x1b[33mSample\x1b[0m                           .play() .stop() .display() .onsets() .nmf() .mfcc()",
+        "                                   .slice() .sep() .granularize() .help()",
         "  \x1b[33mnx(options)\x1b[0m                      NMF cross-synthesis",
-        "  \x1b[33mplaySlice(index?, source?)\x1b[0m       Play an onset slice by index",
-        "  \x1b[33mplayComponent(index?, source?)\x1b[0m   Play an NMF component by index",
-        "  \x1b[33mgranularize(source?, options?)\x1b[0m   Break audio into grains",
         "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",
         "",
         "\x1b[1;36m── Utilities ──\x1b[0m",
-        "  \x1b[33mdisplay(fileOrHash)\x1b[0m              Load and display audio in the waveform view",
-        "  \x1b[33mlist()\x1b[0m                           List all stored samples and features",
         "  \x1b[33mvisualizeNmf(options?)\x1b[0m           Overlay NMF activations on waveform",
         "  \x1b[33mvisualizeNx(options?)\x1b[0m            Overlay NX cross-synthesis on waveform",
         "  \x1b[33monsetSlice(options?)\x1b[0m             Draw onset slice markers on waveform",
@@ -985,11 +1236,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
-        "  slice(analyze()) → playSlice(0)                          \x1b[90m# onset workflow\x1b[0m",
-        "  sep(play(\"path\")) → playComponent(0)                     \x1b[90m# NMF separation\x1b[0m",
-        "  corpus.build(slice(analyze())) → corpus.query(0, 5)      \x1b[90m# corpus search\x1b[0m",
+        "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
+        "  const onsets = samp.onsets(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
+        "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
+        "  corpus.build(samp) → corpus.query(0, 5)                 \x1b[90m# corpus search\x1b[0m",
         "",
-        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mfn.help()\x1b[0m  \x1b[90me.g. analyze.help(), corpus.help(), fs.help()\x1b[0m",
+        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
       ].join("\n"));
     },
     {
@@ -997,10 +1249,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "\x1b[1;36mhelp()\x1b[0m",
         "",
         "  Show the organized command reference. For detailed usage of a specific",
-        "  command, call its .help() method directly.",
+        "  command or object, call its .help() method directly.",
         "",
         "  \x1b[90mExample:\x1b[0m  help()",
-        "           analyze.help()",
+        "           sn.help()",
         "           corpus.help()",
       ].join("\n")),
     },
@@ -1028,33 +1280,35 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  corpus.\x1b[33mbuild\x1b[0m(source?)",
         "    Build a KDTree from the onset slices of an audio file. Requires",
-        "    analyze() and slice() to have been run first.",
-        "    \x1b[90mExample:\x1b[0m  await corpus.build()",
+        "    sample.onsets() and sample.slice() to have been run first.",
+        "    \x1b[90mExample:\x1b[0m  const samp = sn.read('loop.wav')",
+        "                     corpus.build(samp)",
         "",
         "  corpus.\x1b[33mquery\x1b[0m(segmentIndex, k?)",
         "    Find the k nearest corpus segments to the segment at segmentIndex.",
         "    k defaults to 5. Returns a ranked list of indices and distances.",
-        "    \x1b[90mExample:\x1b[0m  await corpus.query(0, 5)",
+        "    \x1b[90mExample:\x1b[0m  corpus.query(0, 5)",
         "",
         "  corpus.\x1b[33mresynthesize\x1b[0m(queryIndices)",
         "    Concatenate and play corpus segments by index array.",
-        "    \x1b[90mExample:\x1b[0m  await corpus.resynthesize([0, 3, 7, 2])",
+        "    \x1b[90mExample:\x1b[0m  corpus.resynthesize([0, 3, 7, 2])",
         "",
         "  \x1b[90mFull workflow:\x1b[0m",
-        "    await analyze()",
-        "    await slice()",
-        "    await corpus.build()",
-        "    await corpus.query(0, 5)       \x1b[90m# find 5 neighbors of segment 0\x1b[0m",
-        "    await corpus.resynthesize([0, 3, 7])",
+        "    const samp = sn.read('loop.wav')",
+        "    samp.onsets()",
+        "    samp.slice()",
+        "    corpus.build(samp)",
+        "    corpus.query(0, 5)             \x1b[90m# find 5 neighbors of segment 0\x1b[0m",
+        "    corpus.resynthesize([0, 3, 7])",
       ].join("\n"));
     },
     /**
      * Build the corpus from the slices of the currently loaded audio.
      * Looks up the most recent onset-slice feature automatically.
-     * Can also be called with an AudioResult or explicit (sourceHash, featureHash) strings.
+     * Can also be called with a Sample or explicit (sourceHash, featureHash) strings.
      */
     async build(
-      source?: string | AudioResult | Promise<AudioResult>,
+      source?: string | Sample | Promise<Sample>,
       featureHashOverride?: string,
     ): Promise<BounceResult> {
       let sourceHash: string;
@@ -1065,17 +1319,17 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         if (!featureHashOverride) throw new Error("featureHash required when passing sourceHash as string.");
         featureHash = featureHashOverride;
       } else {
-        let resolved: AudioResult | undefined;
-        if (source !== undefined) resolved = await resolveAudio(source as AudioResult | Promise<AudioResult>);
+        let resolved: Sample | undefined;
+        if (source !== undefined) resolved = await resolveSample(source as Sample | Promise<Sample>);
         const hash = resolved?.hash ?? audioManager.getCurrentAudio()?.hash;
-        if (!hash) throw new Error('No audio loaded. Use display("path/to/file") first.');
+        if (!hash) throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
         sourceHash = hash;
 
         if (featureHashOverride) {
           featureHash = featureHashOverride;
         } else {
           const feature = await window.electron.getMostRecentFeature(sourceHash, "onset-slice");
-          if (!feature) throw new Error("No onset-slice feature found. Run analyze() then slice() first.");
+          if (!feature) throw new Error("No onset-slice feature found. Run sample.onsets() then sample.slice() first.");
           featureHash = feature.feature_hash;
         }
       }
@@ -1188,9 +1442,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "",
           "  \x1b[33mpath\x1b[0m  Optional path (absolute, relative, or ~). Defaults to cwd.",
           "",
-          "  \x1b[90mExamples:\x1b[0m  await fs.ls()",
-          "            await fs.ls('~/samples')",
-          "            await fs.ls('../other')",
+          "  \x1b[90mExamples:\x1b[0m  fs.ls()",
+          "            fs.ls('~/samples')",
+          "            fs.ls('../other')",
         ].join("\n")),
       },
     ),
@@ -1213,8 +1467,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "",
           "  \x1b[33mpath\x1b[0m  Optional path (absolute, relative, or ~). Defaults to cwd.",
           "",
-          "  \x1b[90mExamples:\x1b[0m  await fs.la()",
-          "            await fs.la('~/samples')",
+          "  \x1b[90mExamples:\x1b[0m  fs.la()",
+          "            fs.la('~/samples')",
         ].join("\n")),
       },
     ),
@@ -1234,9 +1488,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "",
           "  \x1b[33mpath\x1b[0m  Target directory (absolute, relative, or starting with ~).",
           "",
-          "  \x1b[90mExamples:\x1b[0m  await fs.cd('~/samples')",
-          "            await fs.cd('../other')",
-          "            await fs.cd('/Volumes/SampleDrive')",
+          "  \x1b[90mExamples:\x1b[0m  fs.cd('~/samples')",
+          "            fs.cd('../other')",
+          "            fs.cd('/Volumes/SampleDrive')",
         ].join("\n")),
       },
     ),
@@ -1253,7 +1507,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "  Print the current working directory. Relative paths in display()",
           "  and other commands resolve against this path.",
           "",
-          "  \x1b[90mExample:\x1b[0m  await fs.pwd()",
+          "  \x1b[90mExample:\x1b[0m  fs.pwd()",
         ].join("\n")),
       },
     ),
@@ -1277,9 +1531,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "",
           "  \x1b[33mpattern\x1b[0m  Glob pattern string.",
           "",
-          "  \x1b[90mExamples:\x1b[0m  await fs.glob('*.wav')",
-          "            await fs.glob('**/*.{wav,flac}')",
-          "            await fs.glob('drums/**/*.wav')",
+          "  \x1b[90mExamples:\x1b[0m  fs.glob('*.wav')",
+          "            fs.glob('**/*.{wav,flac}')",
+          "            fs.glob('drums/**/*.wav')",
         ].join("\n")),
       },
     ),
@@ -1314,14 +1568,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           "  \x1b[33mhandler\x1b[0m  Either a catch-all callback or a handler-map keyed by fs.FileType.",
           "",
           "  Catch-all — receives every entry:",
-          "    \x1b[90mawait fs.walk('~/samples', async (filePath, type) => {\x1b[0m",
-          "    \x1b[90m  if (type === fs.FileType.File) await display(filePath);\x1b[0m",
+          "    \x1b[90mfs.walk('~/samples', (filePath, type) => {\x1b[0m",
+          "    \x1b[90m  if (type === fs.FileType.File) return sn.read(filePath);\x1b[0m",
           "    \x1b[90m});\x1b[0m",
           "",
           "  Handler map — only listed types fire, rest are silently skipped:",
-          "    \x1b[90mawait fs.walk('~/samples', {\x1b[0m",
-          "    \x1b[90m  [fs.FileType.File]: async (p) => { await display(p); },\x1b[0m",
-          "    \x1b[90m  [fs.FileType.Directory]: async (p) => { console.log(p); },\x1b[0m",
+          "    \x1b[90mfs.walk('~/samples', {\x1b[0m",
+          "    \x1b[90m  [fs.FileType.File]: (p) => sn.read(p),\x1b[0m",
+          "    \x1b[90m  [fs.FileType.Directory]: (p) => { console.log(p); },\x1b[0m",
           "    \x1b[90m});\x1b[0m",
           "",
           "  fs.FileType values: File · Directory · Symlink · BlockDevice",
@@ -1332,17 +1586,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   };
 
   return {
-    display,
-    play,
-    stop,
-    analyze,
-    analyzeNmf,
-    slice,
-    sep,
+    sn,
     nx,
-    list,
-    playSlice,
-    playComponent,
     visualizeNmf,
     visualizeNx,
     onsetSlice,
@@ -1351,8 +1596,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     debug,
     help,
     clear,
-    analyzeMFCC,
-    granularize,
     corpus,
     fs,
   };

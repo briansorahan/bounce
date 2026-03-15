@@ -57,6 +57,7 @@ interface FeatureListData {
   file_path: string;
   options: string | null;
   feature_count: number;
+  feature_hash: string;
 }
 
 interface OnsetSliceOptions {

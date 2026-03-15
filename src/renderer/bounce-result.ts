@@ -1,13 +1,314 @@
+import type { GrainCollection } from "./grain-collection.js";
+
 /**
  * Base class for all Bounce REPL command results.
- * Subclasses carry typed data enabling command composition (e.g. sep(play("…"))).
+ * Subclasses carry typed data enabling command composition.
  * toString() returns the pre-formatted ANSI string shown in the terminal.
  */
 export class BounceResult {
-  constructor(private readonly _display: string) {}
+  constructor(private readonly displayText: string) {}
 
   toString(): string {
-    return this._display;
+    return this.displayText;
+  }
+}
+
+type HelpFactory = () => BounceResult;
+
+function defaultHelp(name: string): BounceResult {
+  return new BounceResult(`\x1b[1;36m${name}\x1b[0m`);
+}
+
+class HelpableResult extends BounceResult {
+  constructor(
+    display: string,
+    private readonly helpFactory: HelpFactory,
+  ) {
+    super(display);
+  }
+
+  help(): BounceResult {
+    return this.helpFactory();
+  }
+}
+
+export interface SampleMethodBindings {
+  help: HelpFactory;
+  play: () => Promise<Sample>;
+  stop: () => BounceResult;
+  display: () => Promise<Sample>;
+  slice: (options?: SliceOptions) => Promise<BounceResult>;
+  sep: (options?: SepOptions) => Promise<BounceResult>;
+  granularize: (options?: GranularizeOptions) => Promise<GrainCollection>;
+  onsets: (options?: AnalyzeOptions) => Promise<OnsetFeature>;
+  nmf: (options?: NmfOptions) => Promise<NmfFeature>;
+  mfcc: (options?: MFCCOptions) => Promise<MfccFeature>;
+}
+
+function unavailableSampleBindings(name: string): SampleMethodBindings {
+  return {
+    help: () => defaultHelp(name),
+    play: async () => {
+      throw new Error(`${name} cannot be played in this context.`);
+    },
+    stop: () => new BounceResult("\x1b[33mPlayback is not available for this object\x1b[0m"),
+    display: async () => {
+      throw new Error(`${name} cannot be displayed in this context.`);
+    },
+    slice: async () => {
+      throw new Error(`${name} does not support slicing in this context.`);
+    },
+    sep: async () => {
+      throw new Error(`${name} does not support separation in this context.`);
+    },
+    granularize: async () => {
+      throw new Error(`${name} does not support granularization in this context.`);
+    },
+    onsets: async () => {
+      throw new Error(`${name} does not support onset analysis in this context.`);
+    },
+    nmf: async () => {
+      throw new Error(`${name} does not support NMF analysis in this context.`);
+    },
+    mfcc: async () => {
+      throw new Error(`${name} does not support MFCC analysis in this context.`);
+    },
+  };
+}
+
+/**
+ * User-facing sample object in the REPL.
+ */
+export class Sample extends HelpableResult {
+  constructor(
+    display: string,
+    public readonly hash: string,
+    public readonly filePath: string | undefined,
+    public readonly sampleRate: number,
+    public readonly channels: number,
+    public readonly duration: number,
+    public readonly id: number | undefined,
+    private readonly bindings: SampleMethodBindings,
+  ) {
+    super(display, bindings.help);
+  }
+
+  play(): Promise<Sample> {
+    return this.bindings.play();
+  }
+
+  stop(): BounceResult {
+    return this.bindings.stop();
+  }
+
+  display(): Promise<Sample> {
+    return this.bindings.display();
+  }
+
+  slice(options?: SliceOptions): Promise<BounceResult> {
+    return this.bindings.slice(options);
+  }
+
+  sep(options?: SepOptions): Promise<BounceResult> {
+    return this.bindings.sep(options);
+  }
+
+  granularize(options?: GranularizeOptions): Promise<GrainCollection> {
+    return this.bindings.granularize(options);
+  }
+
+  onsets(options?: AnalyzeOptions): Promise<OnsetFeature> {
+    return this.bindings.onsets(options);
+  }
+
+  nmf(options?: NmfOptions): Promise<NmfFeature> {
+    return this.bindings.nmf(options);
+  }
+
+  mfcc(options?: MFCCOptions): Promise<MfccFeature> {
+    return this.bindings.mfcc(options);
+  }
+}
+
+/**
+ * Compatibility wrapper retained for internal/tests that still construct
+ * simple audio identity objects directly.
+ */
+export class AudioResult extends Sample {
+  constructor(
+    display: string,
+    hash: string,
+    filePath: string | undefined,
+    sampleRate: number,
+    duration: number,
+    channels = 1,
+    id?: number,
+  ) {
+    super(
+      display,
+      hash,
+      filePath,
+      sampleRate,
+      channels,
+      duration,
+      id,
+      unavailableSampleBindings("AudioResult"),
+    );
+  }
+}
+
+export interface OnsetFeatureBindings {
+  help: HelpFactory;
+  slice: (options?: SliceOptions) => Promise<BounceResult>;
+  playSlice: (index?: number) => Promise<Sample>;
+}
+
+export interface NmfFeatureBindings {
+  help: HelpFactory;
+  sep: (options?: SepOptions) => Promise<BounceResult>;
+  playComponent: (index?: number) => Promise<Sample>;
+}
+
+export interface MfccFeatureBindings {
+  help: HelpFactory;
+}
+
+/**
+ * Base feature result object.
+ */
+export class FeatureResult extends HelpableResult {
+  public readonly source: Sample | undefined;
+  public readonly sourceHash: string;
+
+  constructor(
+    display: string,
+    source: Sample | string,
+    public readonly featureHash: string,
+    public readonly featureType: string,
+    public readonly options: unknown,
+    helpFactory: HelpFactory = () => defaultHelp(featureType),
+  ) {
+    super(display, helpFactory);
+    this.source = typeof source === "string" ? undefined : source;
+    this.sourceHash = typeof source === "string" ? source : source.hash;
+  }
+}
+
+export class OnsetFeature extends FeatureResult {
+  constructor(
+    display: string,
+    source: Sample,
+    featureHash: string,
+    options: AnalyzeOptions | undefined,
+    public readonly slices: number[],
+    private readonly bindings: OnsetFeatureBindings,
+  ) {
+    super(display, source, featureHash, "onset-slice", options, bindings.help);
+  }
+
+  get count(): number {
+    return this.slices.length;
+  }
+
+  slice(options?: SliceOptions): Promise<BounceResult> {
+    return this.bindings.slice(options);
+  }
+
+  playSlice(index = 0): Promise<Sample> {
+    return this.bindings.playSlice(index);
+  }
+}
+
+export class NmfFeature extends FeatureResult {
+  constructor(
+    display: string,
+    source: Sample,
+    featureHash: string,
+    options: NmfOptions | undefined,
+    public readonly components: number | undefined,
+    public readonly iterations: number | undefined,
+    public readonly converged: boolean | undefined,
+    private readonly bindings: NmfFeatureBindings,
+  ) {
+    super(display, source, featureHash, "nmf", options, bindings.help);
+  }
+
+  sep(options?: SepOptions): Promise<BounceResult> {
+    return this.bindings.sep(options);
+  }
+
+  playComponent(index = 0): Promise<Sample> {
+    return this.bindings.playComponent(index);
+  }
+}
+
+export class MfccFeature extends FeatureResult {
+  constructor(
+    display: string,
+    source: Sample,
+    featureHash: string,
+    options: MFCCOptions | undefined,
+    public readonly numFrames: number,
+    public readonly numCoeffs: number,
+    private readonly bindings: MfccFeatureBindings,
+  ) {
+    super(display, source, featureHash, "mfcc", options, bindings.help);
+  }
+}
+
+export interface SampleSummaryFeature {
+  sampleHash: string;
+  featureHash: string | undefined;
+  featureType: string;
+  featureCount: number;
+  filePath: string | undefined;
+  options: string | null;
+}
+
+export class SampleListResult extends HelpableResult {
+  constructor(
+    display: string,
+    public readonly samples: Sample[],
+    public readonly features: SampleSummaryFeature[],
+    helpFactory: HelpFactory,
+  ) {
+    super(display, helpFactory);
+  }
+
+  get length(): number {
+    return this.samples.length;
+  }
+
+  [Symbol.iterator](): Iterator<Sample> {
+    return this.samples[Symbol.iterator]();
+  }
+}
+
+export interface SampleNamespaceBindings {
+  help: HelpFactory;
+  read: (pathOrHash: string) => Promise<Sample>;
+  list: () => Promise<SampleListResult>;
+  current: () => Promise<Sample | null>;
+}
+
+export class SampleNamespace extends HelpableResult {
+  constructor(
+    display: string,
+    private readonly bindings: SampleNamespaceBindings,
+  ) {
+    super(display, bindings.help);
+  }
+
+  read(pathOrHash: string): Promise<Sample> {
+    return this.bindings.read(pathOrHash);
+  }
+
+  list(): Promise<SampleListResult> {
+    return this.bindings.list();
+  }
+
+  current(): Promise<Sample | null> {
+    return this.bindings.current();
   }
 }
 
@@ -26,22 +327,6 @@ export function formatLsEntries(
     lines.push(`\x1b[33m... ${total - 200} more items\x1b[0m`);
   }
   return lines.join("\n");
-}
-
-/**
- * Returned by display() and play().
- * Carries the audio hash so it can be passed directly to analysis / separation commands.
- */
-export class AudioResult extends BounceResult {
-  constructor(
-    display: string,
-    public readonly hash: string,
-    public readonly filePath: string | undefined,
-    public readonly sampleRate: number,
-    public readonly duration: number,
-  ) {
-    super(display);
-  }
 }
 
 /**
@@ -146,24 +431,24 @@ export class GlobResult extends BounceResult {
  * directly, so users can chain without await: fs.ls().filter(f => f.isAudio)
  */
 export class LsResultPromise implements PromiseLike<LsResult> {
-  constructor(private readonly _promise: Promise<LsResult>) {}
+  constructor(private readonly promise: Promise<LsResult>) {}
 
   then<TResult1 = LsResult, TResult2 = never>(
     onfulfilled?: ((value: LsResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
-    return this._promise.then(onfulfilled, onrejected);
+    return this.promise.then(onfulfilled, onrejected);
   }
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
   ): Promise<LsResult | TResult> {
-    return this._promise.catch(onrejected);
+    return this.promise.catch(onrejected);
   }
 
   filter(fn: (entry: FsLsEntry) => boolean): LsResultPromise {
     return new LsResultPromise(
-      this._promise.then((r) => {
+      this.promise.then((r) => {
         const filtered = r.entries.filter(fn);
         return new LsResult(formatLsEntries(filtered, false, filtered.length), filtered, filtered.length, false);
       }),
@@ -171,23 +456,23 @@ export class LsResultPromise implements PromiseLike<LsResult> {
   }
 
   map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]> {
-    return this._promise.then((r) => r.map(fn));
+    return this.promise.then((r) => r.map(fn));
   }
 
   find(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry | undefined> {
-    return this._promise.then((r) => r.find(fn));
+    return this.promise.then((r) => r.find(fn));
   }
 
   forEach(fn: (entry: FsLsEntry) => void): Promise<void> {
-    return this._promise.then((r) => r.forEach(fn));
+    return this.promise.then((r) => r.forEach(fn));
   }
 
   some(fn: (entry: FsLsEntry) => boolean): Promise<boolean> {
-    return this._promise.then((r) => r.some(fn));
+    return this.promise.then((r) => r.some(fn));
   }
 
   every(fn: (entry: FsLsEntry) => boolean): Promise<boolean> {
-    return this._promise.then((r) => r.every(fn));
+    return this.promise.then((r) => r.every(fn));
   }
 }
 
@@ -196,57 +481,42 @@ export class LsResultPromise implements PromiseLike<LsResult> {
  * directly, so users can chain without await: fs.glob("**\/*.wav").filter(p => p.includes("drum"))
  */
 export class GlobResultPromise implements PromiseLike<GlobResult> {
-  constructor(private readonly _promise: Promise<GlobResult>) {}
+  constructor(private readonly promise: Promise<GlobResult>) {}
 
   then<TResult1 = GlobResult, TResult2 = never>(
     onfulfilled?: ((value: GlobResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
-    return this._promise.then(onfulfilled, onrejected);
+    return this.promise.then(onfulfilled, onrejected);
   }
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
   ): Promise<GlobResult | TResult> {
-    return this._promise.catch(onrejected);
+    return this.promise.catch(onrejected);
   }
 
   filter(fn: (path: string) => boolean): GlobResultPromise {
-    return new GlobResultPromise(this._promise.then((r) => new GlobResult(r.paths.filter(fn))));
+    return new GlobResultPromise(this.promise.then((r) => new GlobResult(r.paths.filter(fn))));
   }
 
   map<T>(fn: (path: string) => T): Promise<T[]> {
-    return this._promise.then((r) => r.map(fn));
+    return this.promise.then((r) => r.map(fn));
   }
 
   find(fn: (path: string) => boolean): Promise<string | undefined> {
-    return this._promise.then((r) => r.find(fn));
+    return this.promise.then((r) => r.find(fn));
   }
 
   forEach(fn: (path: string) => void): Promise<void> {
-    return this._promise.then((r) => r.forEach(fn));
+    return this.promise.then((r) => r.forEach(fn));
   }
 
   some(fn: (path: string) => boolean): Promise<boolean> {
-    return this._promise.then((r) => r.some(fn));
+    return this.promise.then((r) => r.some(fn));
   }
 
   every(fn: (path: string) => boolean): Promise<boolean> {
-    return this._promise.then((r) => r.every(fn));
-  }
-}
-
-/**
- * Returned by analyze() and analyzeNmf().
- * Carries source + feature hashes so it can be passed to slice(), sep(), playSlice(), etc.
- */
-export class FeatureResult extends BounceResult {
-  constructor(
-    display: string,
-    public readonly sourceHash: string,
-    public readonly featureHash: string,
-    public readonly featureType: string,
-  ) {
-    super(display);
+    return this.promise.then((r) => r.every(fn));
   }
 }

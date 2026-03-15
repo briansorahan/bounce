@@ -82,8 +82,8 @@ test.describe("Onset Slice Analysis", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `await display("${testFile}")`);
-    await sendCommand(window, `await analyze()`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.onsets()");
 
     await expect(window.locator("#waveform-canvas")).toBeVisible({
       timeout: 5000,
@@ -121,15 +121,15 @@ test.describe("Onset Slice Analysis", () => {
     await window.waitForTimeout(1000);
 
     // First analysis
-    await sendCommand(window, `await display("${testFile}")`);
-    await sendCommand(window, `await analyze()`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.onsets()");
     await expect(window.locator(".xterm-rows")).toContainText(
       /Found \d+ onset slices/,
       { timeout: 5000 },
     );
 
     // Second analysis with different threshold
-    await sendCommand(window, `await analyze({ threshold: 0.5 })`);
+    await sendCommand(window, "samp.onsets({ threshold: 0.5 })");
 
     await expect
       .poll(

@@ -80,7 +80,7 @@ test.describe("Audio Format Support", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `await display("${testFile}")`);
+    await sendCommand(window, `sn.read("${testFile}")`);
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,
@@ -108,7 +108,7 @@ test.describe("Audio Format Support", () => {
     await window.waitForTimeout(1000);
 
     const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
-    await sendCommand(window, `await display("${nonexistentPath}")`);
+    await sendCommand(window, `sn.read("${nonexistentPath}")`);
 
     await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
       timeout: 5000,
@@ -137,7 +137,7 @@ test.describe("Audio Format Support", () => {
     const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
 
     for (const file of unsupportedFormats) {
-      await sendCommand(window, `await display("${file}")`);
+      await sendCommand(window, `sn.read("${file}")`);
 
       await expect(window.locator(".xterm-rows")).toContainText(
         "Unsupported file format",

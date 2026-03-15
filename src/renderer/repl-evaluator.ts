@@ -1,23 +1,12 @@
 export const BOUNCE_GLOBALS = new Set([
-  "display",
-  "play",
-  "stop",
-  "analyze",
-  "analyzeNmf",
-  "slice",
-  "sep",
+  "sn",
   "nx",
-  "list",
-  "playSlice",
-  "playComponent",
   "visualizeNmf",
   "visualizeNx",
   "onsetSlice",
   "nmf",
   "help",
   "clear",
-  "analyzeMFCC",
-  "granularize",
   "corpus",
   "fs",
 ]);
@@ -253,6 +242,135 @@ export function getTopLevelVarNames(js: string): string[] {
   return names;
 }
 
+interface StatementChunk {
+  text: string;
+  terminator: string;
+}
+
+function splitTopLevelStatements(js: string): StatementChunk[] {
+  const chunks: StatementChunk[] = [];
+  let state = makeScanState();
+  let start = 0;
+
+  for (let i = 0; i < js.length; i++) {
+    const ch = js[i];
+    const prev = js[i - 1] ?? "";
+    const next = js[i + 1] ?? "";
+
+    state = advanceScan(state, ch, next, prev);
+    if (state.depth === 0 && !state.inString && !state.inLineComment && !state.inBlockComment && ch === ";") {
+      chunks.push({ text: js.slice(start, i), terminator: ";" });
+      start = i + 1;
+    }
+  }
+
+  if (start < js.length) {
+    chunks.push({ text: js.slice(start), terminator: "" });
+  }
+
+  return chunks.filter((chunk) => chunk.text.trim() || chunk.terminator);
+}
+
+function splitTopLevelByComma(source: string): string[] {
+  const parts: string[] = [];
+  let state = makeScanState();
+  let start = 0;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const prev = source[i - 1] ?? "";
+    const next = source[i + 1] ?? "";
+
+    state = advanceScan(state, ch, next, prev);
+    if (state.depth === 0 && !state.inString && !state.inLineComment && !state.inBlockComment && ch === ",") {
+      parts.push(source.slice(start, i));
+      start = i + 1;
+    }
+  }
+
+  parts.push(source.slice(start));
+  return parts;
+}
+
+function findTopLevelAssignmentOperator(source: string): { index: number; operator: string } | null {
+  const operators = ["??=", "||=", "&&=", ">>>=", ">>=", "<<=", "**=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
+  let state = makeScanState();
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    const prev = source[i - 1] ?? "";
+    const next = source[i + 1] ?? "";
+
+    if (state.depth === 0 && !state.inString && !state.inLineComment && !state.inBlockComment) {
+      const match = operators.find((operator) => source.startsWith(operator, i));
+      if (match) {
+        if (match === "=") {
+          const prevChar = source[i - 1] ?? "";
+          const nextChar = source[i + 1] ?? "";
+          if ("=!<>+-*/%&|^".includes(prevChar) || nextChar === "=" || nextChar === ">") {
+            state = advanceScan(state, ch, next, prev);
+            continue;
+          }
+        }
+        return { index: i, operator: match };
+      }
+    }
+
+    state = advanceScan(state, ch, next, prev);
+  }
+
+  return null;
+}
+
+function transformVarDeclaration(core: string): string {
+  const declarators = splitTopLevelByComma(core.slice(4));
+  const transformed = declarators.map((declarator) => {
+    const assignment = findTopLevelAssignmentOperator(declarator);
+    if (!assignment || assignment.operator !== "=") {
+      return declarator.trim();
+    }
+
+    const lhs = declarator.slice(0, assignment.index).trim();
+    const rhs = declarator.slice(assignment.index + assignment.operator.length).trim();
+    return `${lhs} = await (${rhs})`;
+  });
+
+  return `var ${transformed.join(", ")}`;
+}
+
+function isControlStatement(core: string): boolean {
+  return /^(var\b|function\b|class\b|if\b|for\b|while\b|switch\b|try\b|catch\b|finally\b|do\b|return\b|throw\b|break\b|continue\b|\{)/.test(core);
+}
+
+function transformTopLevelStatement(statement: string): string {
+  const leading = statement.match(/^\s*/)?.[0] ?? "";
+  const trailing = statement.match(/\s*$/)?.[0] ?? "";
+  const core = statement.trim();
+
+  if (!core) return statement;
+  if (core.startsWith("await ")) return statement;
+  if (core.startsWith("var ")) return `${leading}${transformVarDeclaration(core)}${trailing}`;
+
+  const assignment = findTopLevelAssignmentOperator(core);
+  if (assignment) {
+    const lhs = core.slice(0, assignment.index).trim();
+    const rhs = core.slice(assignment.index + assignment.operator.length).trim();
+    return `${leading}${lhs} ${assignment.operator} await (${rhs})${trailing}`;
+  }
+
+  if (!isControlStatement(core)) {
+    return `${leading}await (${core})${trailing}`;
+  }
+
+  return statement;
+}
+
+export function autoAwaitTopLevel(js: string): string {
+  return splitTopLevelStatements(js)
+    .map(({ text, terminator }) => `${transformTopLevelStatement(text)}${terminator}`)
+    .join("");
+}
+
 /**
  * Throws if any top-level variable, function, or class declaration uses
  * a name that is a Bounce global, preventing accidental shadowing.
@@ -357,6 +475,7 @@ export class ReplEvaluator {
     const js = await window.electron.transpileTypeScript(source);
     checkReservedNames(js);
     const promoted = promoteDeclarations(js);
+    const autoAwaited = autoAwaitTopLevel(promoted);
     const declaredNames = getTopLevelVarNames(promoted);
 
     const allNames = new Set([...this.scopeVars.keys(), ...declaredNames]);
@@ -377,26 +496,20 @@ export class ReplEvaluator {
       )
       .join("\n");
 
-    // Try to return the expression value (works for single-expression inputs).
-    // new AsyncFunction throws SyntaxError at construction if the body is invalid.
-    //
-    // TypeScript always appends a trailing semicolon to transpiled output, so
-    // `promoted` looks like `play("hash");\n`. Wrapping that directly in
-    // `const __result__ = (play("hash");)` is a SyntaxError, which causes the
-    // fallback (non-awaiting) path to be used — meaning async calls like play()
-    // would not be awaited and the prompt would print before their output.
-    // Strip trailing semicolons so the expression wrapper succeeds.
+    // For a single top-level expression statement, preserve the expression value.
+    // For declarations / assignments / multi-statement input, run the transformed
+    // body instead so top-level commands and initializers are automatically awaited.
     const singleExpr = promoted.trim().replace(/;+$/, "");
+    const singleStatements = splitTopLevelStatements(promoted).filter((statement) => statement.text.trim());
     let fn: (...args: unknown[]) => Promise<unknown>;
-    try {
+    if (singleStatements.length === 1 && !isControlStatement(singleExpr) && !findTopLevelAssignmentOperator(singleExpr)) {
       fn = new AsyncFunction(
         "__scope__",
         ...bounceNames,
-        `${prelude}\nconst __result__ = (${singleExpr});\n${epilogue}\nreturn __result__;`,
+        `${prelude}\nconst __result__ = await (${singleExpr});\n${epilogue}\nreturn __result__;`,
       );
-    } catch {
-      // Multi-statement input: no return value
-      fn = new AsyncFunction("__scope__", ...bounceNames, `${prelude}\n${promoted}\n${epilogue}`);
+    } else {
+      fn = new AsyncFunction("__scope__", ...bounceNames, `${prelude}\n${autoAwaited}\n${epilogue}`);
     }
 
     return await fn(this.scopeVars, ...bounceValues);

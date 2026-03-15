@@ -4,7 +4,7 @@ description: Creates specification documents for new features and bug fixes in B
 license: ISC
 metadata:
   author: briansorahan
-  version: "1.0"
+  version: "1.1"
   created: "2026-02-25"
 ---
 
@@ -38,6 +38,17 @@ The spec process has three stages:
 3. **IMPL** - Document implementation decisions, track progress, note deviations
 
 Each stage has its own markdown file, and each file informs every subsequent stage.
+
+## Required REPL Interface Contract
+
+Whenever the feature adds or changes Bounce REPL surface area, treat the REPL API as a user-facing product surface and document the following in the spec:
+
+- Every exposed REPL object or namespace should provide a `help()` method with a short explanation and usage examples
+- Every custom object returned from an evaluated REPL expression should print a useful terminal summary when displayed
+- Returned summaries should highlight the most relevant, workflow-driving properties for that type instead of dumping raw structure
+- Automated coverage should explicitly confirm both `help()` output and returned-object display behavior using unit tests and/or Playwright tests
+
+This requirement should be carried through RESEARCH, PLAN, and IMPL. Do not leave it implicit.
 
 ## Step-by-Step Process
 
@@ -73,6 +84,7 @@ Work with Copilot to fill out research documentation:
 - Load context: Tell Copilot to read existing relevant code
 - Collaborate on research questions
 - Document findings in RESEARCH.md
+- If REPL surface area is involved, identify the user-facing help and display conventions that must remain consistent
 
 **This file is immutable after moving to PLAN phase** (unless critical flaw discovered).
 
@@ -86,6 +98,7 @@ Work with Copilot to create implementation plan:
 - Identify all files that need changes
 - Define testing strategy
 - Set success criteria
+- For REPL-facing features, explicitly document the `help()` surface, returned-object terminal summaries, and which unit and/or Playwright tests will verify them
 
 **This file is immutable after moving to IMPL phase** (unless critical flaw discovered).
 
@@ -99,6 +112,7 @@ Work with Copilot to implement and track progress:
 - Track deviations from plan (with rationale)
 - Note any discovered issues or TODOs
 - **Add status updates** when pausing work (for resuming later)
+- For REPL-facing features, record whether `help()` and returned-object display behavior match the plan, including any deviations
 
 ### Step 6: Verification
 
@@ -108,6 +122,7 @@ Before considering work complete:
 - Run tests: `npm test` and/or `npm run test:e2e`
 - Manually test in Electron app: `npm run dev:electron`
 - Verify cross-platform compatibility if possible
+- If REPL surface area changed, verify that unit and/or Playwright tests cover `help()` output and returned-object terminal summaries before closing the work
 
 ### Step 7: Completion
 

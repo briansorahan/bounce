@@ -69,13 +69,13 @@ test.describe("Granularize", () => {
       const window = await electronApp.firstWindow();
       await window.waitForTimeout(1000);
 
-      await sendCommand(window, `await display("${testFile}")`);
+      await sendCommand(window, `const samp = sn.read("${testFile}")`);
 
       // 1s sample ÷ 100ms grains = 10 grains; disable silence filtering so sine wave grains aren't skipped
       // Call without assignment so the return value is printed to the terminal
       await sendCommand(
         window,
-        `await granularize({ grainSize: 100, silenceThreshold: -100 })`,
+        `samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
       );
 
       await expect(window.locator(".xterm-rows")).toContainText("Granularized", {
@@ -88,7 +88,7 @@ test.describe("Granularize", () => {
       // Assign to gc for method tests (result not printed since it's a declaration)
       await sendCommand(
         window,
-        `const gc = await granularize({ grainSize: 100, silenceThreshold: -100 })`,
+        `const gc = samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
       );
 
       // Verify length() via REPL
@@ -100,7 +100,7 @@ test.describe("Granularize", () => {
       // Verify forEach iterates
       await sendCommand(
         window,
-        `let count = 0; await gc.forEach(() => { count++; }); count`,
+        `let count = 0; gc.forEach(() => { count++; }); count`,
       );
       await expect(window.locator(".xterm-rows")).toContainText("10", {
         timeout: 5000,
@@ -139,7 +139,7 @@ test.describe("Granularize", () => {
       await window.waitForTimeout(1000);
 
       // Pass a non-existent hash — should surface a clear error in the terminal
-      await sendCommand(window, `await granularize("nonexistenthash00")`);
+      await sendCommand(window, `sn.read("nonexistenthash00")`);
       await expect(window.locator(".xterm-rows")).toContainText("Error", {
         timeout: 5000,
       });

@@ -13,6 +13,16 @@ const electronPath = require("electron") as string;
 let electronApp: ElectronApplication;
 let window: Page;
 
+async function sendCommand(command: string) {
+  await window.evaluate((cmd: string) => {
+    const executeCommand = (window as unknown as { __bounceExecuteCommand?: (source: string) => Promise<void> }).__bounceExecuteCommand;
+    if (!executeCommand) {
+      throw new Error("Execute command function not exposed");
+    }
+    return executeCommand(cmd);
+  }, command);
+}
+
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     executablePath: electronPath,
@@ -42,61 +52,25 @@ test.describe("NMF Analysis", () => {
     const testFile = path.join(__dirname, "test-multi-viz.wav");
     expect(fs.existsSync(testFile)).toBe(true);
 
-    // Play the audio file to load it into samples table
-    await window.keyboard.type(`await play("${testFile}")`);
-    await window.keyboard.press("Enter");
-
-    // Wait for file to load
-    await window.waitForTimeout(1000);
-
-    // Get the sample hash from terminal output
-    const terminalContent = await window.locator(".xterm-screen").textContent();
-    const hashMatch = terminalContent?.match(/Hash: ([a-f0-9]+)/);
-    expect(hashMatch).toBeTruthy();
-    const sampleHash = hashMatch![1].substring(0, 8);
-
-    // Stop playback but keep audio data loaded
-    await window.keyboard.type("stop()");
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
-
-    // Run NMF analysis
-    await window.keyboard.type("await analyzeNmf()");
-    await window.keyboard.press("Enter");
-
-    // Wait for analysis to complete (NMF can take a few seconds)
-    await window.waitForTimeout(5000);
-
-    // Verify feature was stored
-    await window.keyboard.type("await list()");
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
-
-    const featuresOutput = await window.locator(".xterm-screen").textContent();
-    expect(featuresOutput).toContain("nmf");
-
-    // Play the sample again to show waveform
-    await window.keyboard.type(`await play("${sampleHash}")`);
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(1000);
+    await sendCommand(`const samp = sn.read("${testFile}")`);
+    await sendCommand("const feature = samp.nmf()");
+    await sendCommand("feature.featureType");
+    await expect(window.locator(".xterm-rows")).toContainText("nmf", {
+      timeout: 5000,
+    });
 
     // Verify waveform canvas exists
     const waveformCanvas = window.locator("#waveform-canvas");
     await expect(waveformCanvas).toBeVisible();
 
-    // Stop playback
-    await window.keyboard.type("stop()");
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
-
     // Visualize NMF on the waveform
-    await window.keyboard.type("await visualizeNmf()");
-    await window.keyboard.press("Enter");
-    await window.waitForTimeout(1000);
+    await sendCommand("visualizeNmf()");
 
-    // Verify the NMF visualization was applied
-    const finalOutput = await window.locator(".xterm-screen").textContent();
-    expect(finalOutput).toContain("NMF visualization overlaid");
+    // Verify the NMF visualization was applied after the renderer overlay event lands
+    await expect(window.locator(".xterm-screen")).toContainText(
+      "NMF visualization overlaid",
+      { timeout: 5000 },
+    );
   });
 
   test.skip("should handle visualize-nmf without loaded waveform", async () => {

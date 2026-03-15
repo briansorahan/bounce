@@ -1,12 +1,12 @@
-import { AudioResult, BounceResult } from "./bounce-result.js";
+import { BounceResult, Sample } from "./bounce-result.js";
 
 export class GrainCollection extends BounceResult {
-  private readonly grains: Array<AudioResult | null>;
+  private readonly grains: Array<Sample | null>;
   private readonly _normalize: boolean;
   private readonly sourceHash: string;
 
   constructor(
-    grains: Array<AudioResult | null>,
+    grains: Array<Sample | null>,
     normalize: boolean,
     sourceHash: string,
   ) {
@@ -30,7 +30,7 @@ export class GrainCollection extends BounceResult {
 
   /** Iterate over stored grains sequentially, awaiting each callback. */
   async forEach(
-    callback: (grain: AudioResult, index: number) => void | Promise<void>,
+    callback: (grain: Sample, index: number) => void | Promise<void>,
   ): Promise<void> {
     let i = 0;
     for (const grain of this.grains) {
@@ -41,7 +41,7 @@ export class GrainCollection extends BounceResult {
   }
 
   /** Transform stored grains to an array of any type. */
-  map<T>(callback: (grain: AudioResult, index: number) => T): T[] {
+  map<T>(callback: (grain: Sample, index: number) => T): T[] {
     const results: T[] = [];
     let i = 0;
     for (const grain of this.grains) {
@@ -54,9 +54,9 @@ export class GrainCollection extends BounceResult {
 
   /** Return a new GrainCollection containing only grains that pass the predicate. */
   filter(
-    predicate: (grain: AudioResult, index: number) => boolean,
+    predicate: (grain: Sample, index: number) => boolean,
   ): GrainCollection {
-    const kept: Array<AudioResult | null> = [];
+    const kept: Array<Sample | null> = [];
     let i = 0;
     for (const grain of this.grains) {
       if (grain !== null && predicate(grain, i++)) {

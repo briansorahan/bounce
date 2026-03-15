@@ -80,19 +80,20 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `await play("${testFile}")`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.play()");
 
     await expect(window.locator("#waveform-canvas")).toBeVisible({
       timeout: 5000,
     });
 
-    await sendCommand(window, "stop()");
+    await sendCommand(window, "samp.stop()");
 
     await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("visualization should update on display command", async () => {
+  test("visualization should update on sn.read command", async () => {
     const testFile = path.join(testDir, "viz-test.wav");
     createTestWavFile(testFile, 0.2);
 
@@ -116,10 +117,10 @@ test.describe("Playback and Visualization", () => {
     const isVisibleBefore = await waveformContainerBefore.isVisible();
 
     if (isVisibleBefore) {
-      throw new Error("Waveform should not be visible before display command");
+      throw new Error("Waveform should not be visible before sn.read command");
     }
 
-    await sendCommand(window, `await display("${testFile}")`);
+    await sendCommand(window, `sn.read("${testFile}")`);
 
     await expect(window.locator("#waveform-container")).toBeVisible({
       timeout: 5000,
@@ -129,7 +130,7 @@ test.describe("Playback and Visualization", () => {
     fs.unlinkSync(testFile);
   });
 
-  test("play command should create visualization if not exists", async () => {
+  test("sample.play should create visualization if not exists", async () => {
     const testFile = path.join(testDir, "play-viz-test.wav");
     createTestWavFile(testFile, 0.3);
 
@@ -149,25 +150,23 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `await play("${testFile}")`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.play()");
 
     await expect(window.locator("#waveform-container")).toBeVisible({
-      timeout: 5000,
-    });
-    await expect(window.locator(".xterm-rows")).toContainText("Loaded:", {
       timeout: 5000,
     });
     await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
       timeout: 5000,
     });
 
-    await sendCommand(window, "stop()");
+    await sendCommand(window, "samp.stop()");
 
     await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("stop command should work without errors", async () => {
+  test("sample.stop should work without errors", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -184,7 +183,11 @@ test.describe("Playback and Visualization", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, "stop()");
+    const testFile = path.join(testDir, "stop-test.wav");
+    createTestWavFile(testFile, 0.1);
+
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "samp.stop()");
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "Playback stopped",
@@ -192,5 +195,6 @@ test.describe("Playback and Visualization", () => {
     );
 
     await electronApp.close();
+    fs.unlinkSync(testFile);
   });
 });
