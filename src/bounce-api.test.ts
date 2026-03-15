@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { buildBounceApi, BounceResult, Sample, OnsetFeature, NmfFeature, MfccFeature } from "./renderer/bounce-api.js";
+import {
+  buildBounceApi,
+  BounceResult,
+  Sample,
+  SamplePromise,
+  CurrentSamplePromise,
+  OnsetFeature,
+  NmfFeature,
+  MfccFeature,
+} from "./renderer/bounce-api.js";
 
 function makeTerminal(): { lines: string[]; cleared: boolean } & object {
   const terminal = { lines: [] as string[], cleared: false };
@@ -16,14 +25,18 @@ function makeTerminal(): { lines: string[]; cleared: boolean } & object {
 function makeAudioManager() {
   let currentAudio: Record<string, unknown> | null = null;
   let currentSlices: number[] | null = null;
+  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean }> = [];
   return {
     getCurrentAudio: () => currentAudio,
     setCurrentAudio: (audio: Record<string, unknown>) => { currentAudio = audio; },
     getCurrentSlices: () => currentSlices,
     setCurrentSlices: (slices: number[]) => { currentSlices = slices; },
     clearSlices: () => { currentSlices = null; },
-    playAudio: async () => {},
+    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false) => {
+      playCalls.push({ audioData, sampleRate, loop });
+    },
     stopAudio: () => {},
+    getPlayCalls: () => playCalls,
   };
 }
 
@@ -132,9 +145,12 @@ async function main() {
 
   const sn = api.sn as {
     help(): BounceResult;
-    read(pathOrHash: string): Promise<Sample>;
-    list(): Promise<unknown>;
-    current(): Promise<Sample | null>;
+    read(pathOrHash: string): SamplePromise;
+    list(): PromiseLike<unknown>;
+    current(): CurrentSamplePromise;
+  };
+  const corpus = api.corpus as {
+    build(source?: string | Sample | PromiseLike<Sample>, featureHashOverride?: string): PromiseLike<BounceResult>;
   };
 
   assert.ok(sn.help().toString().includes("sample namespace"));
@@ -144,10 +160,17 @@ async function main() {
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
   assert.equal(waveformUpdated, true, "sn.read updates waveform");
   assert.ok(sample.help().toString().includes("sample.onsets()"));
+  assert.ok(sample.help().toString().includes("sample.loop()"));
   assert.ok(sample.toString().includes("Loaded"));
 
   const played = await sample.play();
   assert.ok(played instanceof Sample, "sample.play returns Sample");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loop, false, "sample.play uses non-looping playback");
+
+  const looped = await sample.loop();
+  assert.ok(looped instanceof Sample, "sample.loop returns Sample");
+  assert.ok(looped.toString().includes("Looping"), "sample.loop indicates looping playback");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loop, true, "sample.loop uses looping playback");
 
   const stopped = sample.stop();
   assert.ok(stopped.toString().includes("stopped"));
@@ -178,6 +201,24 @@ async function main() {
 
   const current = await sn.current();
   assert.ok(current instanceof Sample, "sn.current returns Sample");
+
+  const chainedOnsetFeature = await sn.read("/test.wav").onsets();
+  assert.ok(chainedOnsetFeature instanceof OnsetFeature, "sn.read().onsets() returns OnsetFeature");
+
+  const chainedSliceResult = await sn.read("/test.wav").onsets().slice();
+  assert.ok(chainedSliceResult instanceof BounceResult, "sn.read().onsets().slice() returns BounceResult");
+
+  const chainedComponent = await sn.read("/test.wav").nmf().playComponent(0);
+  assert.ok(chainedComponent instanceof Sample, "sn.read().nmf().playComponent() returns Sample");
+
+  const currentPlayed = await sn.current().play();
+  assert.ok(currentPlayed instanceof Sample, "sn.current().play() returns Sample");
+
+  const grainCount = await sn.read("/test.wav").granularize({ grainSize: 20 }).length();
+  assert.equal(grainCount, 2, "sn.read().granularize().length() counts non-silent grains");
+
+  const corpusBuilt = await corpus.build(sn.read("/test.wav"));
+  assert.ok(corpusBuilt instanceof BounceResult, "corpus.build accepts thenable sample sources");
 }
 
 main().catch((err) => {

@@ -471,6 +471,13 @@ export class ReplEvaluator {
     return isComplete(source);
   }
 
+  getCompletionBindings(): Record<string, unknown> {
+    return {
+      ...this.bounceApi,
+      ...Object.fromEntries(this.scopeVars),
+    };
+  }
+
   async evaluate(source: string): Promise<unknown> {
     const js = await window.electron.transpileTypeScript(source);
     checkReservedNames(js);

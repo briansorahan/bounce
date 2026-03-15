@@ -20,6 +20,7 @@ export class TabCompletion {
   private lastCursorPosition: number = 0;
   private context: CompletionContext = { kind: "global" };
   private api: Record<string, unknown> = {};
+  private bindingsProvider: (() => Record<string, unknown>) | null = null;
   private updateRequestId: number = 0;
 
   constructor() {
@@ -28,6 +29,10 @@ export class TabCompletion {
 
   setApi(api: Record<string, unknown>): void {
     this.api = api;
+  }
+
+  setBindingsProvider(bindingsProvider: () => Record<string, unknown>): void {
+    this.bindingsProvider = bindingsProvider;
   }
 
   get matchCount(): number {
@@ -54,11 +59,11 @@ export class TabCompletion {
       return;
     }
 
-    const dotMatch = text.match(/([a-zA-Z][a-zA-Z0-9]*)\.([a-zA-Z][a-zA-Z0-9]*)?$/);
+    const dotMatch = text.match(/([A-Za-z_$][A-Za-z0-9_$]*)\.([A-Za-z_$][A-Za-z0-9_$]*)?$/);
     if (dotMatch) {
       const objName = dotMatch[1];
       const methodPrefix = dotMatch[2] ?? "";
-      const obj = this.api[objName];
+      const obj = this.getCompletionBindings()[objName];
       if (obj && (typeof obj === "function" || typeof obj === "object")) {
         const methods = this.getCallablePropertyNames(obj)
           .filter((k) => k.startsWith(methodPrefix))
@@ -168,15 +173,19 @@ export class TabCompletion {
       return this.context.prefix;
     }
     if (this.context.kind === "method") {
-      const m = text.match(/\.([a-zA-Z][a-zA-Z0-9]*)$/);
+      const m = text.match(/\.([A-Za-z_$][A-Za-z0-9_$]*)$/);
       return m ? m[1] : "";
     }
     return this.extractPrefix(text);
   }
 
   private extractPrefix(text: string): string {
-    const m = text.match(/[a-zA-Z][a-zA-Z0-9]*$/);
+    const m = text.match(/[A-Za-z_$][A-Za-z0-9_$]*$/);
     return m ? m[0] : "";
+  }
+
+  private getCompletionBindings(): Record<string, unknown> {
+    return this.bindingsProvider ? this.bindingsProvider() : this.api;
   }
 
   private makeAcceptAction(fullName: string): CompletionAction {
