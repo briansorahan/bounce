@@ -86,4 +86,11 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("corpus-query", segmentIndex, k),
   corpusResynthesize: (indices: number[]) =>
     ipcRenderer.invoke("corpus-resynthesize", indices),
+  fsLs: (dirPath?: string) => ipcRenderer.invoke("fs-ls", dirPath, false),
+  fsLa: (dirPath?: string) => ipcRenderer.invoke("fs-ls", dirPath, true),
+  fsCd: (dirPath: string) => ipcRenderer.invoke("fs-cd", dirPath),
+  fsPwd: (): Promise<string> => ipcRenderer.invoke("fs-pwd"),
+  fsGlob: (pattern: string): Promise<string[]> =>
+    ipcRenderer.invoke("fs-glob", pattern),
+  fsWalk: (dirPath: string) => ipcRenderer.invoke("fs-walk", dirPath),
 });

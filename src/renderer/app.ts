@@ -424,7 +424,7 @@ export class BounceApp {
     this.terminal.writeln("");
   }
   private printPrompt(): void {
-    this.terminal.write("\r\x1b[32m>\x1b[0m ");
+    this.terminal.writeWhenFlushed("\r\x1b[32m>\x1b[0m ");
   }
 
   private async executeCommand(source: string): Promise<void> {
@@ -529,6 +529,7 @@ export class BounceApp {
 
     document.body.classList.add("waveform-visible");
     container.classList.add("active");
+    this.terminal.fit();
 
     if (!this.waveformVisualizer) {
       this.waveformVisualizer = new WaveformVisualizer("waveform-canvas");

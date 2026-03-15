@@ -72,9 +72,10 @@ test.describe("Granularize", () => {
       await sendCommand(window, `await display("${testFile}")`);
 
       // 1s sample ÷ 100ms grains = 10 grains; disable silence filtering so sine wave grains aren't skipped
+      // Call without assignment so the return value is printed to the terminal
       await sendCommand(
         window,
-        `const gc = await granularize({ grainSize: 100, silenceThreshold: -100 })`,
+        `await granularize({ grainSize: 100, silenceThreshold: -100 })`,
       );
 
       await expect(window.locator(".xterm-rows")).toContainText("Granularized", {
@@ -83,6 +84,12 @@ test.describe("Granularize", () => {
       await expect(window.locator(".xterm-rows")).toContainText("grains", {
         timeout: 5000,
       });
+
+      // Assign to gc for method tests (result not printed since it's a declaration)
+      await sendCommand(
+        window,
+        `const gc = await granularize({ grainSize: 100, silenceThreshold: -100 })`,
+      );
 
       // Verify length() via REPL
       await sendCommand(window, `gc.length()`);

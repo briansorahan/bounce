@@ -132,12 +132,63 @@ declare class FeatureResult extends BounceResult {
   readonly featureType: string;
 }
 
-declare class GrainCollection {
+declare class LsResult extends BounceResult {
+  readonly entries: FsLsEntry[];
+  readonly total: number;
+  readonly truncated: boolean;
+  readonly length: number;
+  filter(fn: (entry: FsLsEntry) => boolean): FsLsEntry[];
+  map<T>(fn: (entry: FsLsEntry) => T): T[];
+  find(fn: (entry: FsLsEntry) => boolean): FsLsEntry | undefined;
+  forEach(fn: (entry: FsLsEntry) => void): void;
+  some(fn: (entry: FsLsEntry) => boolean): boolean;
+  every(fn: (entry: FsLsEntry) => boolean): boolean;
+  [Symbol.iterator](): Iterator<FsLsEntry>;
+}
+
+declare class LsResultPromise implements PromiseLike<LsResult> {
+  then<TResult1 = LsResult, TResult2 = never>(
+    onfulfilled?: ((value: LsResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+  filter(fn: (entry: FsLsEntry) => boolean): LsResultPromise;
+  map<T>(fn: (entry: FsLsEntry) => T): Promise<T[]>;
+  find(fn: (entry: FsLsEntry) => boolean): Promise<FsLsEntry | undefined>;
+  forEach(fn: (entry: FsLsEntry) => void): Promise<void>;
+  some(fn: (entry: FsLsEntry) => boolean): Promise<boolean>;
+  every(fn: (entry: FsLsEntry) => boolean): Promise<boolean>;
+}
+
+declare class GlobResult extends BounceResult {
+  readonly paths: string[];
+  readonly length: number;
+  filter(fn: (path: string) => boolean): string[];
+  map<T>(fn: (path: string) => T): T[];
+  find(fn: (path: string) => boolean): string | undefined;
+  forEach(fn: (path: string) => void): void;
+  some(fn: (path: string) => boolean): boolean;
+  every(fn: (path: string) => boolean): boolean;
+  [Symbol.iterator](): Iterator<string>;
+}
+
+declare class GlobResultPromise implements PromiseLike<GlobResult> {
+  then<TResult1 = GlobResult, TResult2 = never>(
+    onfulfilled?: ((value: GlobResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+  filter(fn: (path: string) => boolean): GlobResultPromise;
+  map<T>(fn: (path: string) => T): Promise<T[]>;
+  find(fn: (path: string) => boolean): Promise<string | undefined>;
+  forEach(fn: (path: string) => void): Promise<void>;
+  some(fn: (path: string) => boolean): Promise<boolean>;
+  every(fn: (path: string) => boolean): Promise<boolean>;
+}
+
+declare class GrainCollection extends BounceResult {
   length(): number;
   forEach(callback: (grain: AudioResult, index: number) => void | Promise<void>): Promise<void>;
   map<T>(callback: (grain: AudioResult, index: number) => T): T[];
   filter(predicate: (grain: AudioResult, index: number) => boolean): GrainCollection;
-  toString(): string;
 }
 
 declare const display: {
@@ -231,3 +282,57 @@ declare const corpus: {
   query(segmentIndex: number, k?: number): Promise<BounceResult>;
   resynthesize(queryIndices: number[]): Promise<BounceResult>;
 };
+
+declare const enum FileType {
+  File        = "file",
+  Directory   = "directory",
+  Symlink     = "symlink",
+  BlockDevice = "blockDevice",
+  CharDevice  = "charDevice",
+  FIFO        = "fifo",
+  Socket      = "socket",
+  Unknown     = "unknown",
+}
+
+type WalkCatchAll = (filePath: string, type: FileType) => Promise<void>;
+type WalkHandlers = Partial<Record<FileType, (filePath: string) => Promise<void>>>;
+
+interface FsApi {
+  readonly FileType: {
+    readonly File: "file";
+    readonly Directory: "directory";
+    readonly Symlink: "symlink";
+    readonly BlockDevice: "blockDevice";
+    readonly CharDevice: "charDevice";
+    readonly FIFO: "fifo";
+    readonly Socket: "socket";
+    readonly Unknown: "unknown";
+  };
+  help(): BounceResult;
+  ls: {
+    (dirPath?: string): LsResultPromise;
+    help(): BounceResult;
+  };
+  la: {
+    (dirPath?: string): LsResultPromise;
+    help(): BounceResult;
+  };
+  cd: {
+    (dirPath: string): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  pwd: {
+    (): Promise<BounceResult>;
+    help(): BounceResult;
+  };
+  glob: {
+    (pattern: string): GlobResultPromise;
+    help(): BounceResult;
+  };
+  walk: {
+    (dirPath: string, handler: WalkCatchAll | WalkHandlers): Promise<BounceResult | undefined>;
+    help(): BounceResult;
+  };
+}
+
+declare const fs: FsApi;

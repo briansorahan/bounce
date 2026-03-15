@@ -311,6 +311,51 @@ async function testDotCompletionGhostTextShowsSuffix() {
   assert.ok(ghost.includes("de()"), "ghost should show 'de()' suffix for 'hide'");
 }
 
+async function testDotCompletionScopesPlainObjectMethods() {
+  const c = new TabCompletion();
+  c.setApi({
+    fs: {
+      FileType: { File: "file" },
+      help: () => {},
+      ls: () => {},
+      la: () => {},
+      cd: () => {},
+      pwd: () => {},
+      glob: () => {},
+      walk: () => {},
+    },
+  });
+  c.update("fs.", 3);
+  assert.strictEqual(c.matchCount, 7, "should only match callable fs members");
+  const ghost = c.ghostText();
+  assert.ok(!ghost.includes("granularize()"), "should not fall back to top-level globals");
+  assert.ok(ghost.includes("ls()"), "should include fs methods");
+}
+
+async function testDotCompletionScopesPlainObjectPartialMethod() {
+  const c = new TabCompletion();
+  c.setApi({
+    fs: {
+      FileType: { File: "file" },
+      help: () => {},
+      ls: () => {},
+      la: () => {},
+      cd: () => {},
+      pwd: () => {},
+      glob: () => {},
+      walk: () => {},
+    },
+  });
+  c.update("fs.gl", 5);
+  assert.strictEqual(c.matchCount, 1, "should match only 'glob'");
+  const action = c.handleTab();
+  assert.ok(action !== null && action.kind === "accept");
+  if (action!.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "fs.glob()");
+    assert.strictEqual(action.newCursorPosition, 8);
+  }
+}
+
 
 
 const tests: Array<[string, () => Promise<void>]> = [
@@ -344,6 +389,8 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["dot-completion: accept with no prefix after dot", testDotCompletionAcceptsMethodWithNoPrefixAfterDot],
   ["dot-completion: no match for unknown object", testDotCompletionNoMatchForUnknownObject],
   ["dot-completion: ghost text shows suffix", testDotCompletionGhostTextShowsSuffix],
+  ["dot-completion: plain object methods stay scoped", testDotCompletionScopesPlainObjectMethods],
+  ["dot-completion: plain object partial prefix", testDotCompletionScopesPlainObjectPartialMethod],
 ];
 
 async function main() {

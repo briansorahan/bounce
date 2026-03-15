@@ -115,6 +115,11 @@ function testCheckReservedNames() {
     /list.*Bounce built-in/,
     "destructured list throws",
   );
+  assert.throws(
+    () => checkReservedNames("const fs = {};"),
+    /fs.*Bounce built-in/,
+    "const fs throws",
+  );
 
   // Should NOT throw for non-globals or inner scope
   assert.doesNotThrow(

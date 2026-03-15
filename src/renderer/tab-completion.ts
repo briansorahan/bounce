@@ -46,9 +46,10 @@ export class TabCompletion {
       const objName = dotMatch[1];
       const methodPrefix = dotMatch[2] ?? "";
       const obj = this.api[objName];
-      if (obj && typeof obj === "function") {
+      if (obj && (typeof obj === "function" || typeof obj === "object")) {
         const methods = Object.keys(obj)
           .filter((k) => k.startsWith(methodPrefix))
+          .filter((k) => typeof (obj as Record<string, unknown>)[k] === "function")
           .sort();
         if (methods.length > 0) {
           this.methodObject = objName;

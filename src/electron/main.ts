@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 import * as crypto from "crypto";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
@@ -12,9 +13,20 @@ import {
 } from "./ipc-types";
 import { debugLog, setDatabaseManager } from "./logger";
 import { CorpusManager } from "./corpus-manager";
+import { AUDIO_EXTENSIONS, AUDIO_EXTENSIONS_NO_DOT } from "./audio-extensions";
+import { SettingsStore } from "./settings-store";
 
 let dbManager: DatabaseManager | undefined = undefined;
+let settingsStore: SettingsStore | undefined = undefined;
 const corpusManager: CorpusManager = new CorpusManager();
+
+/** Resolve a path against the stored cwd, expanding ~ and handling relative paths. */
+function resolvePath(inputPath: string): string {
+  const expanded = SettingsStore.expandHome(inputPath);
+  if (path.isAbsolute(expanded)) return expanded;
+  const cwd = settingsStore?.getCwd() ?? os.homedir();
+  return path.resolve(cwd, expanded);
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -28,6 +40,7 @@ function createWindow() {
     },
   });
 
+  mainWindow.maximize();
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
 }
 
@@ -67,21 +80,31 @@ ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
     let resolvedPath = filePathOrHash;
 
     if (!path.isAbsolute(filePathOrHash)) {
-      const result = await dialog.showOpenDialog({
-        properties: ["openFile"],
-        filters: [
-          {
-            name: "Audio Files",
-            extensions: ["wav", "mp3", "ogg", "flac", "m4a", "aac", "opus"],
-          },
-        ],
-      });
+      const expanded = SettingsStore.expandHome(filePathOrHash);
+      const hasPathSep = expanded.includes("/") || expanded.includes("\\");
+      const ext = path.extname(expanded).toLowerCase();
+      const isAudioFile =
+        (AUDIO_EXTENSIONS as readonly string[]).includes(ext) || hasPathSep;
 
-      if (result.canceled || result.filePaths.length === 0) {
-        throw new Error("File selection canceled");
+      if (isAudioFile) {
+        resolvedPath = resolvePath(filePathOrHash);
+      } else {
+        const result = await dialog.showOpenDialog({
+          properties: ["openFile"],
+          filters: [
+            {
+              name: "Audio Files",
+              extensions: AUDIO_EXTENSIONS_NO_DOT,
+            },
+          ],
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+          throw new Error("File selection canceled");
+        }
+
+        resolvedPath = result.filePaths[0];
       }
-
-      resolvedPath = result.filePaths[0];
     }
 
     const fileBuffer = fs.readFileSync(resolvedPath);
@@ -549,8 +572,116 @@ ipcMain.handle(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Filesystem utilities
+// ---------------------------------------------------------------------------
+
+export type FileType =
+  | "file"
+  | "directory"
+  | "symlink"
+  | "blockDevice"
+  | "charDevice"
+  | "fifo"
+  | "socket"
+  | "unknown";
+
+export interface FsEntry {
+  name: string;
+  path: string;
+  type: FileType;
+  isAudio: boolean;
+}
+
+export interface WalkEntry {
+  path: string;
+  type: FileType;
+}
+
+function direntToFileType(d: fs.Dirent): FileType {
+  if (d.isFile()) return "file";
+  if (d.isDirectory()) return "directory";
+  if (d.isSymbolicLink()) return "symlink";
+  if (d.isBlockDevice()) return "blockDevice";
+  if (d.isCharacterDevice()) return "charDevice";
+  if (d.isFIFO()) return "fifo";
+  if (d.isSocket()) return "socket";
+  return "unknown";
+}
+
+ipcMain.handle(
+  "fs-ls",
+  async (_event, dirPath: string | undefined, showHidden: boolean) => {
+    const resolved = dirPath ? resolvePath(dirPath) : (settingsStore?.getCwd() ?? os.homedir());
+    const dirents = await fs.promises.readdir(resolved, { withFileTypes: true });
+    const entries: FsEntry[] = [];
+    for (const d of dirents) {
+      if (!showHidden && d.name.startsWith(".")) continue;
+      const type = direntToFileType(d);
+      const ext = path.extname(d.name).toLowerCase();
+      entries.push({
+        name: d.name,
+        path: path.join(resolved, d.name),
+        type,
+        isAudio: type === "file" && (AUDIO_EXTENSIONS as readonly string[]).includes(ext),
+      });
+      if (entries.length >= 200) break;
+    }
+    const total = dirents.filter((d) => showHidden || !d.name.startsWith(".")).length;
+    return { entries, total, truncated: total > 200 };
+  },
+);
+
+ipcMain.handle("fs-cd", async (_event, dirPath: string) => {
+  const resolved = resolvePath(dirPath);
+  const stat = await fs.promises.stat(resolved);
+  if (!stat.isDirectory()) {
+    throw new Error(`Not a directory: ${resolved}`);
+  }
+  settingsStore?.setCwd(resolved);
+  return resolved;
+});
+
+ipcMain.handle("fs-pwd", () => settingsStore?.getCwd() ?? os.homedir());
+
+ipcMain.handle("fs-glob", async (_event, pattern: string) => {
+  const cwd = settingsStore?.getCwd() ?? os.homedir();
+  const results: string[] = [];
+  // fs.promises.glob is available in Node.js 22+
+  const globFn = (fs.promises as Record<string, unknown>)["glob"] as
+    | ((pattern: string, opts: { cwd: string }) => AsyncIterable<string>)
+    | undefined;
+  if (globFn) {
+    for await (const p of globFn(pattern, { cwd })) {
+      results.push(path.resolve(cwd, p));
+    }
+  } else {
+    throw new Error("fs.promises.glob is not available in this Node.js version (requires Node 22+).");
+  }
+  return results.sort();
+});
+
+ipcMain.handle("fs-walk", async (_event, dirPath: string) => {
+  const resolved = resolvePath(dirPath);
+  const dirents = await fs.promises.readdir(resolved, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  const entries: WalkEntry[] = [];
+  for (const d of dirents) {
+    if (entries.length >= 10_000) break;
+    const parentPath = typeof d.parentPath === "string" ? d.parentPath : (d as unknown as { path: string }).path ?? resolved;
+    entries.push({
+      path: path.join(parentPath, d.name),
+      type: direntToFileType(d),
+    });
+  }
+  return { entries, truncated: dirents.length > 10_000 };
+});
+
 app.whenReady().then(() => {
   dbManager = new DatabaseManager();
+  settingsStore = new SettingsStore();
   setDatabaseManager(dbManager);
   createWindow();
 
