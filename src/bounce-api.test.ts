@@ -8,6 +8,8 @@ import {
   OnsetFeature,
   NmfFeature,
   MfccFeature,
+  VisScene,
+  VisStack,
 } from "./renderer/bounce-api.js";
 
 function makeTerminal(): { lines: string[]; cleared: boolean } & object {
@@ -16,6 +18,7 @@ function makeTerminal(): { lines: string[]; cleared: boolean } & object {
     writeln: (line: string) => { terminal.lines.push(line); },
     write: (_data: string) => {},
     clear: () => { terminal.cleared = true; },
+    fit: () => {},
     onData: () => {},
     focus: () => {},
     open: () => {},
@@ -25,15 +28,15 @@ function makeTerminal(): { lines: string[]; cleared: boolean } & object {
 function makeAudioManager() {
   let currentAudio: Record<string, unknown> | null = null;
   let currentSlices: number[] | null = null;
-  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean }> = [];
+  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean; hash?: string }> = [];
   return {
     getCurrentAudio: () => currentAudio,
     setCurrentAudio: (audio: Record<string, unknown>) => { currentAudio = audio; },
     getCurrentSlices: () => currentSlices,
     setCurrentSlices: (slices: number[]) => { currentSlices = slices; },
     clearSlices: () => { currentSlices = null; },
-    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false) => {
-      playCalls.push({ audioData, sampleRate, loop });
+    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false, hash?: string) => {
+      playCalls.push({ audioData, sampleRate, loop, hash });
     },
     stopAudio: () => {},
     getPlayCalls: () => playCalls,
@@ -75,7 +78,7 @@ const mockElectron = {
     feature_type: featureType ?? "onset-slice",
     feature_data:
       featureType === "nmf"
-        ? JSON.stringify({ bases: [[1, 2], [3, 4]] })
+        ? JSON.stringify({ components: 2, bases: [[1, 2], [3, 4]], activations: [[5, 6], [7, 8]] })
         : JSON.stringify([0, 2, 4]),
     options: JSON.stringify({ components: 2, iterations: 5, numFrames: 2, numCoeffs: 3 }),
   }),
@@ -130,21 +133,20 @@ const mockElectron = {
 async function main() {
   const terminal = makeTerminal() as ReturnType<typeof makeTerminal>;
   const audioManager = makeAudioManager();
-  let waveformUpdated = false;
 
   const api = buildBounceApi({
     terminal: terminal as unknown as import("./renderer/terminal.js").BounceTerminal,
     audioManager: audioManager as unknown as import("./renderer/audio-context.js").AudioManager,
-    onUpdateWaveform: () => { waveformUpdated = true; },
-    onHideWaveform: () => {},
   }) as Record<string, unknown>;
 
   assert.ok(api.sn, "api exposes sn");
+  assert.ok(api.vis, "api exposes vis");
   assert.ok(!("play" in api), "api no longer exposes top-level play");
   assert.ok(!("display" in api), "api no longer exposes top-level display");
 
   const sn = api.sn as {
     help(): BounceResult;
+    stop(): BounceResult;
     read(pathOrHash: string): SamplePromise;
     list(): PromiseLike<unknown>;
     current(): CurrentSamplePromise;
@@ -152,13 +154,18 @@ async function main() {
   const corpus = api.corpus as {
     build(source?: string | Sample | PromiseLike<Sample>, featureHashOverride?: string): PromiseLike<BounceResult>;
   };
+  const vis = api.vis as {
+    help(): BounceResult;
+    waveform(sample: Sample): VisScene;
+    stack(): VisStack;
+  };
 
   assert.ok(sn.help().toString().includes("sample namespace"));
+  assert.ok(sn.help().toString().includes("sn.stop()"));
+  assert.ok(vis.help().toString().includes("visualization namespace"));
 
-  waveformUpdated = false;
   const sample = await sn.read("/test.wav");
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
-  assert.equal(waveformUpdated, true, "sn.read updates waveform");
   assert.ok(sample.help().toString().includes("sample.onsets()"));
   assert.ok(sample.help().toString().includes("sample.loop()"));
   assert.ok(sample.toString().includes("Loaded"));
@@ -166,14 +173,19 @@ async function main() {
   const played = await sample.play();
   assert.ok(played instanceof Sample, "sample.play returns Sample");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loop, false, "sample.play uses non-looping playback");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.hash, sample.hash, "sample.play preserves sample hash for playback tracking");
 
   const looped = await sample.loop();
   assert.ok(looped instanceof Sample, "sample.loop returns Sample");
   assert.ok(looped.toString().includes("Looping"), "sample.loop indicates looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loop, true, "sample.loop uses looping playback");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.hash, sample.hash, "sample.loop preserves sample hash for playback tracking");
 
   const stopped = sample.stop();
   assert.ok(stopped.toString().includes("stopped"));
+
+  const namespaceStopped = sn.stop();
+  assert.ok(namespaceStopped.toString().includes("Playback stopped"), "sn.stop stops all playback");
 
   const onsetFeature = await sample.onsets();
   assert.ok(onsetFeature instanceof OnsetFeature, "sample.onsets returns OnsetFeature");
@@ -192,6 +204,22 @@ async function main() {
   const mfccFeature = await sample.mfcc();
   assert.ok(mfccFeature instanceof MfccFeature, "sample.mfcc returns MfccFeature");
   assert.ok(mfccFeature.help().toString().includes("MFCC"));
+
+  const scene = vis.waveform(sample);
+  assert.ok(scene instanceof VisScene, "vis.waveform returns VisScene");
+  assert.ok(scene.toString().includes("VisScene"), "VisScene prints a useful summary");
+  assert.equal(scene.overlay(onsetFeature), scene, "scene.overlay chains");
+  assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
+  assert.ok(scene.help().toString().includes("scene.show()"), "VisScene help describes show()");
+
+  const stack = vis.stack();
+  assert.ok(stack instanceof VisStack, "vis.stack returns VisStack");
+  assert.ok(stack.help().toString().includes("multiple visualization scenes"), "VisStack help describes multi-scene usage");
+  assert.equal(stack.waveform(sample), stack, "stack.waveform chains");
+  assert.equal(stack.overlay(onsetFeature), stack, "stack.overlay chains on latest scene");
+  assert.equal(stack.panel(nmfFeature), stack, "stack.panel chains on latest scene");
+  assert.equal(stack.waveform(sample), stack, "stack accepts multiple scenes");
+  assert.ok(stack.toString().includes("scenes: 2"), "VisStack prints scene count");
 
   const grains = await sample.granularize({ grainSize: 20 });
   assert.ok(grains.toString().includes("grains"));

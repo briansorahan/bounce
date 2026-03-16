@@ -1,5 +1,6 @@
 export const BOUNCE_GLOBALS = new Set([
   "sn",
+  "vis",
   "nx",
   "visualizeNmf",
   "visualizeNx",

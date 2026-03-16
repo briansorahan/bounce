@@ -55,21 +55,41 @@
         background: #555;
       }
 
-      body.waveform-visible #terminal {
+      body.waveform-visible #terminal,
+      body.visualization-visible #terminal {
         flex: none;
-        height: 70vh;
+        height: 60vh;
+        min-height: 60px;
       }
 
-      body.waveform-visible #divider {
+      body.waveform-visible #divider,
+      body.visualization-visible #divider {
         display: block;
       }
 
+      #visualization-area {
+        flex: 1 1 auto;
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+        padding: 12px;
+        background: #252525;
+        overflow: auto;
+      }
+
+      body.waveform-visible #visualization-area,
+      body.visualization-visible #visualization-area {
+        display: flex;
+      }
+
       #waveform-container {
-        flex: none;
-        height: 30vh;
         display: none;
         position: relative;
-        background: #252525;
+        min-height: 220px;
+        background: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 8px;
       }
 
       #waveform-container.active {
@@ -84,13 +104,108 @@
         height: 100%;
         display: block;
       }
+
+      #visualization-stack {
+        display: none;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
+
+      body.visualization-visible #visualization-stack {
+        display: flex;
+      }
+
+      .visualization-scene {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        background: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 8px;
+      }
+
+      .visualization-scene-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .visualization-scene-title,
+      .visualization-scene-panel-title {
+        color: #d4d4d4;
+        font-size: 13px;
+        font-family: Menlo, Monaco, "Courier New", monospace;
+      }
+
+      .visualization-scene-close {
+        border: 1px solid #555;
+        border-radius: 4px;
+        background: #252525;
+        color: #d4d4d4;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+
+      .visualization-scene-close:hover {
+        background: #333;
+      }
+
+      .visualization-scene-waveform {
+        position: relative;
+        min-height: 220px;
+        background: #252525;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .visualization-scene-waveform-canvas {
+        width: 100%;
+        height: 220px;
+        display: block;
+      }
+
+      .visualization-scene-panels {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .visualization-scene-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        background: #252525;
+        border-radius: 6px;
+      }
+
+      .visualization-scene-panel-canvas {
+        width: 100%;
+        min-height: 320px;
+        background: #1a1a1a;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .visualization-scene-panel-canvas canvas {
+        width: 100%;
+        height: 320px;
+        display: block;
+      }
     </style>
   </head>
   <body>
     <div id="terminal"></div>
     <div id="divider"></div>
-    <div id="waveform-container">
-      <canvas id="waveform-canvas"></canvas>
+    <div id="visualization-area">
+      <div id="waveform-container">
+        <canvas id="waveform-canvas"></canvas>
+      </div>
+      <div id="visualization-stack"></div>
     </div>
 
     <script type="module" src="main.js"></script>

@@ -2,9 +2,10 @@
 
 See the brainstorming section for the full description of what each of these ideas actually entails.
 
+* Visualization
+* Projects
 * Audio Recording
 * Normalization
-* Visualization
 * Scripts
 * Multiline Editing
 * Staging Area
@@ -60,3 +61,29 @@ and selecting which one you want to use to record.
 
 I would like to be able to normalize a sample!
 There may be some other kinds of gain adjustments we could apply.
+
+## Runtime Introspection
+
+There could be an API that allows you to see the variables you've defined in the current
+session along with their values.
+
+## Projects
+
+All the state of the application could be stored in "projects".
+There would be a "default" project that is a fallback.
+There would be an API under the proj object:
+* proj.list(NAME)
+* proj.rm(NAME)
+* proj.load(NAME)
+
+The load function would create a new project if you specify a name that doesn't yet exist.
+Projects would save the state of the interpreter i.e. any variables/functions/etc that you
+had defined, as well as the state of the UI.
+
+I think the samples would also be organized into projects as well.
+
+## Sample Lineage
+
+We already store samples and features in a way that would allow us to track lineage.
+e.g. raw sample -> feature1, feature2 -> derived sample
+This feature would just expose that through the UI somehow.
