@@ -81,3 +81,9 @@ Projects would save the state of the interpreter i.e. any variables/functions/et
 had defined, as well as the state of the UI.
 
 I think the samples would also be organized into projects as well.
+
+## Sample Lineage
+
+We already store samples and features in a way that would allow us to track lineage.
+e.g. raw sample -> feature1, feature2 -> derived sample
+This feature would just expose that through the UI somehow.
