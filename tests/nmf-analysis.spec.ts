@@ -7,11 +7,13 @@ import {
 } from "@playwright/test";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 const electronPath = require("electron") as string;
 
 let electronApp: ElectronApplication;
 let window: Page;
+let userDataDir: string;
 
 async function sendCommand(command: string) {
   await window.evaluate((cmd: string) => {
@@ -24,6 +26,9 @@ async function sendCommand(command: string) {
 }
 
 test.beforeAll(async () => {
+  userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "bounce-nmf-analysis-"),
+  );
   electronApp = await electron.launch({
     executablePath: electronPath,
     args: [
@@ -34,6 +39,7 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
+      BOUNCE_USER_DATA_PATH: userDataDir,
     },
   });
   window = await electronApp.firstWindow();
@@ -44,6 +50,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (electronApp) {
     await electronApp.close();
+  }
+  if (userDataDir) {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
 

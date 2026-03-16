@@ -5,6 +5,7 @@ import { app } from "electron";
 
 interface Settings {
   cwd: string;
+  currentProjectName: string | null;
 }
 
 export class SettingsStore {
@@ -26,6 +27,15 @@ export class SettingsStore {
     this.save();
   }
 
+  getCurrentProjectName(): string | null {
+    return this.settings.currentProjectName;
+  }
+
+  setCurrentProjectName(projectName: string | null): void {
+    this.settings.currentProjectName = projectName;
+    this.save();
+  }
+
   /** Expand a leading ~ to the user's home directory. */
   static expandHome(p: string): string {
     if (p === "~") return os.homedir();
@@ -39,9 +49,12 @@ export class SettingsStore {
     try {
       const raw = fs.readFileSync(this.settingsPath, "utf8");
       const parsed = JSON.parse(raw) as Partial<Settings>;
-      return { cwd: parsed.cwd ?? os.homedir() };
+      return {
+        cwd: parsed.cwd ?? os.homedir(),
+        currentProjectName: parsed.currentProjectName ?? null,
+      };
     } catch {
-      return { cwd: os.homedir() };
+      return { cwd: os.homedir(), currentProjectName: null };
     }
   }
 

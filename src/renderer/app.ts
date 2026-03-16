@@ -70,6 +70,10 @@ export class BounceApp {
       this.handleNMFOverlay(data);
     });
 
+    window.addEventListener("bounce:project-changed", () => {
+      void this.refreshHistoryForProject();
+    });
+
     // Expose terminal and executeCommand for testing
     const testWindow = window as Window & {
       __bounceExecuteCommand?: (cmd: string) => Promise<void>;
@@ -724,5 +728,15 @@ export class BounceApp {
     } catch (error) {
       console.error("Failed to load command history:", error);
     }
+  }
+
+  private async refreshHistoryForProject(): Promise<void> {
+    await this.loadHistoryFromStorage();
+    this.historyIndex = -1;
+    this.isReverseSearchMode = false;
+    this.searchQuery = "";
+    this.searchResultIndex = -1;
+    this.matchedCommands = [];
+    this.savedCommandBuffer = "";
   }
 }

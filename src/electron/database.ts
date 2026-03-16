@@ -52,6 +52,7 @@ export interface FeatureListRecord {
 }
 
 export interface SampleFeatureLink {
+  project_id: number;
   sample_hash: string;
   source_hash: string;
   feature_hash: string;
@@ -59,11 +60,24 @@ export interface SampleFeatureLink {
 }
 
 export interface DerivedSampleSummary {
+  project_id: number;
   source_hash: string;
   source_file_path: string | null;
   feature_hash: string;
   feature_type: string;
   derived_count: number;
+}
+
+export interface ProjectRecord {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface ProjectListRecord extends ProjectRecord {
+  sample_count: number;
+  feature_count: number;
+  command_count: number;
 }
 
 export interface FeatureOptions {
@@ -83,6 +97,8 @@ export interface GranularizeOptions {
 
 export class DatabaseManager {
   public db: Database.Database;
+  private currentProjectId: number | null = null;
+  private currentProjectName: string | null = null;
 
   constructor(dbPath?: string) {
     const resolvedPath =
@@ -90,6 +106,8 @@ export class DatabaseManager {
 
     this.db = new Database(resolvedPath);
     this.initializeTables();
+    const defaultProject = this.ensureDefaultProject();
+    this.setCurrentProjectByName(defaultProject.name);
   }
 
   private initializeTables(): void {
@@ -105,6 +123,7 @@ export class DatabaseManager {
       () => this.migrate002_sampleFilePathNullable(),
       () => this.migrate003_samplesFeatures(),
       () => this.migrate004_repairFeaturesFK(),
+      () => this.migrate005_projects(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -347,6 +366,238 @@ export class DatabaseManager {
     }
   }
 
+  private migrate005_projects(): void {
+    this.db.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      this.db.exec(`
+        DROP TABLE IF EXISTS samples_features;
+        DROP TABLE IF EXISTS features;
+        DROP TABLE IF EXISTS command_history;
+        DROP TABLE IF EXISTS samples;
+
+        CREATE TABLE IF NOT EXISTS projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE samples (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          hash TEXT NOT NULL,
+          file_path TEXT,
+          audio_data BLOB NOT NULL,
+          sample_rate INTEGER NOT NULL,
+          channels INTEGER NOT NULL,
+          duration REAL NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(project_id, hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_project_hash
+        ON samples(project_id, hash);
+
+        CREATE INDEX idx_samples_project_file_path
+        ON samples(project_id, file_path);
+
+        CREATE TABLE features (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          feature_hash TEXT NOT NULL,
+          feature_type TEXT NOT NULL,
+          feature_data TEXT NOT NULL,
+          options TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(project_id, sample_hash, feature_hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_features_project_sample
+        ON features(project_id, sample_hash);
+
+        CREATE INDEX idx_features_project_type
+        ON features(project_id, feature_type);
+
+        CREATE INDEX idx_features_project_hash
+        ON features(project_id, feature_hash);
+
+        CREATE TABLE command_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          command TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_command_history_project_timestamp
+        ON command_history(project_id, timestamp DESC);
+
+        CREATE TABLE samples_features (
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          feature_hash TEXT NOT NULL,
+          index_order INTEGER NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (project_id, sample_hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, source_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, source_hash, feature_hash) REFERENCES features(project_id, sample_hash, feature_hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_features_project_source
+        ON samples_features(project_id, source_hash);
+
+        CREATE INDEX idx_samples_features_project_feature
+        ON samples_features(project_id, source_hash, feature_hash);
+      `);
+    } finally {
+      this.db.exec("PRAGMA foreign_keys = ON;");
+    }
+  }
+
+  private normalizeProjectName(name: string): string {
+    const normalized = name.trim();
+    if (!normalized) {
+      throw new Error("Project name cannot be empty.");
+    }
+    return normalized;
+  }
+
+  private requireCurrentProjectId(): number {
+    if (this.currentProjectId === null) {
+      throw new Error("No current project selected.");
+    }
+    return this.currentProjectId;
+  }
+
+  private selectProjectSummaries(whereClause = "", ...params: unknown[]): ProjectListRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        p.id,
+        p.name,
+        p.created_at,
+        COALESCE(sample_counts.sample_count, 0) AS sample_count,
+        COALESCE(feature_counts.feature_count, 0) AS feature_count,
+        COALESCE(command_counts.command_count, 0) AS command_count
+      FROM projects p
+      LEFT JOIN (
+        SELECT project_id, COUNT(*) AS sample_count
+        FROM samples
+        GROUP BY project_id
+      ) sample_counts ON sample_counts.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id, COUNT(*) AS feature_count
+        FROM features
+        GROUP BY project_id
+      ) feature_counts ON feature_counts.project_id = p.id
+      LEFT JOIN (
+        SELECT project_id, COUNT(*) AS command_count
+        FROM command_history
+        GROUP BY project_id
+      ) command_counts ON command_counts.project_id = p.id
+      ${whereClause}
+      ORDER BY p.name COLLATE NOCASE ASC
+    `);
+
+    return stmt.all(...params) as ProjectListRecord[];
+  }
+
+  private getProjectSummaryById(projectId: number): ProjectListRecord | undefined {
+    const rows = this.selectProjectSummaries("WHERE p.id = ?", projectId);
+    return rows[0];
+  }
+
+  private projectExists(projectId: number): boolean {
+    const row = this.db
+      .prepare("SELECT 1 FROM projects WHERE id = ?")
+      .get(projectId);
+    return !!row;
+  }
+
+  getCurrentProjectName(): string | null {
+    return this.currentProjectName;
+  }
+
+  ensureDefaultProject(): ProjectRecord {
+    this.db
+      .prepare("INSERT OR IGNORE INTO projects (name) VALUES (?)")
+      .run("default");
+
+    const project = this.getProjectByName("default");
+    if (!project) {
+      throw new Error("Failed to ensure default project.");
+    }
+    return project;
+  }
+
+  getProjectByName(name: string): ProjectRecord | undefined {
+    const normalized = this.normalizeProjectName(name);
+    return this.db
+      .prepare(`
+        SELECT id, name, created_at
+        FROM projects
+        WHERE name = ?
+        LIMIT 1
+      `)
+      .get(normalized) as ProjectRecord | undefined;
+  }
+
+  listProjects(): ProjectListRecord[] {
+    return this.selectProjectSummaries();
+  }
+
+  getCurrentProject(): ProjectListRecord {
+    const projectId = this.requireCurrentProjectId();
+    const project = this.getProjectSummaryById(projectId);
+    if (!project) {
+      throw new Error("Current project could not be loaded.");
+    }
+    return project;
+  }
+
+  setCurrentProjectByName(name: string): ProjectListRecord {
+    const normalized = this.normalizeProjectName(name);
+    const project = this.getProjectByName(normalized);
+    if (!project) {
+      throw new Error(`Project "${normalized}" does not exist.`);
+    }
+
+    this.currentProjectId = project.id;
+    this.currentProjectName = project.name;
+    return this.getCurrentProject();
+  }
+
+  loadOrCreateProject(name: string): ProjectListRecord {
+    const normalized = this.normalizeProjectName(name);
+    this.db
+      .prepare("INSERT OR IGNORE INTO projects (name) VALUES (?)")
+      .run(normalized);
+    return this.setCurrentProjectByName(normalized);
+  }
+
+  removeProject(name: string): ProjectListRecord {
+    const normalized = this.normalizeProjectName(name);
+    const target = this.getProjectByName(normalized);
+    if (!target) {
+      throw new Error(`Project "${normalized}" does not exist.`);
+    }
+
+    if (this.currentProjectId === target.id) {
+      throw new Error(
+        `Cannot remove the current project "${normalized}". Load a different project first.`,
+      );
+    }
+
+    this.db.prepare("DELETE FROM projects WHERE id = ?").run(target.id);
+    return this.getCurrentProject();
+  }
+
   addDebugLog(
     level: string,
     message: string,
@@ -376,44 +627,52 @@ export class DatabaseManager {
   }
 
   addCommand(command: string): void {
+    const projectId = this.requireCurrentProjectId();
     const lastCommand = this.db
       .prepare(
         `
-      SELECT command FROM command_history 
-      ORDER BY timestamp DESC 
-      LIMIT 1
-    `,
+       SELECT command FROM command_history 
+       WHERE project_id = ?
+       ORDER BY timestamp DESC 
+       LIMIT 1
+     `,
       )
-      .get() as { command: string } | undefined;
+      .get(projectId) as { command: string } | undefined;
 
     if (lastCommand?.command === command) {
       return;
     }
 
     const stmt = this.db.prepare(`
-      INSERT INTO command_history (command, timestamp) 
-      VALUES (?, ?)
+      INSERT INTO command_history (project_id, command, timestamp) 
+      VALUES (?, ?, ?)
     `);
-    stmt.run(command, Date.now());
+    stmt.run(projectId, command, Date.now());
   }
 
   getCommandHistory(limit: number = 1000): string[] {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT command 
       FROM command_history 
+      WHERE project_id = ?
       ORDER BY timestamp DESC 
       LIMIT ?
     `);
 
-    const rows = stmt.all(limit) as { command: string }[];
+    const rows = stmt.all(projectId, limit) as { command: string }[];
     return rows.map((row) => row.command).reverse();
   }
 
   clearCommandHistory(): void {
-    this.db.prepare("DELETE FROM command_history").run();
+    const projectId = this.requireCurrentProjectId();
+    this.db
+      .prepare("DELETE FROM command_history WHERE project_id = ?")
+      .run(projectId);
   }
 
   dedupeCommandHistory(): { removed: number } {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       DELETE FROM command_history
       WHERE id IN (
@@ -422,14 +681,17 @@ export class DatabaseManager {
         INNER JOIN command_history h2 
           ON h1.command = h2.command 
           AND h1.timestamp > h2.timestamp
+          AND h1.project_id = h2.project_id
         WHERE NOT EXISTS (
           SELECT 1 FROM command_history h3
           WHERE h3.timestamp > h2.timestamp 
             AND h3.timestamp < h1.timestamp
+            AND h3.project_id = h1.project_id
         )
+        AND h1.project_id = ?
       )
     `);
-    const result = stmt.run();
+    const result = stmt.run(projectId);
     return { removed: result.changes };
   }
 
@@ -439,38 +701,47 @@ export class DatabaseManager {
 
   storeSample(
     hash: string,
-    filePath: string,
+    filePath: string | null,
     audioData: Buffer,
     sampleRate: number,
     channels: number,
     duration: number,
   ): void {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO samples (hash, file_path, audio_data, sample_rate, channels, duration) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO samples (project_id, hash, file_path, audio_data, sample_rate, channels, duration)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, hash) DO UPDATE SET
+        file_path = excluded.file_path,
+        audio_data = excluded.audio_data,
+        sample_rate = excluded.sample_rate,
+        channels = excluded.channels,
+        duration = excluded.duration
     `);
-    stmt.run(hash, filePath, audioData, sampleRate, channels, duration);
+    stmt.run(projectId, hash, filePath, audioData, sampleRate, channels, duration);
   }
 
   getSampleByHash(hash: string): SampleRecord | undefined {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
       FROM samples 
-      WHERE hash LIKE ? || '%'
+      WHERE project_id = ? AND hash LIKE ? || '%'
       LIMIT 1
     `);
-    return stmt.get(hash) as SampleRecord | undefined;
+    return stmt.get(projectId, hash) as SampleRecord | undefined;
   }
 
   getSampleByPath(filePath: string): SampleRecord | undefined {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
       FROM samples 
-      WHERE file_path = ? 
+      WHERE project_id = ? AND file_path = ? 
       ORDER BY id DESC 
       LIMIT 1
     `);
-    return stmt.get(filePath) as SampleRecord | undefined;
+    return stmt.get(projectId, filePath) as SampleRecord | undefined;
   }
 
   private computeFeatureHash(
@@ -490,15 +761,17 @@ export class DatabaseManager {
     featureData: number[],
     options?: FeatureOptions,
   ): number {
+    const projectId = this.requireCurrentProjectId();
     const featureHash = this.computeFeatureHash(featureType, featureData, options);
     const dataStr = JSON.stringify(featureData);
 
     const stmt = this.db.prepare(`
-      INSERT OR IGNORE INTO features (sample_hash, feature_hash, feature_type, feature_data, options) 
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO features (project_id, sample_hash, feature_hash, feature_type, feature_data, options) 
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     const optionsStrOrNull = options ? JSON.stringify(options) : null;
     const result = stmt.run(
+      projectId,
       sampleHash,
       featureHash,
       featureType,
@@ -511,10 +784,10 @@ export class DatabaseManager {
       const existing = this.db
         .prepare(
           `
-        SELECT id FROM features WHERE sample_hash = ? AND feature_hash = ?
+        SELECT id FROM features WHERE project_id = ? AND sample_hash = ? AND feature_hash = ?
       `,
         )
-        .get(sampleHash, featureHash) as { id: number } | undefined;
+        .get(projectId, sampleHash, featureHash) as { id: number } | undefined;
 
       return existing ? existing.id : 0;
     }
@@ -526,10 +799,11 @@ export class DatabaseManager {
     sampleHash?: string,
     featureType?: string,
   ): FeatureRecord | undefined {
+    const projectId = this.requireCurrentProjectId();
     let sql =
       "SELECT id, sample_hash, feature_hash, feature_type, feature_data, options FROM features";
-    const conditions: string[] = [];
-    const params: string[] = [];
+    const conditions: string[] = ["project_id = ?"];
+    const params: string[] = [String(projectId)];
 
     if (sampleHash) {
       conditions.push("sample_hash = ?");
@@ -559,6 +833,7 @@ export class DatabaseManager {
     channels: number,
     duration: number,
   ): string {
+    const projectId = this.requireCurrentProjectId();
     // Hash includes provenance to ensure uniqueness per derivation
     const hashInput = `${sourceHash}:${featureHash}:${index}:`;
     const hash = crypto
@@ -569,17 +844,17 @@ export class DatabaseManager {
 
     this.db
       .prepare(
-        `INSERT OR IGNORE INTO samples (hash, file_path, audio_data, sample_rate, channels, duration)
-         VALUES (?, NULL, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO samples (project_id, hash, file_path, audio_data, sample_rate, channels, duration)
+         VALUES (?, ?, NULL, ?, ?, ?, ?)`,
       )
-      .run(hash, audioData, sampleRate, channels, duration);
+      .run(projectId, hash, audioData, sampleRate, channels, duration);
 
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO samples_features (sample_hash, source_hash, feature_hash, index_order)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO samples_features (project_id, sample_hash, source_hash, feature_hash, index_order)
+         VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(hash, sourceHash, featureHash, index);
+      .run(projectId, hash, sourceHash, featureHash, index);
 
     return hash;
   }
@@ -588,16 +863,19 @@ export class DatabaseManager {
     sourceHash: string,
     featureHash: string,
   ): { hash: string; index: number }[] {
+    const projectId = this.requireCurrentProjectId();
     const sample = this.getSampleByHash(sourceHash);
     if (!sample) {
       throw new Error(`Source sample not found: ${sourceHash}`);
     }
 
     const feature = this.db
-      .prepare(
-        "SELECT feature_data, feature_hash FROM features WHERE sample_hash = ? AND feature_hash LIKE ?",
-      )
-      .get(sample.hash, `${featureHash}%`) as
+        .prepare(
+          `SELECT feature_data, feature_hash
+           FROM features
+           WHERE project_id = ? AND sample_hash = ? AND feature_hash LIKE ?`,
+        )
+        .get(projectId, sample.hash, `${featureHash}%`) as
       | { feature_data: string; feature_hash: string }
       | undefined;
 
@@ -759,13 +1037,14 @@ export class DatabaseManager {
     sourceHash: string,
     featureHash: string,
   ): SampleFeatureLink[] {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT sample_hash, source_hash, feature_hash, index_order
+      SELECT project_id, sample_hash, source_hash, feature_hash, index_order
       FROM samples_features
-      WHERE source_hash = ? AND feature_hash LIKE ?
+      WHERE project_id = ? AND source_hash = ? AND feature_hash LIKE ?
       ORDER BY index_order ASC
     `);
-    return stmt.all(sourceHash, `${featureHash}%`) as SampleFeatureLink[];
+    return stmt.all(projectId, sourceHash, `${featureHash}%`) as SampleFeatureLink[];
   }
 
   getDerivedSampleByIndex(
@@ -773,35 +1052,43 @@ export class DatabaseManager {
     featureHash: string,
     index: number,
   ): SampleRecord | undefined {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT s.id, s.hash, s.file_path, s.audio_data, s.sample_rate, s.channels, s.duration
       FROM samples s
-      JOIN samples_features sf ON s.hash = sf.sample_hash
-      WHERE sf.source_hash = ? AND sf.feature_hash LIKE ? AND sf.index_order = ?
+      JOIN samples_features sf ON s.project_id = sf.project_id AND s.hash = sf.sample_hash
+      WHERE sf.project_id = ? AND sf.source_hash = ? AND sf.feature_hash LIKE ? AND sf.index_order = ?
     `);
-    return stmt.get(sourceHash, `${featureHash}%`, index) as
+    return stmt.get(projectId, sourceHash, `${featureHash}%`, index) as
       | SampleRecord
       | undefined;
   }
 
   listDerivedSamplesSummary(): DerivedSampleSummary[] {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT
+        sf.project_id,
         sf.source_hash,
         s.file_path as source_file_path,
         sf.feature_hash,
         f.feature_type,
         COUNT(*) as derived_count
       FROM samples_features sf
-      JOIN samples s ON sf.source_hash = s.hash
-      JOIN features f ON sf.source_hash = f.sample_hash AND sf.feature_hash = f.feature_hash
-      GROUP BY sf.source_hash, sf.feature_hash
+      JOIN samples s ON sf.project_id = s.project_id AND sf.source_hash = s.hash
+      JOIN features f
+        ON sf.project_id = f.project_id
+       AND sf.source_hash = f.sample_hash
+       AND sf.feature_hash = f.feature_hash
+      WHERE sf.project_id = ?
+      GROUP BY sf.project_id, sf.source_hash, sf.feature_hash
       ORDER BY sf.source_hash
     `);
-    return stmt.all() as DerivedSampleSummary[];
+    return stmt.all(projectId) as DerivedSampleSummary[];
   }
 
   listSamples(): SampleListRecord[] {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT 
         id, 
@@ -813,26 +1100,29 @@ export class DatabaseManager {
         length(audio_data) as data_size,
         created_at
       FROM samples 
-      WHERE file_path IS NOT NULL
+      WHERE project_id = ? AND file_path IS NOT NULL
       ORDER BY id DESC
     `);
-    return stmt.all() as SampleListRecord[];
+    return stmt.all(projectId) as SampleListRecord[];
   }
 
   listFeatures(): FeatureListRecord[] {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
       SELECT 
         f.sample_hash,
         f.feature_type,
         s.file_path,
         f.options,
-        COUNT(*) as feature_count
+        COUNT(*) as feature_count,
+        MAX(f.feature_hash) as feature_hash
       FROM features f
-      JOIN samples s ON f.sample_hash = s.hash
-      GROUP BY f.sample_hash, f.feature_type, f.options
+      JOIN samples s ON f.project_id = s.project_id AND f.sample_hash = s.hash
+      WHERE f.project_id = ?
+      GROUP BY f.sample_hash, f.feature_type, s.file_path, f.options
       ORDER BY MAX(f.id) DESC
     `);
-    return stmt.all() as FeatureListRecord[];
+    return stmt.all(projectId) as FeatureListRecord[];
   }
 
   getFeature(
@@ -846,14 +1136,15 @@ export class DatabaseManager {
         options: string;
       }
     | undefined {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
 SELECT feature_type, feature_data, feature_hash, options
 FROM features
-WHERE sample_hash = ? AND feature_type = ?
+WHERE project_id = ? AND sample_hash = ? AND feature_type = ?
 ORDER BY created_at DESC
 LIMIT 1
 `);
-    return stmt.get(sampleHash, featureType) as
+    return stmt.get(projectId, sampleHash, featureType) as
       | {
           feature_type: string;
           feature_data: string;
@@ -874,13 +1165,14 @@ LIMIT 1
         options: string;
       }
     | undefined {
+    const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
 SELECT feature_type, feature_data, feature_hash, options
 FROM features
-WHERE sample_hash = ? AND feature_hash LIKE ?
+WHERE project_id = ? AND sample_hash = ? AND feature_hash LIKE ?
 LIMIT 1
 `);
-    return stmt.get(sampleHash, `${featureHashPrefix}%`) as
+    return stmt.get(projectId, sampleHash, `${featureHashPrefix}%`) as
       | {
           feature_type: string;
           feature_data: string;

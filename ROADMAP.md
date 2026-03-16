@@ -87,3 +87,15 @@ I think the samples would also be organized into projects as well.
 We already store samples and features in a way that would allow us to track lineage.
 e.g. raw sample -> feature1, feature2 -> derived sample
 This feature would just expose that through the UI somehow.
+
+## Tutorials
+
+I think interactive tutorials could be cool!
+Maybe it's a `tutorial()` global function to learn the global functions.
+Then each global object could expose a tutorial() method to educate the user
+about how to use that object.
+Each tutorial would run in a temp directory and temp db, to sandbox everything the
+user does. When they exit the tutorial, everything they did is removed.
+I think that seems right?
+It could be kinda sad if someone did something they actually wanted to save
+while in a tutorial session, but couldn't :(

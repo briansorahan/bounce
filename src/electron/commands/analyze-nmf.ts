@@ -2,7 +2,6 @@ import { BrowserWindow } from "electron";
 import { DatabaseManager } from "../database";
 import { debugLog } from "../logger";
 import { BufNMF } from "../BufNMF";
-import crypto from "crypto";
 import { Command } from "./types";
 
 export const analyzeNmfCommand: Command = {
@@ -67,10 +66,15 @@ Example:
     }
 
     try {
-      // Look up sample in database
-      const sample = dbManager.db
-        .prepare("SELECT * FROM samples WHERE hash LIKE ?")
-        .get(`${sampleHash}%`) as any;
+      // Look up sample in the current project context
+      const sample = dbManager.getSampleByHash(sampleHash) as
+        | {
+            hash: string;
+            duration: number;
+            sample_rate: number;
+            audio_data: Buffer;
+          }
+        | undefined;
 
       if (!sample) {
         debugLog("error", "[AnalyzeNMF] Sample not found", { sampleHash });
@@ -117,30 +121,24 @@ Example:
         ],
       });
 
-      // Compute feature hash
-      const featureData = JSON.stringify({
+      const featurePayload = {
         bases: result.bases,
         activations: result.activations,
-      });
-      const featureHash = crypto
-        .createHash("sha256")
-        .update(featureData)
-        .digest("hex");
+      };
+      dbManager.storeFeature(
+        sample.hash,
+        "nmf",
+        featurePayload as unknown as number[],
+        { components, iterations, fftSize } as Record<string, unknown>,
+      );
+      const storedFeature = dbManager.getMostRecentFeature(sample.hash, "nmf");
+      if (!storedFeature) {
+        throw new Error("NMF feature could not be loaded after storage.");
+      }
 
       debugLog("info", "[AnalyzeNMF] Computed feature hash", {
-        featureHash: featureHash.substring(0, 8),
+        featureHash: storedFeature.feature_hash.substring(0, 8),
       });
-
-      // Store in features table with the parameters used
-      const options = JSON.stringify({ components, iterations, fftSize });
-      dbManager.db
-        .prepare(
-          `
-        INSERT OR REPLACE INTO features (sample_hash, feature_type, feature_hash, feature_data, options, created_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-      `,
-        )
-        .run(sample.hash, "nmf", featureHash, featureData, options);
 
       debugLog("info", "[AnalyzeNMF] Feature stored in database");
 
@@ -149,7 +147,7 @@ Example:
         message:
           `NMF analysis complete for sample ${sample.hash.substring(0, 8)}\r\n` +
           `Components: ${components}, Iterations: ${iterations}\r\n` +
-          `Feature hash: ${featureHash.substring(0, 8)}`,
+          `Feature hash: ${storedFeature.feature_hash.substring(0, 8)}`,
       };
     } catch (error: any) {
       debugLog("error", "[AnalyzeNMF] Error during analysis", {

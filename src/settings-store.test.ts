@@ -22,6 +22,7 @@ function testDefaultCwd() {
     // File does not exist yet — should default to homedir
     const store = new SettingsStore(settingsPath);
     assert.strictEqual(store.getCwd(), os.homedir(), "default cwd is homedir");
+    assert.strictEqual(store.getCurrentProjectName(), null, "default project is unset");
     console.log("  default cwd: passed");
   });
 }
@@ -45,6 +46,34 @@ function testSetCwdUpdatesInMemory() {
     store.setCwd(os.tmpdir());
     assert.strictEqual(store.getCwd(), os.tmpdir(), "getCwd reflects setCwd immediately");
     console.log("  setCwd in-memory update: passed");
+  });
+}
+
+function testSetCurrentProjectPersists() {
+  withTempFile((settingsPath) => {
+    const store = new SettingsStore(settingsPath);
+    store.setCurrentProjectName("drums");
+
+    const store2 = new SettingsStore(settingsPath);
+    assert.strictEqual(
+      store2.getCurrentProjectName(),
+      "drums",
+      "current project persists after reload",
+    );
+    console.log("  current project persists: passed");
+  });
+}
+
+function testSetCurrentProjectUpdatesInMemory() {
+  withTempFile((settingsPath) => {
+    const store = new SettingsStore(settingsPath);
+    store.setCurrentProjectName("default");
+    assert.strictEqual(
+      store.getCurrentProjectName(),
+      "default",
+      "current project reflects setCurrentProjectName immediately",
+    );
+    console.log("  current project in-memory update: passed");
   });
 }
 
@@ -97,6 +126,11 @@ function testMissingCwdKeyFallsBackToHomedir() {
     fs.writeFileSync(settingsPath, JSON.stringify({ someOtherKey: "value" }), "utf8");
     const store = new SettingsStore(settingsPath);
     assert.strictEqual(store.getCwd(), os.homedir(), "missing cwd key falls back to homedir");
+    assert.strictEqual(
+      store.getCurrentProjectName(),
+      null,
+      "missing currentProjectName falls back to null",
+    );
     console.log("  missing cwd key fallback: passed");
   });
 }
@@ -106,6 +140,8 @@ async function runAll() {
   testDefaultCwd();
   testSetCwdPersists();
   testSetCwdUpdatesInMemory();
+  testSetCurrentProjectPersists();
+  testSetCurrentProjectUpdatesInMemory();
   testExpandHomeTilde();
   testExpandHomeTildeSlash();
   testExpandHomeNoTilde();

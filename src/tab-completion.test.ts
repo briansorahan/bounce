@@ -47,6 +47,17 @@ async function testMultiMatchVisualize() {
   assert.strictEqual(c.matchCount, 3);
 }
 
+async function testSingleMatchProjectNamespace() {
+  const c = new TabCompletion();
+  await c.update("pr", 2);
+  assert.strictEqual(c.matchCount, 1);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "proj()");
+  }
+}
+
 async function testGhostTextSingleMatchContainsSuffix() {
   const c = new TabCompletion();
   await c.update("sn", 2);
@@ -169,6 +180,24 @@ async function testFsCompletionStillScoped() {
   assert.strictEqual(c.matchCount, 7);
 }
 
+async function testProjectDotCompletion() {
+  class ProjectNamespaceStub {
+    help() {}
+    current() {}
+    list() {}
+    load(_name: string) {}
+    rm(_name: string) {}
+  }
+
+  const c = new TabCompletion();
+  c.setApi({ proj: new ProjectNamespaceStub() });
+  await c.update("proj.", 5);
+  assert.strictEqual(c.matchCount, 5);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("current()"));
+  assert.ok(ghost.includes("load()"));
+}
+
 async function testPathCompletionScopesToFsString() {
   mockFsCompletePath(async (method, inputPath) => {
     assert.strictEqual(method, "ls");
@@ -185,6 +214,7 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
   ["single match namespace", testSingleMatchNamespace],
   ["multi match visualize", testMultiMatchVisualize],
+  ["single match project namespace", testSingleMatchProjectNamespace],
   ["ghostText single match contains suffix", testGhostTextSingleMatchContainsSuffix],
   ["ghostText multi match contains candidates", testGhostTextMultiMatchContainsCandidates],
   ["reset clears state", testResetClearsState],
@@ -193,6 +223,7 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["dot completion uses scope variable bindings", testDotCompletionUsesScopeVariableBindings],
   ["dot completion uses merged bindings", testDotCompletionPrefersMergedBindingsOverStaticApiOnly],
   ["fs completion still scoped", testFsCompletionStillScoped],
+  ["project dot completion", testProjectDotCompletion],
   ["path completion scopes to fs string", testPathCompletionScopesToFsString],
 ];
 
