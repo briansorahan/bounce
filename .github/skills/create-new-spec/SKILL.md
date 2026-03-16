@@ -119,10 +119,11 @@ Work with Copilot to implement and track progress:
 Before considering work complete:
 - Run linter: `npm run lint`
 - Build TypeScript: `npm run build:electron`
-- Run tests: `npm test` and/or `npm run test:e2e`
+- Run tests: `npm test` and, when Playwright coverage is needed, `./build.sh`
 - Manually test in Electron app: `npm run dev:electron`
 - Verify cross-platform compatibility if possible
 - If REPL surface area changed, verify that unit and/or Playwright tests cover `help()` output and returned-object terminal summaries before closing the work
+- Do not run Playwright directly from the host for verification docs or Copilot guidance; prefer `./build.sh`, which runs the Playwright suite in Docker
 
 ### Step 7: Completion
 
