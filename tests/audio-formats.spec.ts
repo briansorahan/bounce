@@ -80,9 +80,10 @@ test.describe("Audio Format Support", () => {
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
-    await sendCommand(window, `sn.read("${testFile}")`);
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "vis.waveform(samp).show()");
 
-    await expect(window.locator("#waveform-container")).toBeVisible({
+    await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
       timeout: 5000,
     });
 
