@@ -31,11 +31,8 @@ npm run dev:electron
 # Run unit tests
 npm test
 
-# Run Playwright e2e tests
-npm run test:e2e
-
-# Run full GitHub workflow locally (all tests)
-npm run test:workflow
+# Run the Dockerized workflow locally, including Playwright e2e tests
+./build.sh
 ```
 
 ## Prerequisites

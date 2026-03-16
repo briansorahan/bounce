@@ -90,8 +90,9 @@ For REPL-facing work, specs should explicitly document the REPL interface contra
 ### Build & Test
 - Run `npm run lint` before commits
 - Run relevant tests for changed code
+- When Playwright or end-to-end coverage is needed, always run `./build.sh` so the suite executes inside the Dockerized test environment; do not run direct Playwright commands from Copilot
 - Run `npm run rebuild` after any C++ changes
-- Full workflow test: `npm run test:workflow`
+- Full Dockerized workflow test: `./build.sh`
 
 ## Performance Considerations
 
