@@ -117,6 +117,8 @@ declare class NmfFeature extends FeatureResult {
   readonly components: number | undefined;
   readonly iterations: number | undefined;
   readonly converged: boolean | undefined;
+  readonly bases: number[][] | Float32Array[] | undefined;
+  readonly activations: number[][] | Float32Array[] | undefined;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
   playComponent(index?: number): ReplValue<Promise<Sample>>;
 }
@@ -152,6 +154,7 @@ declare class GrainCollection extends BounceResult {
 
 interface SampleNamespace {
   help(): BounceResult;
+  stop(): BounceResult;
   read: {
     (pathOrHash: string): ReplValue<Promise<Sample>>;
     help(): BounceResult;
@@ -167,6 +170,68 @@ interface SampleNamespace {
 }
 
 declare const sn: SampleNamespace;
+
+declare class VisScene extends BounceResult {
+  readonly sample: Sample;
+  readonly overlays: Array<OnsetFeature | NmfFeature>;
+  readonly panels: NmfFeature[];
+  readonly sceneId: string | undefined;
+  readonly titleText: string | undefined;
+  help(): BounceResult;
+  title(text: string): VisScene;
+  overlay(feature: OnsetFeature | NmfFeature): VisScene;
+  panel(feature: NmfFeature): VisScene;
+  show(): ReplValue<Promise<BounceResult>>;
+}
+
+declare class VisStack extends BounceResult {
+  readonly scenes: VisScene[];
+  help(): BounceResult;
+  waveform(sample: Sample): VisStack;
+  title(text: string): VisStack;
+  overlay(feature: OnsetFeature | NmfFeature): VisStack;
+  panel(feature: NmfFeature): VisStack;
+  show(): ReplValue<Promise<BounceResult>>;
+}
+
+interface VisSceneSummary {
+  id: string;
+  title: string;
+  sampleHash: string;
+  sampleLabel: string;
+  overlayCount: number;
+  panelCount: number;
+}
+
+declare class VisSceneListResult extends BounceResult {
+  readonly scenes: VisSceneSummary[];
+  readonly length: number;
+  help(): BounceResult;
+}
+
+declare const vis: {
+  help(): BounceResult;
+  waveform: {
+    (sample: Sample): VisScene;
+    help(): BounceResult;
+  };
+  stack: {
+    (): VisStack;
+    help(): BounceResult;
+  };
+  list: {
+    (): VisSceneListResult;
+    help(): BounceResult;
+  };
+  remove: {
+    (id: string): BounceResult;
+    help(): BounceResult;
+  };
+  clear: {
+    (): BounceResult;
+    help(): BounceResult;
+  };
+};
 
 declare const nx: {
   (options?: NxOptions): ReplValue<Promise<BounceResult>>;

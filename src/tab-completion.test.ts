@@ -44,7 +44,7 @@ async function testSingleMatchNamespace() {
 async function testMultiMatchVisualize() {
   const c = new TabCompletion();
   await c.update("vi", 2);
-  assert.strictEqual(c.matchCount, 2);
+  assert.strictEqual(c.matchCount, 3);
 }
 
 async function testGhostTextSingleMatchContainsSuffix() {
@@ -59,6 +59,7 @@ async function testGhostTextMultiMatchContainsCandidates() {
   const c = new TabCompletion();
   await c.update("vi", 2);
   const ghost = c.ghostText();
+  assert.ok(ghost.includes("vis()"));
   assert.ok(ghost.includes("visualizeNmf()"));
   assert.ok(ghost.includes("visualizeNx()"));
 }
@@ -78,15 +79,17 @@ async function testDotCompletionUsesPrototypeMethods() {
     read(_path: string) {}
     list() {}
     current() {}
+    stop() {}
   }
 
   const c = new TabCompletion();
   c.setApi({ sn: new SampleNamespaceStub() });
   await c.update("sn.", 3);
-  assert.strictEqual(c.matchCount, 4);
+  assert.strictEqual(c.matchCount, 5);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("read()"));
   assert.ok(ghost.includes("help()"));
+  assert.ok(ghost.includes("stop()"));
 }
 
 async function testDotCompletionPartialPrototypeMethod() {
@@ -95,6 +98,7 @@ async function testDotCompletionPartialPrototypeMethod() {
     read(_path: string) {}
     list() {}
     current() {}
+    stop() {}
   }
 
   const c = new TabCompletion();

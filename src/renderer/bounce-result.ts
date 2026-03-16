@@ -236,6 +236,8 @@ export class NmfFeature extends FeatureResult {
     public readonly components: number | undefined,
     public readonly iterations: number | undefined,
     public readonly converged: boolean | undefined,
+    public readonly bases: number[][] | Float32Array[] | undefined,
+    public readonly activations: number[][] | Float32Array[] | undefined,
     private readonly bindings: NmfFeatureBindings,
   ) {
     super(display, source, featureHash, "nmf", options, bindings.help);
@@ -261,6 +263,150 @@ export class MfccFeature extends FeatureResult {
     private readonly bindings: MfccFeatureBindings,
   ) {
     super(display, source, featureHash, "mfcc", options, bindings.help);
+  }
+}
+
+export interface VisSceneBindings {
+  help: HelpFactory;
+  show: (scene: VisScene) => Promise<BounceResult>;
+}
+
+export interface VisStackBindings {
+  help: HelpFactory;
+  show: (stack: VisStack) => Promise<BounceResult>;
+}
+
+export interface VisSceneSummary {
+  id: string;
+  title: string;
+  sampleHash: string;
+  sampleLabel: string;
+  overlayCount: number;
+  panelCount: number;
+}
+
+export class VisScene extends HelpableResult {
+  readonly overlays: Array<OnsetFeature | NmfFeature> = [];
+  readonly panels: NmfFeature[] = [];
+  private shownSceneId: string | undefined;
+  public titleText: string | undefined;
+
+  constructor(
+    public readonly sample: Sample,
+    titleText: string | undefined,
+    private readonly bindings: VisSceneBindings,
+  ) {
+    super("", bindings.help);
+    this.titleText = titleText;
+  }
+
+  override toString(): string {
+    const label = this.sample.filePath?.split(/[/\\]/).pop() ?? this.sample.hash.substring(0, 8);
+    return [
+      `\x1b[1;36mVisScene${this.shownSceneId ? ` ${this.shownSceneId}` : ""}\x1b[0m`,
+      "",
+      `  sample:   ${label}`,
+      `  overlays: ${this.overlays.length}`,
+      `  panels:   ${this.panels.length}`,
+      `  shown:    ${this.shownSceneId ? "yes" : "no"}`,
+      this.titleText ? `  title:    ${this.titleText}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  get sceneId(): string | undefined {
+    return this.shownSceneId;
+  }
+
+  title(text: string): VisScene {
+    this.titleText = text;
+    return this;
+  }
+
+  overlay(feature: OnsetFeature | NmfFeature): VisScene {
+    this.overlays.push(feature);
+    return this;
+  }
+
+  panel(feature: NmfFeature): VisScene {
+    this.panels.push(feature);
+    return this;
+  }
+
+  show(): Promise<BounceResult> {
+    return this.bindings.show(this);
+  }
+
+  markShown(id: string): void {
+    this.shownSceneId = id;
+  }
+}
+
+export class VisSceneListResult extends HelpableResult {
+  constructor(
+    display: string,
+    public readonly scenes: VisSceneSummary[],
+    helpFactory: HelpFactory,
+  ) {
+    super(display, helpFactory);
+  }
+
+  get length(): number {
+    return this.scenes.length;
+  }
+}
+
+export class VisStack extends HelpableResult {
+  readonly scenes: VisScene[] = [];
+
+  constructor(private readonly bindings: VisStackBindings) {
+    super("", bindings.help);
+  }
+
+  override toString(): string {
+    return [
+      "\x1b[1;36mVisStack\x1b[0m",
+      "",
+      `  scenes: ${this.scenes.length}`,
+      this.scenes.length > 0
+        ? `  latest: ${this.scenes[this.scenes.length - 1].sample.filePath?.split(/[/\\]/).pop() ?? this.scenes[this.scenes.length - 1].sample.hash.substring(0, 8)}`
+        : "  latest: none",
+    ].join("\n");
+  }
+
+  waveform(_sample: Sample): VisStack {
+    throw new Error("Use vis.stack().waveform(sample) from the vis namespace.");
+  }
+
+  addScene(scene: VisScene): VisStack {
+    this.scenes.push(scene);
+    return this;
+  }
+
+  title(text: string): VisStack {
+    this.requireLatestScene().title(text);
+    return this;
+  }
+
+  overlay(feature: OnsetFeature | NmfFeature): VisStack {
+    this.requireLatestScene().overlay(feature);
+    return this;
+  }
+
+  panel(feature: NmfFeature): VisStack {
+    this.requireLatestScene().panel(feature);
+    return this;
+  }
+
+  show(): Promise<BounceResult> {
+    return this.bindings.show(this);
+  }
+
+  private requireLatestScene(): VisScene {
+    const latest = this.scenes[this.scenes.length - 1];
+    if (!latest) {
+      throw new Error("No scenes in stack. Call stack.waveform(sample) first.");
+    }
+    return latest;
   }
 }
 
@@ -297,6 +443,7 @@ export interface SampleNamespaceBindings {
   read: (pathOrHash: string) => Promise<Sample>;
   list: () => Promise<SampleListResult>;
   current: () => Promise<Sample | null>;
+  stop: () => BounceResult;
 }
 
 export class SampleNamespace extends HelpableResult {
@@ -317,6 +464,10 @@ export class SampleNamespace extends HelpableResult {
 
   current(): CurrentSamplePromise {
     return new CurrentSamplePromise(this.bindings.current());
+  }
+
+  stop(): BounceResult {
+    return this.bindings.stop();
   }
 }
 

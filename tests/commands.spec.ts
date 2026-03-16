@@ -15,7 +15,7 @@ async function sendCommand(window: any, command: string) {
 }
 
 test.describe("Audio Commands", () => {
-  test("sn.read should load and visualize WAV file", async () => {
+  test("sn.read should load a WAV file without auto-visualizing it", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -43,9 +43,10 @@ test.describe("Audio Commands", () => {
 
     await sendCommand(window, `sn.read("${testFile}")`);
 
-    await expect(window.locator("#waveform-container")).toBeVisible({
+    await expect(window.locator(".xterm-rows")).toContainText("Loaded:", {
       timeout: 5000,
     });
+    await expect(window.locator("#waveform-container")).toBeHidden();
 
     await electronApp.close();
   });
@@ -77,7 +78,7 @@ test.describe("Audio Commands", () => {
     await electronApp.close();
   });
 
-  test("sample.play should load file if not already displayed", async () => {
+  test("sample.play should play without auto-showing the waveform panel", async () => {
     const electronApp = await electron.launch({
       executablePath: electronPath,
       args: [
@@ -106,9 +107,10 @@ test.describe("Audio Commands", () => {
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.play()");
 
-    await expect(window.locator("#waveform-container")).toBeVisible({
+    await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
       timeout: 5000,
     });
+    await expect(window.locator("#waveform-container")).toBeHidden();
 
     await electronApp.close();
   });

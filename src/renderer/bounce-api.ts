@@ -2,14 +2,16 @@
 /// <reference path="./bounce-globals.d.ts" />
 import { AudioManager } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
-import { NMFVisualizer } from "./nmf-visualizer.js";
-import { VisualizationManager } from "./visualization-manager.js";
+import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 import {
   BounceResult,
   Sample,
   OnsetFeature,
   NmfFeature,
   MfccFeature,
+  VisScene,
+  VisStack,
+  VisSceneListResult,
   SampleNamespace,
   SampleListResult,
   SamplePromise,
@@ -33,6 +35,9 @@ export {
   OnsetFeature,
   NmfFeature,
   MfccFeature,
+  VisScene,
+  VisStack,
+  VisSceneListResult,
   SampleNamespace,
   SampleListResult,
   SamplePromise,
@@ -51,8 +56,7 @@ export {
 export interface BounceApiDeps {
   terminal: BounceTerminal;
   audioManager: AudioManager;
-  onUpdateWaveform: () => void;
-  onHideWaveform: () => void;
+  sceneManager?: VisualizationSceneManager;
 }
 
 /**
@@ -60,7 +64,8 @@ export interface BounceApiDeps {
  * Each function closes over the provided deps and the global window.electron IPC bridge.
  */
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
-  const { terminal, audioManager, onUpdateWaveform } = deps;
+  const { terminal, audioManager } = deps;
+  let visualizationScenes: VisualizationSceneManager | null = deps.sceneManager ?? null;
 
   const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
 
@@ -97,6 +102,93 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
     }
     return hash;
+  }
+
+  function getSceneManager(): VisualizationSceneManager {
+    if (!visualizationScenes) {
+      visualizationScenes = new VisualizationSceneManager(() => {
+        if ("fit" in terminal && typeof terminal.fit === "function") {
+          terminal.fit();
+        }
+      });
+    }
+    return visualizationScenes;
+  }
+
+  function visSceneHelpText(scene: VisScene): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mVisScene\x1b[0m",
+      "",
+      `  sample:   ${sampleLabel(scene.sample.filePath, scene.sample.hash)}`,
+      `  overlays: ${scene.overlays.length}`,
+      `  panels:   ${scene.panels.length}`,
+      `  shown:    ${scene.sceneId ? "yes" : "no"}`,
+      "",
+      "  Methods:",
+      "    scene.title(text)",
+      "    scene.overlay(feature)",
+      "    scene.panel(feature)",
+      "    scene.show()",
+    ].join("\n"));
+  }
+
+  function visStackHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mVisStack\x1b[0m",
+      "",
+      "  Build multiple visualization scenes in one chained expression.",
+      "",
+      "  Methods:",
+      "    stack.waveform(sample)",
+      "    stack.title(text)",
+      "    stack.overlay(feature)",
+      "    stack.panel(feature)",
+      "    stack.show()",
+      "",
+      "  \x1b[90mExample:\x1b[0m  vis.stack().waveform(a).waveform(b).show()",
+    ].join("\n"));
+  }
+
+  function visListHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mvis.list()\x1b[0m",
+      "",
+      "  List currently shown visualization scenes.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  vis.list()",
+    ].join("\n"));
+  }
+
+  function visWaveformHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mvis.waveform(sample)\x1b[0m",
+      "",
+      "  Create a draft visualization scene rooted in a sample waveform.",
+      "  Chain overlay()/panel()/title() and call show() to render it.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+      "           const scene = vis.waveform(samp)",
+      "           scene.show()",
+    ].join("\n"));
+  }
+
+  function visHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36mvis\x1b[0m — visualization namespace",
+      "",
+      "  Use vis.waveform(sample) to create a draft scene, then compose and show it.",
+      "  Use vis.stack() to build and show multiple scenes in one expression.",
+      "",
+      "  vis.waveform(sample)    Create a VisScene",
+      "  vis.stack()             Create a VisStack",
+      "  vis.list()              List shown scenes",
+      "  vis.remove(id)          Remove one shown scene",
+      "  vis.clear()             Remove all shown scenes",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const scene = vis.waveform(samp)",
+      "           scene.overlay(onsets).panel(nmf).show()",
+      "           vis.stack().waveform(a).waveform(b).show()",
+    ].join("\n"));
   }
 
   function sampleHelpText(sample: Sample): BounceResult {
@@ -201,7 +293,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         help: (): BounceResult => sampleHelpText(bound),
         play: () => play(bound),
         loop: () => loop(bound),
-        stop: () => stop(),
+        stop: () => stop(bound),
         display: () => display(bound.hash),
         slice: (options) => slice(bound, options),
         sep: (options) => sep(bound, options),
@@ -243,17 +335,21 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     components: number | undefined,
     iterations: number | undefined,
     converged: boolean | undefined,
+    bases: number[][] | Float32Array[] | undefined,
+    activations: number[][] | Float32Array[] | undefined,
     displayText: string,
   ): NmfFeature {
     const bound: NmfFeature = new NmfFeature(
       displayText,
-      source,
-      featureHash,
-      options,
-      components,
-      iterations,
-      converged,
-      {
+        source,
+        featureHash,
+        options,
+        components,
+        iterations,
+        converged,
+        bases,
+        activations,
+        {
         help: (): BounceResult => nmfHelpText(bound),
         sep: (sepOptions) => sep(bound, sepOptions),
         playComponent: (index = 0) => playComponent(index, bound),
@@ -284,6 +380,44 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     return bound;
   }
 
+  function bindVisScene(
+    sample: Sample,
+    titleText?: string,
+  ): VisScene {
+    const bound = new VisScene(
+      sample,
+      titleText,
+      {
+        help: (): BounceResult => visSceneHelpText(bound),
+        show: async (scene): Promise<BounceResult> => {
+          const rendered = await getSceneManager().renderScene(scene);
+          return new BounceResult(
+            `\x1b[32mScene ${rendered.id} shown for ${rendered.sampleLabel} (${rendered.overlayCount} overlays, ${rendered.panelCount} panels)\x1b[0m`,
+          );
+        },
+      },
+    );
+    return bound;
+  }
+
+  function bindVisStack(): VisStack {
+    return new VisStack({
+      help: (): BounceResult => visStackHelpText(),
+      show: async (stack): Promise<BounceResult> => {
+        if (stack.scenes.length === 0) {
+          throw new Error("No scenes in stack. Add at least one waveform before show().");
+        }
+        const rendered = [];
+        for (const scene of stack.scenes) {
+          rendered.push(await getSceneManager().renderScene(scene));
+        }
+        return new BounceResult(
+          `\x1b[32mRendered ${rendered.length} scenes (${rendered.map((scene) => scene.id).join(", ")})\x1b[0m`,
+        );
+      },
+    });
+  }
+
   async function display(fileOrHash: string): Promise<Sample> {
     ensureSupportedInput(fileOrHash);
 
@@ -302,7 +436,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     };
 
     audioManager.setCurrentAudio(audio);
-    onUpdateWaveform();
 
     const existing = await window.electron.getSampleByHash(audioFileData.hash);
     return bindSample(
@@ -325,7 +458,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     return isPromiseLike<Sample>(source) ? await source : source;
   }
 
-  function stop(): BounceResult {
+  function stop(source?: Sample): BounceResult {
+    if (source) {
+      audioManager.stopAudio(source.hash);
+      return new BounceResult(`\x1b[32mPlayback stopped: ${sampleLabel(source.filePath, source.hash)}\x1b[0m`);
+    }
     audioManager.stopAudio();
     return new BounceResult("\x1b[32mPlayback stopped\x1b[0m");
   }
@@ -352,7 +489,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
     }
 
-    await audioManager.playAudio(audio.audioData, audio.sampleRate, loopPlayback);
     const activeSample =
       loadedSample ??
       bindSample({
@@ -362,6 +498,13 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         channels: 1,
         duration: audio.duration,
       });
+
+    await audioManager.playAudio(
+      audio.audioData,
+      audio.sampleRate,
+      loopPlayback,
+      activeSample.hash,
+    );
 
     return bindSample(
       {
@@ -412,9 +555,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       throw new Error("Failed to load stored onset feature.");
     }
 
-    audioManager.setCurrentSlices(slices);
-    onUpdateWaveform();
-
     return bindOnsetFeature(sample, feature.feature_hash, slices, opts);
   }
 
@@ -461,6 +601,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       result.components,
       result.iterations,
       result.converged,
+      result.bases,
+      result.activations,
       [
         `\x1b[32mNMF complete: ${result.components} components (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
         `Converged: ${result.converged ? "Yes" : "No"} after ${result.iterations} iterations`,
@@ -772,8 +914,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       });
       audioManager.clearSlices();
 
-      await audioManager.playAudio(audioData, derivedSample.sample_rate);
-      onUpdateWaveform();
+      await audioManager.playAudio(
+        audioData,
+        derivedSample.sample_rate,
+        false,
+        derivedSample.hash,
+      );
 
       return bindSample(
         {
@@ -851,8 +997,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       });
       audioManager.clearSlices();
 
-      await audioManager.playAudio(componentAudio, derivedSample.sample_rate);
-      onUpdateWaveform();
+      await audioManager.playAudio(
+        componentAudio,
+        derivedSample.sample_rate,
+        false,
+        derivedSample.hash,
+      );
 
       return bindSample(
         {
@@ -881,46 +1031,58 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const visualizeNmf = Object.assign(
-    async function visualizeNmf(options?: VisualizeNmfOptions): Promise<BounceResult> {
+    async function visualizeNmf(_options?: VisualizeNmfOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
         throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
       }
 
-      const hash = options?.featureHash ?? audio.hash;
-
-      const sample = await window.electron.getSampleByHash(hash);
-      if (!sample) {
-        throw new Error(`Sample ${hash} not found in database`);
+      const current = await window.electron.getSampleByHash(audio.hash);
+      if (!current) {
+        throw new Error(`Sample ${audio.hash} not found in database`);
       }
 
-      const sampleAudioData = new Float32Array(
-        sample.audio_data.buffer,
-        sample.audio_data.byteOffset,
-        sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+      const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
+      if (!feature) {
+        throw new Error("No NMF analysis found. Run sample.nmf() first.");
+      }
+
+      const featureData = JSON.parse(feature.feature_data) as {
+        bases?: number[][];
+        activations?: number[][];
+        components?: number;
+      };
+
+      const sample = bindSample({
+        id: current.id,
+        hash: current.hash,
+        filePath: current.file_path ?? undefined,
+        sampleRate: current.sample_rate,
+        channels: current.channels,
+        duration: current.duration,
+      });
+      const boundFeature = bindNmfFeature(
+        sample,
+        feature.feature_hash,
+        undefined,
+        featureData.components ?? featureData.activations?.length,
+        undefined,
+        undefined,
+        featureData.bases,
+        featureData.activations,
+        `\x1b[32mNMF feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
       );
 
-      audioManager.setCurrentAudio({
-        audioData: sampleAudioData,
-        sampleRate: sample.sample_rate,
-        duration: sample.duration,
-        filePath: sample.file_path ?? undefined,
-        hash: sample.hash,
-        visualize: () => "Visualization available",
-        analyzeOnsetSlice: async () => ({ slices: [], visualize: () => "Available" }),
-      });
-      audioManager.clearSlices();
-      onUpdateWaveform();
-
-      await window.electron.visualizeNMF(hash);
-      return new BounceResult(`\x1b[32mNMF visualization overlaid for ${hash.substring(0, 8)}\x1b[0m`);
+      return bindVisScene(sample, `NMF Overlay · ${sampleLabel(sample.filePath, sample.hash)}`)
+        .overlay(boundFeature)
+        .show();
     },
     {
       help: (): BounceResult => new BounceResult([
         "\x1b[1;36mvisualizeNmf(options?)\x1b[0m",
         "",
-        "  Overlay NMF component activations on the current waveform. Requires",
-        "  sample.nmf() to have been run for the current sample.",
+        "  Compatibility helper: create a new vis scene with the current sample",
+        "  waveform and the most recent NMF overlay.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
         "",
@@ -957,7 +1119,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         visualize: () => "NX Visualization",
         analyzeOnsetSlice: async () => ({ slices: [], visualize: () => "Not available" }),
       });
-      onUpdateWaveform();
 
       await window.electron.sendCommand("visualize-nx", [targetHash]);
       return new BounceResult(`\x1b[32mNX visualization overlaid for ${targetHash.substring(0, 8)}\x1b[0m`);
@@ -977,7 +1138,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const onsetSlice = Object.assign(
-    async function onsetSlice(options?: OnsetSliceVisOptions): Promise<BounceResult> {
+    async function onsetSlice(_options?: OnsetSliceVisOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
         throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
@@ -989,18 +1150,35 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       }
 
       const slicesData = JSON.parse(feature.feature_data) as number[];
-      audioManager.setCurrentSlices(slicesData);
-      onUpdateWaveform();
-      return new BounceResult(
-        `\x1b[32mOnset slice markers updated (${slicesData.length} slices, feature: ${options?.featureHash ? options.featureHash.substring(0, 8) : feature.feature_hash.substring(0, 8)})\x1b[0m`,
+      const current = await window.electron.getSampleByHash(audio.hash);
+      if (!current) {
+        throw new Error(`Sample ${audio.hash} not found in database`);
+      }
+      const sample = bindSample({
+        id: current.id,
+        hash: current.hash,
+        filePath: current.file_path ?? undefined,
+        sampleRate: current.sample_rate,
+        channels: current.channels,
+        duration: current.duration,
+      });
+      const boundFeature = bindOnsetFeature(
+        sample,
+        feature.feature_hash,
+        slicesData,
+        undefined,
+        `\x1b[32mOnset feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
       );
+      return bindVisScene(sample, `Onset Overlay · ${sampleLabel(sample.filePath, sample.hash)}`)
+        .overlay(boundFeature)
+        .show();
     },
     {
       help: (): BounceResult => new BounceResult([
         "\x1b[1;36monsetSlice(options?)\x1b[0m",
         "",
-        "  Draw onset slice markers on the waveform display using the most recent",
-        "  sample.onsets() result for the current audio.",
+        "  Compatibility helper: create a new vis scene with the current sample",
+        "  waveform and the most recent onset overlay.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored onset-slice feature",
         "",
@@ -1010,7 +1188,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const nmf = Object.assign(
-    async function nmf(options?: NmfVisOptions): Promise<BounceResult> {
+    async function nmf(_options?: NmfVisOptions): Promise<BounceResult> {
       const audio = audioManager.getCurrentAudio();
       if (!audio?.hash) {
         throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
@@ -1026,36 +1204,40 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         bases: number[][];
         activations: number[][];
       };
-
-      const vizContainer = document.getElementById("visualizations-container");
-      if (!vizContainer) {
-        throw new Error("Visualization container not found in DOM");
+      const current = await window.electron.getSampleByHash(audio.hash);
+      if (!current) {
+        throw new Error(`Sample ${audio.hash} not found in database`);
       }
-
-      const vizManager = new VisualizationManager("visualizations-container");
-      const viz = vizManager.addVisualization("NMF Decomposition", 400);
-
-      if (!viz.canvas) {
-        throw new Error("Failed to create visualization canvas");
-      }
-
-      new NMFVisualizer(viz.canvas, {
-        bases: nmfData.bases,
-        activations: nmfData.activations,
-        sampleRate: audio.sampleRate,
-        components: nmfData.components,
+      const sample = bindSample({
+        id: current.id,
+        hash: current.hash,
+        filePath: current.file_path ?? undefined,
+        sampleRate: current.sample_rate,
+        channels: current.channels,
+        duration: current.duration,
       });
-
-      return new BounceResult(
-        `\x1b[32mNMF visualization created (${nmfData.components} components, feature: ${options?.featureHash ? options.featureHash.substring(0, 8) : feature.feature_hash.substring(0, 8)})\x1b[0m`,
+      const boundFeature = bindNmfFeature(
+        sample,
+        feature.feature_hash,
+        undefined,
+        nmfData.components,
+        undefined,
+        undefined,
+        nmfData.bases,
+        nmfData.activations,
+        `\x1b[32mNMF feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
       );
+
+      return bindVisScene(sample, `NMF Panel · ${sampleLabel(sample.filePath, sample.hash)}`)
+        .panel(boundFeature)
+        .show();
     },
     {
       help: (): BounceResult => new BounceResult([
         "\x1b[1;36mnmf(options?)\x1b[0m",
         "",
-        "  Show a detailed NMF bases and activations visualization panel below",
-        "  the waveform. Requires sample.nmf() to have been run first.",
+        "  Compatibility helper: create a new vis scene with the current sample",
+        "  waveform and a detailed NMF panel.",
         "",
         "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
         "",
@@ -1192,6 +1374,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "  sn.read(pathOrHash)   Load a sample and return a Sample object",
       "  sn.list()             List stored samples and features",
       "  sn.current()          Return the currently loaded sample, if any",
+      "  sn.stop()             Stop all active sample playback",
       "",
       "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), const samp = sn.read('x'); samp.help()",
     ].join("\n"),
@@ -1204,6 +1387,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
         "           samp.loop()",
+        "           sn.stop()",
         "           const feature = samp.nmf()",
         "           feature.sep()",
       ].join("\n")),
@@ -1223,6 +1407,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           duration: current.duration,
         });
       },
+      stop: () => stop(),
     },
   );
 
@@ -1230,8 +1415,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     new BounceResult([
       "\x1b[1;36msn.read(pathOrHash)\x1b[0m",
       "",
-      "  Load an audio file or stored sample hash into the shared waveform context",
-      "  and return a Sample object.",
+      "  Load an audio file or stored sample hash into the shared sample context",
+      "  and return a Sample object. Visualization is explicit via vis.",
       "",
       "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"kick.wav\")",
       "           const samp = sn.read(\"a1b2c3d4\")",
@@ -1247,6 +1432,109 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "  \x1b[90mExample:\x1b[0m  const current = sn.current()",
       "           current?.help()",
     ].join("\n"));
+  (sn.stop as typeof sn.stop & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.stop()\x1b[0m",
+      "",
+      "  Stop all active sample playback and looping voices.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  sn.stop()",
+    ].join("\n"));
+
+  const vis = {
+    help(): BounceResult {
+      return visHelpText();
+    },
+
+    waveform: Object.assign(
+      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene {
+        if (isPromiseLike<Sample>(sampleOrPromise)) {
+          throw new Error("vis.waveform() requires a resolved Sample. Assign sn.read(...) to a variable first.");
+        }
+        return bindVisScene(sampleOrPromise, `Waveform · ${sampleLabel(sampleOrPromise.filePath, sampleOrPromise.hash)}`);
+      },
+      {
+        help: (): BounceResult => visWaveformHelpText(),
+      },
+    ),
+
+    stack: Object.assign(
+      function stack(): VisStack {
+        const bound = bindVisStack();
+        (bound as VisStack & {
+          waveform: (sampleOrPromise: Sample | PromiseLike<Sample>) => VisStack;
+        }).waveform = (sampleOrPromise: Sample | PromiseLike<Sample>) => {
+          if (isPromiseLike<Sample>(sampleOrPromise)) {
+            throw new Error("vis.stack().waveform() requires a resolved Sample. Assign sn.read(...) to a variable first.");
+          }
+          return bound.addScene(
+            bindVisScene(
+              sampleOrPromise,
+              `Waveform · ${sampleLabel(sampleOrPromise.filePath, sampleOrPromise.hash)}`,
+            ),
+          );
+        };
+        return bound;
+      },
+      {
+        help: (): BounceResult => visStackHelpText(),
+      },
+    ),
+
+    list: Object.assign(
+      function listScenes(): VisSceneListResult {
+        const scenes = getSceneManager().listScenes();
+        const display = scenes.length === 0
+          ? "\x1b[90mNo visualization scenes shown\x1b[0m"
+          : [
+            "\x1b[1;36mVisualization Scenes\x1b[0m",
+            "",
+            ...scenes.map((scene) =>
+              `${scene.id.padEnd(10)} ${scene.title} \x1b[90m(${scene.overlayCount} overlays, ${scene.panelCount} panels)\x1b[0m`,
+            ),
+          ].join("\n");
+        return new VisSceneListResult(display, scenes, visListHelpText);
+      },
+      {
+        help: (): BounceResult => visListHelpText(),
+      },
+    ),
+
+    remove: Object.assign(
+      function removeScene(id: string): BounceResult {
+        const removed = getSceneManager().removeScene(id);
+        if (!removed) {
+          throw new Error(`Scene ${id} not found.`);
+        }
+        return new BounceResult(`\x1b[32mRemoved scene ${id}\x1b[0m`);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mvis.remove(id)\x1b[0m",
+          "",
+          "  Remove a shown visualization scene by id.",
+          "",
+          "  \x1b[90mExample:\x1b[0m  vis.remove(\"scene-1\")",
+        ].join("\n")),
+      },
+    ),
+
+    clear: Object.assign(
+      function clearScenes(): BounceResult {
+        const removed = getSceneManager().clearScenes();
+        return new BounceResult(`\x1b[32mCleared ${removed} visualization scene${removed === 1 ? "" : "s"}\x1b[0m`);
+      },
+      {
+        help: (): BounceResult => new BounceResult([
+          "\x1b[1;36mvis.clear()\x1b[0m",
+          "",
+          "  Remove all shown visualization scenes.",
+          "",
+          "  \x1b[90mExample:\x1b[0m  vis.clear()",
+        ].join("\n")),
+      },
+    ),
+  };
 
   const help = Object.assign(
     function help(): BounceResult {
@@ -1254,17 +1542,18 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
         "\x1b[1;36m── Sample API ──\x1b[0m",
-        "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .help()",
+        "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .stop() .help()",
         "  \x1b[33mSample\x1b[0m                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()",
         "                                   .slice() .sep() .granularize() .help()",
+        "  \x1b[33mvis\x1b[0m                              Visualization namespace: .waveform() .list() .remove() .clear()",
         "  \x1b[33mnx(options)\x1b[0m                      NMF cross-synthesis",
         "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",
         "",
         "\x1b[1;36m── Utilities ──\x1b[0m",
-        "  \x1b[33mvisualizeNmf(options?)\x1b[0m           Overlay NMF activations on waveform",
-        "  \x1b[33mvisualizeNx(options?)\x1b[0m            Overlay NX cross-synthesis on waveform",
-        "  \x1b[33monsetSlice(options?)\x1b[0m             Draw onset slice markers on waveform",
-        "  \x1b[33mnmf(options?)\x1b[0m                    Show NMF bases/activations panel",
+        "  \x1b[33mvisualizeNmf(options?)\x1b[0m           Legacy helper: vis waveform + NMF overlay",
+        "  \x1b[33mvisualizeNx(options?)\x1b[0m            Legacy helper for NX visualization",
+        "  \x1b[33monsetSlice(options?)\x1b[0m             Legacy helper: vis waveform + onset overlay",
+        "  \x1b[33mnmf(options?)\x1b[0m                    Legacy helper: vis waveform + NMF panel",
         "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
@@ -1273,9 +1562,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
         "  const onsets = samp.onsets(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
         "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
+        "  vis.waveform(samp).overlay(onsets).show()               \x1b[90m# explicit visualization\x1b[0m",
         "  corpus.build(samp) → corpus.query(0, 5)                 \x1b[90m# corpus search\x1b[0m",
         "",
-        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
+        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), vis.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
       ].join("\n"));
     },
     {
@@ -1621,6 +1911,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   return {
     sn,
+    vis,
     nx,
     visualizeNmf,
     visualizeNx,

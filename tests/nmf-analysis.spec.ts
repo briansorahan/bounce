@@ -48,7 +48,7 @@ test.afterAll(async () => {
 });
 
 test.describe("NMF Analysis", () => {
-  test("should analyze sample with NMF and visualize results", async () => {
+  test("should analyze sample with NMF and visualize results explicitly", async () => {
     const testFile = path.join(__dirname, "test-multi-viz.wav");
     expect(fs.existsSync(testFile)).toBe(true);
 
@@ -59,16 +59,14 @@ test.describe("NMF Analysis", () => {
       timeout: 5000,
     });
 
-    // Verify waveform canvas exists
-    const waveformCanvas = window.locator("#waveform-canvas");
-    await expect(waveformCanvas).toBeVisible();
+    await expect(window.locator(".visualization-scene-waveform-canvas")).toHaveCount(0);
 
-    // Visualize NMF on the waveform
-    await sendCommand("visualizeNmf()");
+    await sendCommand("vis.waveform(samp).overlay(feature).panel(feature).show()");
 
-    // Verify the NMF visualization was applied after the renderer overlay event lands
+    await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible();
+    await expect(window.locator(".visualization-scene-panel canvas")).toBeVisible();
     await expect(window.locator(".xterm-screen")).toContainText(
-      "NMF visualization overlaid",
+      "Scene scene-",
       { timeout: 5000 },
     );
   });
@@ -82,9 +80,13 @@ test.describe("NMF Analysis", () => {
     await window.waitForTimeout(500);
 
     // Load sample
-    await window.keyboard.type(`await play("${testFile}")`);
+    await window.keyboard.type(`const samp = sn.read("${testFile}")`);
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(2000);
+    await window.waitForTimeout(1000);
+
+    await window.keyboard.type("samp.play()");
+    await window.keyboard.press("Enter");
+    await window.waitForTimeout(1000);
 
     // Wait for hash to appear in terminal
     await window.waitForFunction(
@@ -101,7 +103,7 @@ test.describe("NMF Analysis", () => {
     expect(hashMatch).toBeTruthy();
     const sampleHash = hashMatch![1].substring(0, 8);
 
-    await window.keyboard.type("stop()");
+    await window.keyboard.type("sn.stop()");
     await window.keyboard.press("Enter");
     await window.waitForTimeout(500);
 

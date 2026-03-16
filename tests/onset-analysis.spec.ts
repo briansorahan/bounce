@@ -62,7 +62,7 @@ function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
 }
 
 test.describe("Onset Slice Analysis", () => {
-  test("should analyze onset slices and display on waveform", async () => {
+  test("should analyze onset slices and display only when explicitly shown", async () => {
     const testFile = path.join(__dirname, "test-onset-audio.wav");
     createTestWavFile(testFile, 0.5);
 
@@ -85,10 +85,6 @@ test.describe("Onset Slice Analysis", () => {
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.onsets()");
 
-    await expect(window.locator("#waveform-canvas")).toBeVisible({
-      timeout: 5000,
-    });
-
     await expect(window.locator(".xterm-rows")).toContainText("Found", {
       timeout: 5000,
     });
@@ -96,11 +92,23 @@ test.describe("Onset Slice Analysis", () => {
       timeout: 5000,
     });
 
+    await expect(window.locator(".visualization-scene-waveform-canvas")).toHaveCount(0);
+
+    await sendCommand(window, "const onsetScene = vis.waveform(samp).overlay(samp.onsets())");
+    await sendCommand(window, "onsetScene.show()");
+
+    await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(window.locator(".xterm-rows")).toContainText("Scene scene-", {
+      timeout: 5000,
+    });
+
     await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("should update visualization when running analysis again", async () => {
+  test("should append a new scene when shown again", async () => {
     const testFile = path.join(__dirname, "test-multi-analysis.wav");
     createTestWavFile(testFile, 0.3);
 
@@ -122,27 +130,91 @@ test.describe("Onset Slice Analysis", () => {
 
     // First analysis
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.onsets()");
-    await expect(window.locator(".xterm-rows")).toContainText(
-      /Found \d+ onset slices/,
-      { timeout: 5000 },
-    );
+    await sendCommand(window, "const onsetsA = samp.onsets()");
+    await sendCommand(window, "vis.waveform(samp).overlay(onsetsA).show()");
+    await expect(window.locator(".xterm-rows")).toContainText("Analyzing onset slices...", {
+      timeout: 5000,
+    });
+    await expect(window.locator(".visualization-scene")).toHaveCount(1);
 
     // Second analysis with different threshold
-    await sendCommand(window, "samp.onsets({ threshold: 0.5 })");
+    await sendCommand(window, "const onsetsB = samp.onsets({ threshold: 0.5 })");
+    await sendCommand(window, "vis.waveform(samp).overlay(onsetsB).show()");
 
-    await expect
-      .poll(
-        async () => {
-          const text =
-            (await window.locator(".xterm-rows").textContent()) ?? "";
-          return (text.match(/Found \d+ onset slices/g) ?? []).length;
-        },
-        { timeout: 5000 },
-      )
-      .toBeGreaterThanOrEqual(2);
+    await expect(window.locator(".visualization-scene")).toHaveCount(2);
+
+    const beforeResize = await window.evaluate(() => {
+      const area = document.getElementById("visualization-area");
+      if (!(area instanceof HTMLElement)) {
+        throw new Error("visualization-area not found");
+      }
+      return {
+        clientHeight: area.clientHeight,
+        scrollHeight: area.scrollHeight,
+      };
+    });
+
+    const divider = window.locator("#divider");
+    const box = await divider.boundingBox();
+    if (!box) {
+      throw new Error("divider bounding box not found");
+    }
+    await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await window.mouse.down();
+    await window.mouse.move(box.x + box.width / 2, 80);
+    await window.mouse.up();
+
+    const afterResize = await window.evaluate(() => {
+      const area = document.getElementById("visualization-area");
+      if (!(area instanceof HTMLElement)) {
+        throw new Error("visualization-area not found");
+      }
+      return {
+        clientHeight: area.clientHeight,
+        scrollHeight: area.scrollHeight,
+      };
+    });
+
+    expect(afterResize.clientHeight).toBeGreaterThan(beforeResize.clientHeight);
+    expect(afterResize.scrollHeight).toBeLessThanOrEqual(afterResize.clientHeight + 2);
 
     await electronApp.close();
     fs.unlinkSync(testFile);
+  });
+
+  test("should show multiple waveform scenes from one vis.stack command", async () => {
+    const firstFile = path.join(__dirname, "test-stack-a.wav");
+    const secondFile = path.join(__dirname, "test-stack-b.wav");
+    createTestWavFile(firstFile, 0.25);
+    createTestWavFile(secondFile, 0.35);
+
+    const electronApp = await electron.launch({
+      executablePath: electronPath,
+      args: [
+        path.join(__dirname, "../dist/electron/main.js"),
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+      ],
+      env: {
+        ...process.env,
+        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
+      },
+    });
+
+    const window = await electronApp.firstWindow();
+    await window.waitForTimeout(1000);
+
+    await sendCommand(window, `const a = sn.read("${firstFile}")`);
+    await sendCommand(window, `const b = sn.read("${secondFile}")`);
+    await sendCommand(window, "vis.stack().waveform(a).waveform(b).show()");
+
+    await expect(window.locator(".visualization-scene")).toHaveCount(2);
+    await expect(window.locator(".xterm-rows")).toContainText("Rendered 2 scenes", {
+      timeout: 5000,
+    });
+
+    await electronApp.close();
+    fs.unlinkSync(firstFile);
+    fs.unlinkSync(secondFile);
   });
 });

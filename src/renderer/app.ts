@@ -1,9 +1,10 @@
-import { AudioManager } from "./audio-context.js";
+import { AudioManager, type PlaybackCursorState } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { WaveformVisualizer } from "./waveform-visualizer.js";
 import { ReplEvaluator } from "./repl-evaluator.js";
 import { buildBounceApi, BounceResult } from "./bounce-api.js";
 import { TabCompletion } from "./tab-completion.js";
+import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 
 enum ControlCode {
   CTRL_A = 1,
@@ -43,16 +44,17 @@ export class BounceApp {
   private replEvaluator!: ReplEvaluator;
   private completion: TabCompletion;
   private redrawVersion: number = 0;
+  private sceneManager: VisualizationSceneManager;
 
   constructor() {
     this.terminal = new BounceTerminal();
     this.audioManager = new AudioManager();
     this.completion = new TabCompletion();
+    this.sceneManager = new VisualizationSceneManager(() => this.terminal.fit());
     const bounceApi = buildBounceApi({
       terminal: this.terminal,
       audioManager: this.audioManager,
-      onUpdateWaveform: () => this.updateWaveformVisualization(),
-      onHideWaveform: () => this.hideWaveformVisualization(),
+      sceneManager: this.sceneManager,
     });
     this.replEvaluator = new ReplEvaluator(bounceApi);
     this.completion.setApi(bounceApi);
@@ -71,11 +73,13 @@ export class BounceApp {
     // Expose terminal and executeCommand for testing
     const testWindow = window as Window & {
       __bounceExecuteCommand?: (cmd: string) => Promise<void>;
+      __bounceGetPlaybackStates?: () => PlaybackCursorState[];
     };
     testWindow.__bounceExecuteCommand = (cmd: string) => {
       this.commandBuffer = cmd;
       return this.executeCommand(cmd);
     };
+    testWindow.__bounceGetPlaybackStates = () => this.audioManager.getPlaybackStates();
   }
 
   async mount(containerId: string): Promise<void> {
@@ -102,8 +106,8 @@ export class BounceApp {
 
     this.setupDivider(container);
 
-    this.audioManager.setPlaybackUpdateCallback((position) => {
-      this.updatePlaybackCursor(position);
+    this.audioManager.setPlaybackUpdateCallback((playbacks) => {
+      this.updatePlaybackCursor(playbacks);
     });
   }
 
@@ -579,12 +583,18 @@ export class BounceApp {
     this.terminal.fit();
   }
 
-  private updatePlaybackCursor(position: number): void {
+  private updatePlaybackCursor(playbacks: PlaybackCursorState[]): void {
+    this.sceneManager.updatePlaybackCursors(playbacks);
+
     const audio = this.audioManager.getCurrentAudio();
+    const activePlayback = audio?.hash
+      ? playbacks.find((playback) => playback.hash === audio.hash)
+      : undefined;
+
     if (!audio || !this.waveformVisualizer) return;
 
     this.waveformVisualizer.updatePlaybackCursor(
-      position,
+      activePlayback?.position ?? 0,
       audio.audioData.length,
     );
   }

@@ -13,10 +13,10 @@ export class WaveformVisualizer {
   private currentSlices: number[] | null = null;
   private currentNMFData: NMFOverlayData | null = null;
 
-  constructor(waveformCanvasId: string) {
-    this.waveformCanvas = document.getElementById(
-      waveformCanvasId,
-    ) as HTMLCanvasElement;
+  constructor(waveformCanvasOrId: string | HTMLCanvasElement) {
+    this.waveformCanvas = typeof waveformCanvasOrId === "string"
+      ? document.getElementById(waveformCanvasOrId) as HTMLCanvasElement
+      : waveformCanvasOrId;
 
     const waveformCtx = this.waveformCanvas.getContext("2d");
 
