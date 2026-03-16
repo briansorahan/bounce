@@ -47,6 +47,7 @@ Whenever the feature adds or changes Bounce REPL surface area, treat the REPL AP
 - Every custom object returned from an evaluated REPL expression should print a useful terminal summary when displayed
 - Returned summaries should highlight the most relevant, workflow-driving properties for that type instead of dumping raw structure
 - Automated coverage should explicitly confirm both `help()` output and returned-object display behavior using unit tests and/or Playwright tests
+- Every global object used to execute commands should offer tab-completion for those commands.
 
 This requirement should be carried through RESEARCH, PLAN, and IMPL. Do not leave it implicit.
 
