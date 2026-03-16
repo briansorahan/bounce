@@ -108,6 +108,56 @@ const mockElectron = {
   getDebugLogs: async () => [],
   saveCommand: async () => {},
   sendCommand: async () => ({ success: true, message: "ok" }),
+  getCurrentProject: async () => ({
+    id: 1,
+    name: "default",
+    created_at: "2026-03-16 00:00:00",
+    sample_count: 1,
+    feature_count: 1,
+    command_count: 0,
+    current: true,
+  }),
+  listProjects: async () => [
+    {
+      id: 1,
+      name: "default",
+      created_at: "2026-03-16 00:00:00",
+      sample_count: 1,
+      feature_count: 1,
+      command_count: 0,
+      current: true,
+    },
+    {
+      id: 2,
+      name: "drums",
+      created_at: "2026-03-16 00:01:00",
+      sample_count: 4,
+      feature_count: 3,
+      command_count: 8,
+      current: false,
+    },
+  ],
+  loadProject: async (name: string) => ({
+    id: name === "drums" ? 2 : 3,
+    name,
+    created_at: "2026-03-16 00:01:00",
+    sample_count: 0,
+    feature_count: 0,
+    command_count: 0,
+    current: true,
+  }),
+  removeProject: async (name: string) => ({
+    removedName: name,
+    currentProject: {
+      id: 1,
+      name: "default",
+      created_at: "2026-03-16 00:00:00",
+      sample_count: 1,
+      feature_count: 1,
+      command_count: 0,
+      current: true,
+    },
+  }),
   nx: async () => ({ success: true, message: "ok" }),
   visualizeNMF: async () => "ok",
   sep: async () => ({ success: true, message: "Separated" }),
@@ -140,6 +190,7 @@ async function main() {
   }) as Record<string, unknown>;
 
   assert.ok(api.sn, "api exposes sn");
+  assert.ok(api.proj, "api exposes proj");
   assert.ok(api.vis, "api exposes vis");
   assert.ok(!("play" in api), "api no longer exposes top-level play");
   assert.ok(!("display" in api), "api no longer exposes top-level display");
@@ -159,9 +210,24 @@ async function main() {
     waveform(sample: Sample): VisScene;
     stack(): VisStack;
   };
+  const proj = api.proj as {
+    help(): BounceResult;
+    current(): Promise<ProjectResultLike>;
+    list(): Promise<BounceResult>;
+    load(name: string): Promise<ProjectResultLike>;
+    rm(name: string): Promise<BounceResult>;
+  };
+
+  interface ProjectResultLike {
+    name: string;
+    current: boolean;
+    help(): BounceResult;
+    toString(): string;
+  }
 
   assert.ok(sn.help().toString().includes("sample namespace"));
   assert.ok(sn.help().toString().includes("sn.stop()"));
+  assert.ok(proj.help().toString().includes("project namespace"));
   assert.ok(vis.help().toString().includes("visualization namespace"));
 
   const sample = await sn.read("/test.wav");
@@ -229,6 +295,22 @@ async function main() {
 
   const current = await sn.current();
   assert.ok(current instanceof Sample, "sn.current returns Sample");
+
+  const currentProject = await proj.current();
+  assert.equal(currentProject.name, "default", "proj.current returns active project");
+  assert.equal(currentProject.current, true, "current project is marked current");
+  assert.ok(currentProject.help().toString().includes("proj.list()"));
+
+  const projectList = await proj.list();
+  assert.ok(String(projectList).includes("Projects"), "proj.list prints project table");
+  assert.ok(String(projectList).includes("drums"), "proj.list includes named projects");
+
+  const loadedProject = await proj.load("drums");
+  assert.equal(loadedProject.name, "drums", "proj.load switches projects");
+  assert.ok(loadedProject.toString().includes("Loaded Project"), "proj.load prints useful summary");
+
+  const removeResult = await proj.rm("drums");
+  assert.ok(removeResult.toString().includes("Removed project drums"), "proj.rm confirms project deletion");
 
   const chainedOnsetFeature = await sn.read("/test.wav").onsets();
   assert.ok(chainedOnsetFeature instanceof OnsetFeature, "sn.read().onsets() returns OnsetFeature");

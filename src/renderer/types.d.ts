@@ -54,10 +54,25 @@ interface DerivedSampleSummaryData {
 interface FeatureListData {
   sample_hash: string;
   feature_type: string;
-  file_path: string;
+  file_path: string | null;
   options: string | null;
   feature_count: number;
   feature_hash: string;
+}
+
+interface ProjectData {
+  id: number;
+  name: string;
+  created_at: string;
+  sample_count: number;
+  feature_count: number;
+  command_count: number;
+  current: boolean;
+}
+
+interface RemoveProjectResultData {
+  removedName: string;
+  currentProject: ProjectData;
 }
 
 interface OnsetSliceOptions {
@@ -149,6 +164,10 @@ interface Window {
     ) => Promise<number[][]>;
     saveCommand: (command: string) => Promise<void>;
     sendCommand: (command: string, args: string[]) => Promise<void>;
+    getCurrentProject: () => Promise<ProjectData | null>;
+    listProjects: () => Promise<ProjectData[]>;
+    loadProject: (name: string) => Promise<ProjectData>;
+    removeProject: (name: string) => Promise<RemoveProjectResultData>;
     getCommandHistory: (limit?: number) => Promise<string[]>;
     clearCommandHistory: () => Promise<void>;
     dedupeCommandHistory: () => Promise<{ removed: number }>;

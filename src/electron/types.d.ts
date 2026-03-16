@@ -1,5 +1,44 @@
 export interface ElectronAPI {
   version: string;
+  getCurrentProject: () => Promise<{
+    id: number;
+    name: string;
+    created_at: string;
+    sample_count: number;
+    feature_count: number;
+    command_count: number;
+    current: boolean;
+  } | null>;
+  listProjects: () => Promise<Array<{
+    id: number;
+    name: string;
+    created_at: string;
+    sample_count: number;
+    feature_count: number;
+    command_count: number;
+    current: boolean;
+  }>>;
+  loadProject: (name: string) => Promise<{
+    id: number;
+    name: string;
+    created_at: string;
+    sample_count: number;
+    feature_count: number;
+    command_count: number;
+    current: boolean;
+  }>;
+  removeProject: (name: string) => Promise<{
+    removedName: string;
+    currentProject: {
+      id: number;
+      name: string;
+      created_at: string;
+      sample_count: number;
+      feature_count: number;
+      command_count: number;
+      current: boolean;
+    };
+  }>;
   readAudioFile: (path: string) => Promise<{
     channelData: Float32Array;
     sampleRate: number;

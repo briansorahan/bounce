@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("electron", {
   analyzeMFCC: (audioData: Float32Array, options?: MFCCOptions) =>
     ipcRenderer.invoke("analyze-mfcc", audioData, options),
   saveCommand: (command: string) => ipcRenderer.invoke("save-command", command),
+  getCurrentProject: () => ipcRenderer.invoke("get-current-project"),
+  listProjects: () => ipcRenderer.invoke("list-projects"),
+  loadProject: (name: string) => ipcRenderer.invoke("load-project", name),
+  removeProject: (name: string) => ipcRenderer.invoke("remove-project", name),
   getCommandHistory: (limit?: number) =>
     ipcRenderer.invoke("get-command-history", limit),
   clearCommandHistory: () => ipcRenderer.invoke("clear-command-history"),

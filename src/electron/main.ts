@@ -5,7 +5,12 @@ import * as os from "os";
 import * as crypto from "crypto";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../index";
 import decode from "audio-decode";
-import { DatabaseManager, FeatureOptions, GranularizeOptions } from "./database";
+import {
+  DatabaseManager,
+  FeatureOptions,
+  GranularizeOptions,
+  ProjectListRecord,
+} from "./database";
 import {
   BufNMFOptions,
   MFCCOptions,
@@ -19,6 +24,19 @@ import { SettingsStore } from "./settings-store";
 let dbManager: DatabaseManager | undefined = undefined;
 let settingsStore: SettingsStore | undefined = undefined;
 const corpusManager: CorpusManager = new CorpusManager();
+
+const userDataOverride = process.env.BOUNCE_USER_DATA_PATH;
+if (userDataOverride) {
+  fs.mkdirSync(userDataOverride, { recursive: true });
+  app.setPath("userData", userDataOverride);
+}
+
+function toProjectData(project: ProjectListRecord): ProjectListRecord & { current: boolean } {
+  return {
+    ...project,
+    current: project.name === dbManager?.getCurrentProjectName(),
+  };
+}
 
 /** Resolve a path against the stored cwd, expanding ~ and handling relative paths. */
 function resolvePath(inputPath: string): string {
@@ -210,6 +228,63 @@ ipcMain.handle("save-command", async (_event, command: string) => {
     }
   } catch (error) {
     console.error("Failed to save command to database:", error);
+  }
+});
+
+ipcMain.handle("get-current-project", async () => {
+  try {
+    if (!dbManager) {
+      return null;
+    }
+    return toProjectData(dbManager.getCurrentProject());
+  } catch (error) {
+    console.error("Failed to get current project:", error);
+    return null;
+  }
+});
+
+ipcMain.handle("list-projects", async () => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.listProjects().map(toProjectData);
+  } catch (error) {
+    console.error("Failed to list projects:", error);
+    return [];
+  }
+});
+
+ipcMain.handle("load-project", async (_event, name: string) => {
+  try {
+    if (!dbManager || !settingsStore) {
+      throw new Error("Project services not initialized");
+    }
+    const project = dbManager.loadOrCreateProject(name);
+    settingsStore.setCurrentProjectName(project.name);
+    return toProjectData(project);
+  } catch (error) {
+    throw new Error(
+      `Failed to load project: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+});
+
+ipcMain.handle("remove-project", async (_event, name: string) => {
+  try {
+    if (!dbManager || !settingsStore) {
+      throw new Error("Project services not initialized");
+    }
+    const currentProject = dbManager.removeProject(name);
+    settingsStore.setCurrentProjectName(currentProject.name);
+    return {
+      removedName: name,
+      currentProject: toProjectData(currentProject),
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to remove project: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 });
 
@@ -727,8 +802,20 @@ ipcMain.handle("fs-walk", async (_event, dirPath: string) => {
 });
 
 app.whenReady().then(() => {
-  dbManager = new DatabaseManager();
   settingsStore = new SettingsStore();
+  dbManager = new DatabaseManager();
+  const storedProjectName = settingsStore.getCurrentProjectName();
+  if (storedProjectName) {
+    const storedProject = dbManager.getProjectByName(storedProjectName);
+    if (storedProject) {
+      dbManager.setCurrentProjectByName(storedProject.name);
+    } else {
+      const fallback = dbManager.setCurrentProjectByName("default");
+      settingsStore.setCurrentProjectName(fallback.name);
+    }
+  } else {
+    settingsStore.setCurrentProjectName(dbManager.getCurrentProject().name);
+  }
   setDatabaseManager(dbManager);
   createWindow();
 

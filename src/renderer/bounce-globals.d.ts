@@ -145,6 +145,33 @@ declare class SampleListResult extends BounceResult {
   [Symbol.iterator](): Iterator<Sample>;
 }
 
+declare class ProjectResult extends BounceResult {
+  readonly id: number;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly sampleCount: number;
+  readonly featureCount: number;
+  readonly commandCount: number;
+  readonly current: boolean;
+  help(): BounceResult;
+}
+
+interface ProjectSummary {
+  id: number;
+  name: string;
+  createdAt: string;
+  sampleCount: number;
+  featureCount: number;
+  commandCount: number;
+  current: boolean;
+}
+
+declare class ProjectListResult extends BounceResult {
+  readonly projects: ProjectSummary[];
+  readonly length: number;
+  help(): BounceResult;
+}
+
 declare class GrainCollection extends BounceResult {
   length(): number;
   forEach(callback: (grain: Sample, index: number) => void | Promise<void>): Promise<void>;
@@ -170,6 +197,28 @@ interface SampleNamespace {
 }
 
 declare const sn: SampleNamespace;
+
+interface ProjectNamespace {
+  help(): BounceResult;
+  current: {
+    (): ReplValue<Promise<ProjectResult>>;
+    help(): BounceResult;
+  };
+  list: {
+    (): ReplValue<Promise<ProjectListResult>>;
+    help(): BounceResult;
+  };
+  load: {
+    (name: string): ReplValue<Promise<ProjectResult>>;
+    help(): BounceResult;
+  };
+  rm: {
+    (name: string): ReplValue<Promise<BounceResult>>;
+    help(): BounceResult;
+  };
+}
+
+declare const proj: ProjectNamespace;
 
 declare class VisScene extends BounceResult {
   readonly sample: Sample;

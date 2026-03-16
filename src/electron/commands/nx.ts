@@ -3,7 +3,6 @@ import { DatabaseManager } from "../database";
 import { debugLog } from "../logger";
 import { BufNMFCross } from "../BufNMFCross";
 import { BufNMF } from "../BufNMF";
-import * as crypto from "crypto";
 import { Command } from "./types";
 
 export const nxCommand: Command = {
@@ -165,25 +164,25 @@ Example:
       });
 
       // Store cross-synthesis result as a new feature
-      const featureData = JSON.stringify({
+      const featurePayload = {
         bases: crossResult.bases,
         activations: crossResult.activations,
         sourceSampleHash: sourceSample.hash,
         sourceFeatureHash: sourceFeature.feature_hash,
-      });
-
-      const featureHash = crypto
-        .createHash("sha256")
-        .update(featureData)
-        .digest("hex");
-
-      const options = JSON.stringify({ fftSize, hopSize, windowSize });
-      dbManager.db
-        .prepare(
-          `INSERT OR REPLACE INTO features (sample_hash, feature_type, feature_hash, feature_data, options, created_at)
-           VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-        )
-        .run(targetSample.hash, "nmf-cross", featureHash, featureData, options);
+      };
+      dbManager.storeFeature(
+        targetSample.hash,
+        "nmf-cross",
+        featurePayload as unknown as number[],
+        { fftSize, hopSize, windowSize } as Record<string, unknown>,
+      );
+      const storedFeature = dbManager.getMostRecentFeature(
+        targetSample.hash,
+        "nmf-cross",
+      );
+      if (!storedFeature) {
+        throw new Error("Cross-synthesis feature could not be loaded after storage.");
+      }
 
       debugLog("info", "[NX] Cross-synthesis feature stored");
 
@@ -208,7 +207,7 @@ Example:
 
         const derivedHash = dbManager.createDerivedSample(
           targetSample.hash,
-          featureHash,
+          storedFeature.feature_hash,
           i,
           componentBuffer,
           targetSample.sample_rate,

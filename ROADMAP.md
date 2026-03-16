@@ -4,6 +4,7 @@ See the brainstorming section for the full description of what each of these ide
 
 * Visualization
 * Projects
+* Runtime Introspection and Persistence
 * Audio Recording
 * Normalization
 * Scripts
@@ -62,10 +63,14 @@ and selecting which one you want to use to record.
 I would like to be able to normalize a sample!
 There may be some other kinds of gain adjustments we could apply.
 
-## Runtime Introspection
+## Runtime Introspection and Persistence
 
 There could be an API that allows you to see the variables you've defined in the current
 session along with their values.
+I also think that we should add a hook that fires when the application is closed.
+This hook should save the whole runtime environment for the project, so that
+when you start the app again and it loads the last project you were working on,
+all the variables and functions that you had defined are still there.
 
 ## Projects
 
@@ -87,3 +92,19 @@ I think the samples would also be organized into projects as well.
 We already store samples and features in a way that would allow us to track lineage.
 e.g. raw sample -> feature1, feature2 -> derived sample
 This feature would just expose that through the UI somehow.
+
+## Tutorials
+
+I think interactive tutorials could be cool!
+Maybe it's a `tutorial()` global function to learn the global functions.
+Then each global object could expose a tutorial() method to educate the user
+about how to use that object.
+Each tutorial would run in a temp directory and temp db, to sandbox everything the
+user does. When they exit the tutorial, everything they did is removed.
+I think that seems right?
+It could be kinda sad if someone did something they actually wanted to save
+while in a tutorial session, but couldn't :(
+Once you start a tutorial, there are globals added to the bounce REPL:
+* next() goes to the next page in the tutorial
+* prev() goes back to the previous page in the tutorial
+* quit() exits the tutorial and deletes everything in the sandbox environment
