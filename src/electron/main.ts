@@ -90,10 +90,7 @@ ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
           filePath: sample.file_path,
         };
       }
-      // If not found, fall through to treat as file path
-      debugLog("info", "[AudioLoader] Hash not found, treating as file path", {
-        input: filePathOrHash,
-      });
+      throw new Error(`Sample with hash "${filePathOrHash.substring(0, 8)}..." not found in database.`);
     }
 
     let resolvedPath = filePathOrHash;

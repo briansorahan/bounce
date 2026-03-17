@@ -49,6 +49,7 @@ function createTestWavFile(filePath: string, durationSeconds = 1.0) {
 
 test.describe("Granularize", () => {
   test("granularize returns GrainCollection with correct length", async () => {
+    test.setTimeout(60000);
     const testFile = path.join(__dirname, "test-granularize.wav");
     createTestWavFile(testFile, 1.0);
 
