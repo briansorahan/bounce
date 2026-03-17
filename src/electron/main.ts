@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -830,6 +830,58 @@ ipcMain.handle("fs-walk", async (_event, dirPath: string) => {
   return { entries, truncated: dirents.length > 10_000 };
 });
 
+ipcMain.handle("get-sample-by-name", async (_event, name: string) => {
+  if (!dbManager) return null;
+  const sample = dbManager.getSampleByPath(name);
+  if (!sample) return null;
+  return {
+    id: sample.id,
+    hash: sample.hash,
+    file_path: sample.file_path,
+    sample_rate: sample.sample_rate,
+    channels: sample.channels,
+    duration: sample.duration,
+  };
+});
+
+ipcMain.handle(
+  "store-recording",
+  async (
+    _event,
+    name: string,
+    audioData: number[],
+    sampleRate: number,
+    channels: number,
+    duration: number,
+    overwrite: boolean,
+  ) => {
+    if (!dbManager) throw new Error("Database not initialised");
+
+    const existing = dbManager.getSampleByPath(name);
+    if (existing && !overwrite) {
+      return { status: "exists" as const };
+    }
+
+    const pcm = new Float32Array(audioData);
+    const audioDataBuffer = Buffer.from(pcm.buffer);
+    const hash = crypto.createHash("sha256").update(audioDataBuffer).digest("hex");
+
+    dbManager.storeSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
+
+    const stored = dbManager.getSampleByHash(hash);
+    return {
+      status: "ok" as const,
+      hash,
+      id: stored?.id,
+      sampleRate,
+      channels,
+      duration,
+      filePath: name,
+    };
+  },
+);
+
+
 app.whenReady().then(() => {
   settingsStore = new SettingsStore();
   dbManager = new DatabaseManager();
@@ -846,6 +898,15 @@ app.whenReady().then(() => {
     settingsStore.setCurrentProjectName(dbManager.getCurrentProject().name);
   }
   setDatabaseManager(dbManager);
+
+  // Grant microphone access to the renderer so getUserMedia / MediaRecorder work.
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "media");
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === "media";
+  });
+
   createWindow();
 
   app.on("activate", () => {

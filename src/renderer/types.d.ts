@@ -1,3 +1,14 @@
+interface StoreRecordingResult {
+  status: "ok" | "exists";
+  hash?: string;
+  id?: number;
+  sampleRate?: number;
+  channels?: number;
+  duration?: number;
+  filePath?: string;
+}
+
+
 interface AudioFileData {
   channelData: Float32Array;
   sampleRate: number;
@@ -255,5 +266,14 @@ interface Window {
         created_at: string;
       }>
     >;
+    getSampleByName: (name: string) => Promise<SampleData | null>;
+    storeRecording: (
+      name: string,
+      audioData: number[],
+      sampleRate: number,
+      channels: number,
+      duration: number,
+      overwrite: boolean,
+    ) => Promise<StoreRecordingResult>;
   };
 }
