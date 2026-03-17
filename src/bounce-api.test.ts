@@ -179,6 +179,8 @@ const mockElectron = {
   clearCommandHistory: async () => {},
   dedupeCommandHistory: async () => ({ removed: 0 }),
   debugLog: async () => {},
+  saveReplEnv: async () => {},
+  getReplEnv: async () => [],
 };
 
 (globalThis as Record<string, unknown>).window = { electron: mockElectron };
