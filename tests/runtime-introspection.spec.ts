@@ -134,6 +134,21 @@ test.describe("env namespace runtime introspection", () => {
     await electronApp.close();
   });
 
+  test("env.functions() with no argument lists user-defined functions", async () => {
+    const electronApp = await launchApp();
+    const window = await electronApp.firstWindow();
+    await window.waitForTimeout(1000);
+
+    await sendCommand(window, "function greet() { return 'hi'; }");
+    await sendCommand(window, "env.functions()");
+
+    const rows = window.locator(".xterm-rows");
+    await expect(rows).toContainText("User-Defined Functions", { timeout: 5000 });
+    await expect(rows).toContainText("greet()", { timeout: 5000 });
+
+    await electronApp.close();
+  });
+
   test("env.vars.help() describes the vars command", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();

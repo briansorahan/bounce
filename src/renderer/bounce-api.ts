@@ -290,12 +290,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
 
   function envFunctionsHelpText(): BounceResult {
     return new BounceResult([
-      "\x1b[1;36menv.functions(value)\x1b[0m",
+      "\x1b[1;36menv.functions([value])\x1b[0m",
       "",
-      "  List callable members discovered on a runtime value using the same",
+      "  With no argument: list all user-defined functions in scope.",
+      "  With an argument: list callable members on that value using the same",
       "  callable-property rules as tab completion.",
       "",
-      "  \x1b[90mExamples:\x1b[0m  env.functions(sn)",
+      "  \x1b[90mExamples:\x1b[0m  env.functions()",
+      "            env.functions(sn)",
       "            env.functions(\"samp\")",
     ].join("\n"));
   }
@@ -1813,24 +1815,45 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
 
     functions: Object.assign(
-      function functions(nameOrValue: unknown): EnvFunctionListResult {
+      function functions(nameOrValue?: unknown): EnvFunctionListResult {
+        if (nameOrValue === undefined) {
+          const names = (deps.runtime?.listScopeEntries() ?? [])
+            .filter(({ value }) => typeof value === "function")
+            .map(({ name }) => name)
+            .sort();
+          const display =
+            names.length === 0
+              ? [
+                  "\x1b[1;36mUser-Defined Functions\x1b[0m",
+                  "",
+                  "\x1b[90mNo user-defined functions in scope.\x1b[0m",
+                ].join("\n")
+              : [
+                  "\x1b[1;36mUser-Defined Functions\x1b[0m",
+                  "",
+                  ...names.map((name) => `  ${name}()`),
+                ].join("\n");
+          return new EnvFunctionListResult(display, "function", names, envFunctionsHelpText);
+        }
+
         const target = resolveEnvTarget(nameOrValue);
         const callableMembers =
           target.value && (typeof target.value === "object" || typeof target.value === "function")
             ? getCallablePropertyNames(target.value).sort()
             : [];
         const targetLabel = target.name ?? getRuntimeTypeLabel(target.value);
-        const display = callableMembers.length === 0
-          ? [
-              `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
-              "",
-              "\x1b[90mNo callable members found.\x1b[0m",
-            ].join("\n")
-          : [
-              `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
-              "",
-              ...callableMembers.map((name) => `  ${name}()`),
-            ].join("\n");
+        const display =
+          callableMembers.length === 0
+            ? [
+                `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+                "",
+                "\x1b[90mNo callable members found.\x1b[0m",
+              ].join("\n")
+            : [
+                `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+                "",
+                ...callableMembers.map((name) => `  ${name}()`),
+              ].join("\n");
 
         return new EnvFunctionListResult(
           display,

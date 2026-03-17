@@ -33,6 +33,15 @@ maintain that?
 Probably not...
 Maybe the main database is _just_ for audio?
 
+I was thinking more about this feature last night.
+I was thinking how it's cool that we keep track of lineage for derived samples, but that
+sometimes the user might want to throw away the history and _just_ keep the resulting sample.
+Maybe this is an option that people could use when they copy samples from the session to
+the project? If this option is turned on, then the sample appears in the project db
+as a raw sample.
+Maybe this is actually how the copy should work by default?
+Maybe we don't care about tracking lineage for samples that get moved into a project?
+
 ## Multiline Editing
 
 I know that this does not work very well right now.

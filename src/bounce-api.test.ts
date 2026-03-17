@@ -271,6 +271,11 @@ async function main() {
   const inspectGlobal = env.inspect("sn");
   assert.ok(inspectGlobal.toString().includes("scope:     global"));
 
+  const userFunctionList = env.functions();
+  assert.ok(userFunctionList instanceof EnvFunctionListResult, "env.functions() returns EnvFunctionListResult");
+  assert.ok(userFunctionList.toString().includes("sayHi()"), "env.functions() lists user-defined functions");
+  assert.ok(!userFunctionList.toString().includes("answer"), "env.functions() excludes non-function scope vars");
+
   const functionList = env.functions("sn");
   assert.ok(functionList instanceof EnvFunctionListResult, "env.functions returns EnvFunctionListResult");
   assert.ok(functionList.toString().includes("read()"));
