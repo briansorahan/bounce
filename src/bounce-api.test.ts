@@ -225,7 +225,7 @@ async function main() {
     vars(): EnvScopeResult;
     globals(): EnvScopeResult;
     inspect(nameOrValue: unknown): EnvInspectionResult;
-    functions(nameOrValue: unknown): EnvFunctionListResult;
+    functions(nameOrValue?: unknown): EnvFunctionListResult;
   };
   const vis = api.vis as {
     help(): BounceResult;

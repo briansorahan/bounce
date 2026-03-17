@@ -247,6 +247,54 @@ export function getTopLevelVarNames(js: string): string[] {
   return names;
 }
 
+/**
+ * Extracts the names of top-level function declarations so they can be
+ * persisted in scopeVars across evaluations. Handles both plain and async
+ * variants: `function foo() {}` and `async function foo() {}`.
+ */
+export function getTopLevelFunctionDeclNames(js: string): string[] {
+  const names: string[] = [];
+  let state = makeScanState();
+  let i = 0;
+
+  while (i < js.length) {
+    const ch = js[i];
+    const prev = js[i - 1] ?? "";
+    const next = js[i + 1] ?? "";
+
+    if (state.depth === 0 && !state.inString && !state.inLineComment && !state.inBlockComment) {
+      // Detect `function` or `async function` at the start of a statement.
+      let nameStart = -1;
+
+      if (js.slice(i, i + 8) === "function" && /[\s*(]/.test(js[i + 8] ?? "")) {
+        nameStart = i + 8;
+      } else if (js.slice(i, i + 5) === "async" && /\s/.test(js[i + 5] ?? "")) {
+        let j = i + 5;
+        while (j < js.length && /\s/.test(js[j])) j++;
+        if (js.slice(j, j + 8) === "function" && /[\s*(]/.test(js[j + 8] ?? "")) {
+          nameStart = j + 8;
+        }
+      }
+
+      if (nameStart !== -1) {
+        // Skip optional generator `*`
+        while (nameStart < js.length && (js[nameStart] === "*" || /\s/.test(js[nameStart]))) nameStart++;
+        // Read identifier
+        let name = "";
+        while (nameStart < js.length && /[\w$]/.test(js[nameStart])) name += js[nameStart++];
+        if (name && !BOUNCE_GLOBALS.has(name)) names.push(name);
+        i = nameStart;
+        continue;
+      }
+    }
+
+    state = advanceScan(state, ch, next, prev);
+    i++;
+  }
+
+  return names;
+}
+
 interface StatementChunk {
   text: string;
   terminator: string;
@@ -344,7 +392,7 @@ function transformVarDeclaration(core: string): string {
 }
 
 function isControlStatement(core: string): boolean {
-  return /^(var\b|function\b|class\b|if\b|for\b|while\b|switch\b|try\b|catch\b|finally\b|do\b|return\b|throw\b|break\b|continue\b|\{)/.test(core);
+  return /^(var\b|function\b|async\s+function\b|class\b|if\b|for\b|while\b|switch\b|try\b|catch\b|finally\b|do\b|return\b|throw\b|break\b|continue\b|\{)/.test(core);
 }
 
 function transformTopLevelStatement(statement: string): string {
@@ -503,16 +551,20 @@ export class ReplEvaluator {
     const promoted = promoteDeclarations(js);
     const autoAwaited = autoAwaitTopLevel(promoted);
     const declaredNames = getTopLevelVarNames(promoted);
+    const functionDeclNames = new Set(getTopLevelFunctionDeclNames(promoted));
 
-    const allNames = new Set([...this.scopeVars.keys(), ...declaredNames]);
+    const allNames = new Set([...this.scopeVars.keys(), ...declaredNames, ...functionDeclNames]);
     const bounceNames = Object.keys(this.bounceApi);
     const bounceValues = Object.values(this.bounceApi);
 
+    // For function declarations, the fallback must be the hoisted function value
+    // (not `undefined`) so that the prelude var assignment doesn't clobber it.
     const prelude = [...allNames]
-      .map(
-        (n) =>
-          `var ${n} = __scope__.has(${JSON.stringify(n)}) ? __scope__.get(${JSON.stringify(n)}) : undefined;`,
-      )
+      .map((n) => {
+        const scopeTest = `__scope__.has(${JSON.stringify(n)}) ? __scope__.get(${JSON.stringify(n)})`;
+        const fallback = functionDeclNames.has(n) ? n : "undefined";
+        return `var ${n} = ${scopeTest} : ${fallback};`;
+      })
       .join("\n");
 
     const epilogue = [...allNames]
