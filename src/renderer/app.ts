@@ -744,11 +744,11 @@ export class BounceApp {
 
   private async loadScopeFromStorage(): Promise<void> {
     try {
+      this.replEvaluator.clearScope();
       const entries = await window.electron.getReplEnv();
       if (!entries || entries.length === 0) {
         return;
       }
-      this.replEvaluator.clearScope();
       const restored = await this.replEvaluator.restoreScope(entries);
       if (restored.length > 0) {
         const summary = restored

@@ -1,9 +1,11 @@
 import { test, expect, _electron as electron } from "@playwright/test";
 import * as path from "path";
+import * as fs from "fs";
+import * as os from "os";
 
 const electronPath = require("electron") as string;
 
-async function launchApp() {
+async function launchApp(userDataDir: string) {
   return electron.launch({
     executablePath: electronPath,
     args: [
@@ -14,6 +16,7 @@ async function launchApp() {
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
+      BOUNCE_USER_DATA_PATH: userDataDir,
     },
   });
 }
@@ -28,7 +31,8 @@ async function sendCommand(window: any, command: string): Promise<void> {
 
 test.describe("env namespace runtime introspection", () => {
   test("env.help() shows the runtime introspection namespace description", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -40,10 +44,12 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.globals() lists known Bounce globals", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -56,10 +62,12 @@ test.describe("env namespace runtime introspection", () => {
     await expect(rows).toContainText("proj", { timeout: 5000 });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.vars() shows empty message when no user variables are defined", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -72,10 +80,12 @@ test.describe("env namespace runtime introspection", () => {
     });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.vars() lists user-defined variables after they are defined", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -87,10 +97,12 @@ test.describe("env namespace runtime introspection", () => {
     await expect(rows).toContainText("number", { timeout: 5000 });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.inspect() shows scope: global for Bounce globals", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -102,10 +114,12 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.inspect() shows scope: user and type for user-defined variables", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -117,10 +131,12 @@ test.describe("env namespace runtime introspection", () => {
     await expect(rows).toContainText("type:      number", { timeout: 5000 });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.functions() lists callable members of a global", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -132,10 +148,12 @@ test.describe("env namespace runtime introspection", () => {
     await expect(rows).toContainText("current()", { timeout: 5000 });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.functions() with no argument lists user-defined functions", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -147,10 +165,12 @@ test.describe("env namespace runtime introspection", () => {
     await expect(rows).toContainText("greet()", { timeout: 5000 });
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.vars.help() describes the vars command", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -162,10 +182,12 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.globals.help() describes the globals command", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -177,10 +199,12 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.inspect.help() describes the inspect command", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -192,10 +216,12 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
   test("env.functions.help() describes the functions command", async () => {
-    const electronApp = await launchApp();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
+    const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
     await window.waitForTimeout(1000);
 
@@ -207,5 +233,6 @@ test.describe("env namespace runtime introspection", () => {
     );
 
     await electronApp.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 });
