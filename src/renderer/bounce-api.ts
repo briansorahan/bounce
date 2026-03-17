@@ -83,6 +83,7 @@ export interface BounceApiDeps {
     listScopeEntries(): RuntimeScopeEntry[];
     hasScopeValue(name: string): boolean;
     getScopeValue(name: string): unknown;
+    serializeScope(): Array<{ name: string; kind: "json" | "function"; value: string }>;
   };
 }
 
@@ -1917,6 +1918,10 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         );
       },
       load: async (name: string) => {
+        if (deps.runtime) {
+          const entries = deps.runtime.serializeScope();
+          await window.electron.saveReplEnv(entries);
+        }
         const project = await window.electron.loadProject(name);
         dispatchProjectChanged();
         return bindProject(project, "Loaded Project");

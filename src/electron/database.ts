@@ -74,6 +74,14 @@ export interface ProjectRecord {
   created_at: string;
 }
 
+export interface ReplEnvRecord {
+  project_id: number;
+  name: string;
+  kind: "json" | "function";
+  value: string;
+  created_at: string;
+}
+
 export interface ProjectListRecord extends ProjectRecord {
   sample_count: number;
   feature_count: number;
@@ -124,6 +132,7 @@ export class DatabaseManager {
       () => this.migrate003_samplesFeatures(),
       () => this.migrate004_repairFeaturesFK(),
       () => this.migrate005_projects(),
+      () => this.migrate006_replEnv(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -459,6 +468,22 @@ export class DatabaseManager {
     } finally {
       this.db.exec("PRAGMA foreign_keys = ON;");
     }
+  }
+
+  private migrate006_replEnv(): void {
+    this.db.exec(`
+      CREATE TABLE repl_env (
+        project_id INTEGER NOT NULL,
+        name       TEXT NOT NULL,
+        kind       TEXT NOT NULL CHECK(kind IN ('json', 'function')),
+        value      TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (project_id, name),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_repl_env_project ON repl_env(project_id);
+    `);
   }
 
   private normalizeProjectName(name: string): string {
@@ -1180,5 +1205,25 @@ LIMIT 1
           options: string;
         }
       | undefined;
+  }
+
+  saveReplEnv(entries: Array<{ name: string; kind: "json" | "function"; value: string }>): void {
+    const projectId = this.requireCurrentProjectId();
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM repl_env WHERE project_id = ?").run(projectId);
+      const insert = this.db.prepare(
+        "INSERT INTO repl_env (project_id, name, kind, value) VALUES (?, ?, ?, ?)",
+      );
+      for (const entry of entries) {
+        insert.run(projectId, entry.name, entry.kind, entry.value);
+      }
+    })();
+  }
+
+  getReplEnv(): ReplEnvRecord[] {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare("SELECT * FROM repl_env WHERE project_id = ? ORDER BY name ASC")
+      .all(projectId) as ReplEnvRecord[];
   }
 }

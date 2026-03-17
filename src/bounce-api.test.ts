@@ -179,6 +179,8 @@ const mockElectron = {
   clearCommandHistory: async () => {},
   dedupeCommandHistory: async () => ({ removed: 0 }),
   debugLog: async () => {},
+  saveReplEnv: async () => {},
+  getReplEnv: async () => [],
 };
 
 (globalThis as Record<string, unknown>).window = { electron: mockElectron };
@@ -200,6 +202,7 @@ async function main() {
         [...runtimeScope.entries()].map(([name, value]) => ({ name, value })),
       hasScopeValue: (name: string) => runtimeScope.has(name),
       getScopeValue: (name: string) => runtimeScope.get(name),
+      serializeScope: () => [],
     },
   }) as Record<string, unknown>;
 

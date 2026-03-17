@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("get-command-history", limit),
   clearCommandHistory: () => ipcRenderer.invoke("clear-command-history"),
   dedupeCommandHistory: () => ipcRenderer.invoke("dedupe-command-history"),
+  saveReplEnv: (entries: Array<{ name: string; kind: string; value: string }>) =>
+    ipcRenderer.invoke("save-repl-env", entries),
+  getReplEnv: () => ipcRenderer.invoke("get-repl-env"),
   debugLog: (level: string, message: string, data?: Record<string, unknown>) =>
     ipcRenderer.invoke("debug-log", level, message, data),
   getDebugLogs: (limit?: number) => ipcRenderer.invoke("get-debug-logs", limit),

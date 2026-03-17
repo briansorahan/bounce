@@ -517,6 +517,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
 
 export class ReplEvaluator {
   private scopeVars = new Map<string, unknown>();
+  private functionSources = new Map<string, string>();
 
   constructor(private bounceApi: Record<string, unknown>) {}
 
@@ -545,6 +546,66 @@ export class ReplEvaluator {
       .map(([name, value]) => ({ name, value }));
   }
 
+  serializeScope(): Array<{ name: string; kind: "json" | "function"; value: string }> {
+    const entries: Array<{ name: string; kind: "json" | "function"; value: string }> = [];
+
+    // Emit function declarations first, using their original TypeScript source.
+    for (const [name, source] of this.functionSources) {
+      if (!BOUNCE_GLOBALS.has(name)) {
+        entries.push({ name, kind: "function", value: source });
+      }
+    }
+
+    // Emit JSON-serializable non-function values.
+    for (const [name, value] of this.scopeVars) {
+      if (BOUNCE_GLOBALS.has(name) || this.functionSources.has(name)) {
+        continue;
+      }
+      try {
+        const serialized = JSON.stringify(value);
+        if (serialized !== undefined) {
+          entries.push({ name, kind: "json", value: serialized });
+        }
+      } catch {
+        // Skip values that cannot be serialized (circular refs, etc.)
+      }
+    }
+
+    return entries;
+  }
+
+  async restoreScope(
+    entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
+  ): Promise<string[]> {
+    const restored: string[] = [];
+    for (const entry of entries) {
+      if (BOUNCE_GLOBALS.has(entry.name)) {
+        continue;
+      }
+      if (entry.kind === "json") {
+        try {
+          this.scopeVars.set(entry.name, JSON.parse(entry.value));
+          restored.push(entry.name);
+        } catch {
+          // Skip malformed entries
+        }
+      } else if (entry.kind === "function") {
+        try {
+          await this.evaluate(entry.value);
+          restored.push(entry.name);
+        } catch {
+          // Skip functions that fail to re-evaluate
+        }
+      }
+    }
+    return restored;
+  }
+
+  clearScope(): void {
+    this.scopeVars.clear();
+    this.functionSources.clear();
+  }
+
   async evaluate(source: string): Promise<unknown> {
     const js = await window.electron.transpileTypeScript(source);
     checkReservedNames(js);
@@ -552,6 +613,12 @@ export class ReplEvaluator {
     const autoAwaited = autoAwaitTopLevel(promoted);
     const declaredNames = getTopLevelVarNames(promoted);
     const functionDeclNames = new Set(getTopLevelFunctionDeclNames(promoted));
+
+    // Record the original source for each top-level function declaration so it
+    // can be re-evaluated later when restoring a saved scope.
+    for (const name of functionDeclNames) {
+      this.functionSources.set(name, source);
+    }
 
     const allNames = new Set([...this.scopeVars.keys(), ...declaredNames, ...functionDeclNames]);
     const bounceNames = Object.keys(this.bounceApi);
