@@ -59,6 +59,7 @@ export class BounceApp {
         listScopeEntries: () => this.replEvaluator.listScopeEntries(),
         hasScopeValue: (name: string) => this.replEvaluator.hasScopeValue(name),
         getScopeValue: (name: string) => this.replEvaluator.getScopeValue(name),
+        serializeScope: () => this.replEvaluator.serializeScope(),
       },
     });
     this.replEvaluator = new ReplEvaluator(bounceApi);
@@ -76,7 +77,12 @@ export class BounceApp {
     });
 
     window.addEventListener("bounce:project-changed", () => {
-      void this.refreshHistoryForProject();
+      void this.refreshForProject();
+    });
+
+    window.addEventListener("beforeunload", () => {
+      const entries = this.replEvaluator.serializeScope();
+      void window.electron.saveReplEnv(entries);
     });
 
     // Expose terminal and executeCommand for testing
@@ -100,8 +106,9 @@ export class BounceApp {
     this.terminal.open(container);
     this.terminal.fit();
 
-    // Load history before showing the prompt
+    // Load history and scope before showing the prompt
     await this.loadHistoryFromStorage();
+    await this.loadScopeFromStorage();
 
     this.printWelcome();
     this.printPrompt();
@@ -735,7 +742,30 @@ export class BounceApp {
     }
   }
 
-  private async refreshHistoryForProject(): Promise<void> {
+  private async loadScopeFromStorage(): Promise<void> {
+    try {
+      const entries = await window.electron.getReplEnv();
+      if (!entries || entries.length === 0) {
+        return;
+      }
+      this.replEvaluator.clearScope();
+      const restored = await this.replEvaluator.restoreScope(entries);
+      if (restored.length > 0) {
+        const summary = restored
+          .map((name) => {
+            const value = this.replEvaluator.getScopeValue(name);
+            const kind = typeof value === "function" ? "function" : typeof value;
+            return `${name} (${kind})`;
+          })
+          .join(", ");
+        this.terminal.writeln(`\x1b[90mRestored ${restored.length} variable${restored.length === 1 ? "" : "s"}: ${summary}\x1b[0m`);
+      }
+    } catch (error) {
+      console.error("Failed to load scope from storage:", error);
+    }
+  }
+
+  private async refreshForProject(): Promise<void> {
     await this.loadHistoryFromStorage();
     this.historyIndex = -1;
     this.isReverseSearchMode = false;
@@ -743,5 +773,6 @@ export class BounceApp {
     this.searchResultIndex = -1;
     this.matchedCommands = [];
     this.savedCommandBuffer = "";
+    await this.loadScopeFromStorage();
   }
 }

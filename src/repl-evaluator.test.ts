@@ -352,6 +352,127 @@ async function testReplEvaluator() {
 }
 
 // ---------------------------------------------------------------------------
+// serializeScope / restoreScope / clearScope
+// ---------------------------------------------------------------------------
+
+async function testReplEnvPersistence() {
+  const globalAny = globalThis as Record<string, unknown>;
+  globalAny.window = {
+    electron: {
+      transpileTypeScript: (src: string) => src,
+    },
+  };
+
+  const evaluator = new ReplEvaluator({});
+
+  // --- serializeScope: JSON primitives and plain objects ---
+  await evaluator.evaluate("var num = 42;");
+  await evaluator.evaluate("var str = 'hello';");
+  await evaluator.evaluate("var flag = true;");
+  await evaluator.evaluate("var arr = [1, 2, 3];");
+  await evaluator.evaluate("var obj = { rate: 44100 };");
+
+  let entries = evaluator.serializeScope();
+  const byName = (name: string) => entries.find((e) => e.name === name);
+
+  assert.strictEqual(byName("num")?.kind, "json", "number serialized as json");
+  assert.strictEqual(byName("num")?.value, "42");
+  assert.strictEqual(byName("str")?.kind, "json", "string serialized as json");
+  assert.strictEqual(byName("str")?.value, '"hello"');
+  assert.strictEqual(byName("flag")?.kind, "json", "boolean serialized as json");
+  assert.strictEqual(byName("arr")?.kind, "json", "array serialized as json");
+  assert.deepStrictEqual(JSON.parse(byName("arr")!.value), [1, 2, 3]);
+  assert.strictEqual(byName("obj")?.kind, "json", "plain object serialized as json");
+  assert.deepStrictEqual(JSON.parse(byName("obj")!.value), { rate: 44100 });
+
+  // --- serializeScope: function declaration ---
+  await evaluator.evaluate("function double(n) { return n * 2; }");
+  entries = evaluator.serializeScope();
+  const fnEntry = byName("double");
+  assert.strictEqual(fnEntry?.kind, "function", "function declaration serialized as function");
+  assert.ok(fnEntry?.value.includes("double"), "function source contains function name");
+
+  // --- serializeScope: skips un-serializable values ---
+  await evaluator.evaluate("var circ = {}; circ.self = circ;");
+  entries = evaluator.serializeScope();
+  assert.strictEqual(
+    entries.find((e) => e.name === "circ"),
+    undefined,
+    "circular reference is skipped",
+  );
+
+  // --- serializeScope: skips BOUNCE_GLOBALS ---
+  // Manually inject a global name into scope to simulate an edge case
+  (evaluator as unknown as { scopeVars: Map<string, unknown> }).scopeVars.set("sn", {});
+  entries = evaluator.serializeScope();
+  assert.strictEqual(
+    entries.find((e) => e.name === "sn"),
+    undefined,
+    "BOUNCE_GLOBALS names are not serialized",
+  );
+
+  // --- restoreScope: JSON values restored into fresh evaluator ---
+  const evaluator2 = new ReplEvaluator({});
+  (globalAny.window as { electron: { transpileTypeScript: (s: string) => string } }).electron.transpileTypeScript =
+    (src: string) => src;
+
+  const restored = await evaluator2.restoreScope([
+    { name: "x", kind: "json", value: "99" },
+    { name: "config", kind: "json", value: '{"rate":22050}' },
+  ]);
+  assert.deepStrictEqual(restored, ["x", "config"], "restoreScope returns list of restored names");
+  assert.strictEqual(evaluator2.getScopeValue("x"), 99, "json number restored correctly");
+  assert.deepStrictEqual(
+    evaluator2.getScopeValue("config"),
+    { rate: 22050 },
+    "json object restored correctly",
+  );
+
+  // --- restoreScope: function source re-evaluated ---
+  const evaluator3 = new ReplEvaluator({});
+  await evaluator3.restoreScope([
+    { name: "triple", kind: "function", value: "function triple(n) { return n * 3; }" },
+  ]);
+  assert.strictEqual(evaluator3.hasScopeValue("triple"), true, "function restored into scope");
+  const result = await evaluator3.evaluate("triple(4)");
+  assert.strictEqual(result, 12, "restored function is callable");
+
+  // --- restoreScope: skips BOUNCE_GLOBALS ---
+  const evaluator4 = new ReplEvaluator({});
+  const restoredGlobals = await evaluator4.restoreScope([
+    { name: "sn", kind: "json", value: '"should-be-skipped"' },
+  ]);
+  assert.deepStrictEqual(restoredGlobals, [], "BOUNCE_GLOBALS skipped during restore");
+  assert.strictEqual(evaluator4.hasScopeValue("sn"), false, "BOUNCE_GLOBAL not injected");
+
+  // --- clearScope: empties both maps ---
+  await evaluator.evaluate("var z = 7;");
+  evaluator.clearScope();
+  assert.strictEqual(evaluator.listScopeEntries().length, 0, "clearScope empties scopeVars");
+  assert.strictEqual(
+    evaluator.serializeScope().length,
+    0,
+    "clearScope empties functionSources",
+  );
+
+  // --- round-trip: define → serialize → restore → use ---
+  const writer = new ReplEvaluator({});
+  await writer.evaluate("var pi = 3.14;");
+  await writer.evaluate("function square(n) { return n * n; }");
+  const snapshot = writer.serializeScope();
+
+  const reader = new ReplEvaluator({});
+  await reader.restoreScope(snapshot);
+  assert.strictEqual(reader.getScopeValue("pi"), 3.14, "round-trip: number restored");
+  const sq = await reader.evaluate("square(5)");
+  assert.strictEqual(sq, 25, "round-trip: function callable after restore");
+
+  console.log("  ReplEnvPersistence: all tests passed");
+
+  delete globalAny.window;
+}
+
+// ---------------------------------------------------------------------------
 // Run all tests
 // ---------------------------------------------------------------------------
 
@@ -364,6 +485,7 @@ async function main() {
   testCheckReservedNames();
   testAutoAwaitTopLevel();
   await testReplEvaluator();
+  await testReplEnvPersistence();
   console.log("All repl-evaluator tests passed ✓");
 }
 

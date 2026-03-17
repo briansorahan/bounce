@@ -74,6 +74,18 @@ export interface ElectronAPI {
     bases: number[][];
     activations: number[][];
   }>;
+  saveReplEnv: (
+    entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
+  ) => Promise<void>;
+  getReplEnv: () => Promise<
+    Array<{
+      project_id: number;
+      name: string;
+      kind: "json" | "function";
+      value: string;
+      created_at: string;
+    }>
+  >;
 }
 
 declare global {

@@ -10,6 +10,7 @@ import {
   FeatureOptions,
   GranularizeOptions,
   ProjectListRecord,
+  ReplEnvRecord,
 } from "./database";
 import {
   BufNMFOptions,
@@ -228,6 +229,34 @@ ipcMain.handle("save-command", async (_event, command: string) => {
     }
   } catch (error) {
     console.error("Failed to save command to database:", error);
+  }
+});
+
+ipcMain.handle(
+  "save-repl-env",
+  async (
+    _event,
+    entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
+  ) => {
+    try {
+      if (dbManager) {
+        dbManager.saveReplEnv(entries);
+      }
+    } catch (error) {
+      console.error("Failed to save repl env to database:", error);
+    }
+  },
+);
+
+ipcMain.handle("get-repl-env", async (): Promise<ReplEnvRecord[]> => {
+  try {
+    if (!dbManager) {
+      return [];
+    }
+    return dbManager.getReplEnv();
+  } catch (error) {
+    console.error("Failed to get repl env from database:", error);
+    return [];
   }
 });
 

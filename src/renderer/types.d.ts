@@ -243,5 +243,17 @@ interface Window {
     ) => Promise<string[]>;
     fsGlob: (pattern: string) => Promise<string[]>;
     fsWalk: (dirPath: string) => Promise<FsWalkResult>;
+    saveReplEnv: (
+      entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
+    ) => Promise<void>;
+    getReplEnv: () => Promise<
+      Array<{
+        project_id: number;
+        name: string;
+        kind: "json" | "function";
+        value: string;
+        created_at: string;
+      }>
+    >;
   };
 }
