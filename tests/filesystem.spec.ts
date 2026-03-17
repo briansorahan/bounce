@@ -111,27 +111,33 @@ test.describe("Filesystem utilities", () => {
   });
 
   test("fs.ls() hides dotfiles, fs.la() shows them", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-dotfiles-test-"));
+    fs.writeFileSync(path.join(tmpDir, "visible.txt"), "");
+    fs.mkdirSync(path.join(tmpDir, ".hidden"));
 
-    const projectRoot = path.join(__dirname, "..");
+    try {
+      const electronApp = await launchApp();
+      const window = await electronApp.firstWindow();
+      await window.waitForTimeout(1000);
 
-    const lsResult = await callIpc<{ entries: Array<{ name: string }> }>(
-      window,
-      "fsLs",
-      projectRoot,
-    );
-    expect(lsResult.entries.some((e) => e.name === ".github")).toBe(false);
+      const lsResult = await callIpc<{ entries: Array<{ name: string }> }>(
+        window,
+        "fsLs",
+        tmpDir,
+      );
+      expect(lsResult.entries.some((e) => e.name === ".hidden")).toBe(false);
 
-    const laResult = await callIpc<{ entries: Array<{ name: string }> }>(
-      window,
-      "fsLa",
-      projectRoot,
-    );
-    expect(laResult.entries.some((e) => e.name === ".github")).toBe(true);
+      const laResult = await callIpc<{ entries: Array<{ name: string }> }>(
+        window,
+        "fsLa",
+        tmpDir,
+      );
+      expect(laResult.entries.some((e) => e.name === ".hidden")).toBe(true);
 
-    await electronApp.close();
+      await electronApp.close();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true });
+    }
   });
 
   test("fs.glob() returns matched paths", async () => {

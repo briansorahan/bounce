@@ -8,6 +8,9 @@ import {
   OnsetFeature,
   NmfFeature,
   MfccFeature,
+  EnvScopeResult,
+  EnvInspectionResult,
+  EnvFunctionListResult,
   VisScene,
   VisStack,
 } from "./renderer/bounce-api.js";
@@ -183,13 +186,25 @@ const mockElectron = {
 async function main() {
   const terminal = makeTerminal() as ReturnType<typeof makeTerminal>;
   const audioManager = makeAudioManager();
+  const runtimeScope = new Map<string, unknown>([
+    ["answer", 42],
+    ["label", "kick"],
+    ["sayHi", function sayHi() { return "hi"; }],
+  ]);
 
   const api = buildBounceApi({
     terminal: terminal as unknown as import("./renderer/terminal.js").BounceTerminal,
     audioManager: audioManager as unknown as import("./renderer/audio-context.js").AudioManager,
+    runtime: {
+      listScopeEntries: () =>
+        [...runtimeScope.entries()].map(([name, value]) => ({ name, value })),
+      hasScopeValue: (name: string) => runtimeScope.has(name),
+      getScopeValue: (name: string) => runtimeScope.get(name),
+    },
   }) as Record<string, unknown>;
 
   assert.ok(api.sn, "api exposes sn");
+  assert.ok(api.env, "api exposes env");
   assert.ok(api.proj, "api exposes proj");
   assert.ok(api.vis, "api exposes vis");
   assert.ok(!("play" in api), "api no longer exposes top-level play");
@@ -204,6 +219,13 @@ async function main() {
   };
   const corpus = api.corpus as {
     build(source?: string | Sample | PromiseLike<Sample>, featureHashOverride?: string): PromiseLike<BounceResult>;
+  };
+  const env = api.env as {
+    help(): BounceResult;
+    vars(): EnvScopeResult;
+    globals(): EnvScopeResult;
+    inspect(nameOrValue: unknown): EnvInspectionResult;
+    functions(nameOrValue: unknown): EnvFunctionListResult;
   };
   const vis = api.vis as {
     help(): BounceResult;
@@ -226,15 +248,43 @@ async function main() {
   }
 
   assert.ok(sn.help().toString().includes("sample namespace"));
+  assert.ok(env.help().toString().includes("runtime introspection namespace"));
   assert.ok(sn.help().toString().includes("sn.stop()"));
   assert.ok(proj.help().toString().includes("project namespace"));
   assert.ok(vis.help().toString().includes("visualization namespace"));
+
+  const varsResult = env.vars();
+  assert.ok(varsResult instanceof EnvScopeResult, "env.vars returns EnvScopeResult");
+  assert.ok(varsResult.toString().includes("answer"));
+  assert.ok(varsResult.toString().includes("sayHi"));
+
+  const globalsResult = env.globals();
+  assert.ok(globalsResult instanceof EnvScopeResult, "env.globals returns EnvScopeResult");
+  assert.ok(globalsResult.toString().includes("sn"));
+  assert.ok(globalsResult.toString().includes("env"));
+
+  const inspectVar = env.inspect("answer");
+  assert.ok(inspectVar instanceof EnvInspectionResult, "env.inspect returns EnvInspectionResult");
+  assert.ok(inspectVar.toString().includes("type:      number"));
+  assert.ok(inspectVar.toString().includes("scope:     user"));
+
+  const inspectGlobal = env.inspect("sn");
+  assert.ok(inspectGlobal.toString().includes("scope:     global"));
+
+  const functionList = env.functions("sn");
+  assert.ok(functionList instanceof EnvFunctionListResult, "env.functions returns EnvFunctionListResult");
+  assert.ok(functionList.toString().includes("read()"));
+  assert.ok(functionList.toString().includes("current()"));
 
   const sample = await sn.read("/test.wav");
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
   assert.ok(sample.help().toString().includes("sample.onsets()"));
   assert.ok(sample.help().toString().includes("sample.loop()"));
   assert.ok(sample.toString().includes("Loaded"));
+  runtimeScope.set("samp", sample);
+  const inspectSample = env.inspect("samp");
+  assert.ok(inspectSample.toString().includes("type:      Sample"));
+  assert.ok(inspectSample.toString().includes("Loaded"));
 
   const played = await sample.play();
   assert.ok(played instanceof Sample, "sample.play returns Sample");

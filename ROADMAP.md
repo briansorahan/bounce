@@ -108,3 +108,12 @@ Once you start a tutorial, there are globals added to the bounce REPL:
 * next() goes to the next page in the tutorial
 * prev() goes back to the previous page in the tutorial
 * quit() exits the tutorial and deletes everything in the sandbox environment
+
+## Freesound Integration
+
+* Searching sounds from freesound.org
+* Downloading sounds
+* How do we honor the sound's license?
+  * We would need to track that a sound is downloaded from freesound, and store the URL
+  * Could prob fetch the license info from the URL?
+  * Ability to generate an attribution document

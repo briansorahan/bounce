@@ -1,11 +1,14 @@
 export const BOUNCE_GLOBALS = new Set([
   "sn",
+  "env",
   "vis",
   "nx",
   "visualizeNmf",
   "visualizeNx",
   "onsetSlice",
   "nmf",
+  "clearDebug",
+  "debug",
   "help",
   "clear",
   "corpus",
@@ -478,6 +481,20 @@ export class ReplEvaluator {
       ...this.bounceApi,
       ...Object.fromEntries(this.scopeVars),
     };
+  }
+
+  hasScopeValue(name: string): boolean {
+    return this.scopeVars.has(name);
+  }
+
+  getScopeValue(name: string): unknown {
+    return this.scopeVars.get(name);
+  }
+
+  listScopeEntries(): Array<{ name: string; value: unknown }> {
+    return [...this.scopeVars.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, value]) => ({ name, value }));
   }
 
   async evaluate(source: string): Promise<unknown> {

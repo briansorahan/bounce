@@ -1,4 +1,5 @@
 import { BOUNCE_GLOBALS } from "./repl-evaluator.js";
+import { getCallablePropertyNames } from "./runtime-introspection.js";
 
 export type CompletionAction =
   | { kind: "accept"; newBuffer: string; newCursorPosition: number }
@@ -65,7 +66,7 @@ export class TabCompletion {
       const methodPrefix = dotMatch[2] ?? "";
       const obj = this.getCompletionBindings()[objName];
       if (obj && (typeof obj === "function" || typeof obj === "object")) {
-        const methods = this.getCallablePropertyNames(obj)
+        const methods = getCallablePropertyNames(obj)
           .filter((k) => k.startsWith(methodPrefix))
           .sort();
         if (methods.length > 0) {
@@ -256,23 +257,5 @@ export class TabCompletion {
     }
 
     return window.electron.fsCompletePath(method, prefix);
-  }
-
-  private getCallablePropertyNames(obj: object): string[] {
-    const names = new Set<string>();
-    let current: object | null = obj;
-
-    while (current !== null && current !== Object.prototype) {
-      for (const name of Object.getOwnPropertyNames(current)) {
-        if (name === "constructor") continue;
-        const descriptor = Object.getOwnPropertyDescriptor(current, name);
-        if (descriptor && typeof descriptor.value === "function") {
-          names.add(name);
-        }
-      }
-      current = Object.getPrototypeOf(current);
-    }
-
-    return [...names];
   }
 }

@@ -58,6 +58,17 @@ async function testSingleMatchProjectNamespace() {
   }
 }
 
+async function testSingleMatchEnvNamespace() {
+  const c = new TabCompletion();
+  await c.update("en", 2);
+  assert.strictEqual(c.matchCount, 1);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "env()");
+  }
+}
+
 async function testGhostTextSingleMatchContainsSuffix() {
   const c = new TabCompletion();
   await c.update("sn", 2);
@@ -198,6 +209,24 @@ async function testProjectDotCompletion() {
   assert.ok(ghost.includes("load()"));
 }
 
+async function testEnvDotCompletion() {
+  const c = new TabCompletion();
+  c.setApi({
+    env: {
+      help() {},
+      vars() {},
+      globals() {},
+      inspect(_value: unknown) {},
+      functions(_value: unknown) {},
+    },
+  });
+  await c.update("env.", 4);
+  assert.strictEqual(c.matchCount, 5);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("vars()"));
+  assert.ok(ghost.includes("inspect()"));
+}
+
 async function testPathCompletionScopesToFsString() {
   mockFsCompletePath(async (method, inputPath) => {
     assert.strictEqual(method, "ls");
@@ -215,6 +244,7 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["single match namespace", testSingleMatchNamespace],
   ["multi match visualize", testMultiMatchVisualize],
   ["single match project namespace", testSingleMatchProjectNamespace],
+  ["single match env namespace", testSingleMatchEnvNamespace],
   ["ghostText single match contains suffix", testGhostTextSingleMatchContainsSuffix],
   ["ghostText multi match contains candidates", testGhostTextMultiMatchContainsCandidates],
   ["reset clears state", testResetClearsState],
@@ -224,6 +254,7 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["dot completion uses merged bindings", testDotCompletionPrefersMergedBindingsOverStaticApiOnly],
   ["fs completion still scoped", testFsCompletionStillScoped],
   ["project dot completion", testProjectDotCompletion],
+  ["env dot completion", testEnvDotCompletion],
   ["path completion scopes to fs string", testPathCompletionScopesToFsString],
 ];
 

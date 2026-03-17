@@ -121,6 +121,16 @@ function testCheckReservedNames() {
     /fs.*Bounce built-in/,
     "const fs throws",
   );
+  assert.throws(
+    () => checkReservedNames("const env = {};"),
+    /env.*Bounce built-in/,
+    "const env throws",
+  );
+  assert.throws(
+    () => checkReservedNames("function debug() {}"),
+    /debug.*Bounce built-in/,
+    "function debug throws",
+  );
 
   // Should NOT throw for non-globals or inner scope
   assert.doesNotThrow(
@@ -249,6 +259,13 @@ async function testReplEvaluator() {
   await evaluator.evaluate("x = x + 1;");
   const r5 = await evaluator.evaluate("x");
   assert.strictEqual(r5, 43, "mutation persists across evals");
+  assert.strictEqual(evaluator.hasScopeValue("x"), true, "scope reports persisted variables");
+  assert.strictEqual(evaluator.getScopeValue("x"), 43, "scope lookup returns persisted value");
+  assert.deepStrictEqual(
+    evaluator.listScopeEntries().map((entry) => entry.name),
+    ["x", "y"],
+    "scope entries are listed in sorted order",
+  );
 
   // Transpile error surfaces
   await assert.rejects(
@@ -273,6 +290,7 @@ async function testReplEvaluator() {
   await evaluator.evaluate("let samp = makeSample();");
   const r9 = await evaluator.evaluate("samp.hash");
   assert.strictEqual(r9, "sample-123", "variable initializers store awaited values");
+  assert.strictEqual(evaluator.hasScopeValue("samp"), true, "awaited initializer stored in scope");
 
   await evaluator.evaluate("samp = makeSample();");
   const r10 = await evaluator.evaluate("samp.hash");

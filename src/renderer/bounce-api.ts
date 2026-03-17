@@ -17,6 +17,12 @@ import {
   ProjectNamespace,
   ProjectResult,
   ProjectListResult,
+  EnvScopeResult,
+  EnvInspectionResult,
+  EnvFunctionListResult,
+  type EnvEntrySummary,
+  type EnvEntryScope,
+  type EnvInspectScope,
   SamplePromise,
   CurrentSamplePromise,
   OnsetFeaturePromise,
@@ -32,6 +38,12 @@ import {
   formatLsEntries,
 } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
+import {
+  getCallablePropertyNames,
+  getRuntimePreview,
+  getRuntimeTypeLabel,
+  type RuntimeScopeEntry,
+} from "./runtime-introspection.js";
 
 export {
   BounceResult,
@@ -47,6 +59,9 @@ export {
   ProjectNamespace,
   ProjectResult,
   ProjectListResult,
+  EnvScopeResult,
+  EnvInspectionResult,
+  EnvFunctionListResult,
   SamplePromise,
   CurrentSamplePromise,
   OnsetFeaturePromise,
@@ -64,6 +79,11 @@ export interface BounceApiDeps {
   terminal: BounceTerminal;
   audioManager: AudioManager;
   sceneManager?: VisualizationSceneManager;
+  runtime?: {
+    listScopeEntries(): RuntimeScopeEntry[];
+    hasScopeValue(name: string): boolean;
+    getScopeValue(name: string): unknown;
+  };
 }
 
 /**
@@ -73,6 +93,7 @@ export interface BounceApiDeps {
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { terminal, audioManager } = deps;
   let visualizationScenes: VisualizationSceneManager | null = deps.sceneManager ?? null;
+  let api: Record<string, unknown> | null = null;
 
   const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
 
@@ -219,6 +240,182 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "           scene.overlay(onsets).panel(nmf).show()",
       "           vis.stack().waveform(a).waveform(b).show()",
     ].join("\n"));
+  }
+
+  function envHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36menv\x1b[0m — runtime introspection namespace",
+      "",
+      "  Inspect the current REPL environment, including user-defined variables,",
+      "  built-in Bounce globals, callable members, and runtime value summaries.",
+      "",
+      "  env.vars()                List user-defined variables in scope",
+      "  env.globals()             List built-in Bounce globals",
+      "  env.inspect(nameOrValue)  Show details for one binding or value",
+      "  env.functions(value)      List callable members on a value",
+      "",
+      "  \x1b[90mExamples:\x1b[0m  env.vars()",
+      "            env.globals()",
+      "            env.inspect(\"samp\")",
+      "            env.functions(sn)",
+    ].join("\n"));
+  }
+
+  function envScopeHelpText(label: "vars" | "globals"): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36menv.${label}()\x1b[0m`,
+      "",
+      label === "vars"
+        ? "  List user-defined bindings that persist across REPL evaluations."
+        : "  List Bounce-provided globals exposed in the current REPL session.",
+      "",
+      "  Each entry shows a name, runtime type label, callable flag, and short preview.",
+      "",
+      `  \x1b[90mExample:\x1b[0m  env.${label}()`,
+    ].join("\n"));
+  }
+
+  function envInspectHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36menv.inspect(nameOrValue)\x1b[0m",
+      "",
+      "  Inspect one runtime binding or direct value. If you pass a string that",
+      "  matches a user variable or Bounce global, Bounce resolves it by name first.",
+      "",
+      "  \x1b[90mExamples:\x1b[0m  env.inspect(\"sn\")",
+      "            env.inspect(\"samp\")",
+      "            env.inspect(sn.current())",
+    ].join("\n"));
+  }
+
+  function envFunctionsHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36menv.functions(value)\x1b[0m",
+      "",
+      "  List callable members discovered on a runtime value using the same",
+      "  callable-property rules as tab completion.",
+      "",
+      "  \x1b[90mExamples:\x1b[0m  env.functions(sn)",
+      "            env.functions(\"samp\")",
+    ].join("\n"));
+  }
+
+  function getApiEntries(): Array<[string, unknown]> {
+    return Object.entries(api ?? {});
+  }
+
+  function makeEnvEntry(
+    name: string,
+    scope: EnvEntryScope,
+    value: unknown,
+  ): EnvEntrySummary {
+    return {
+      name,
+      scope,
+      typeLabel: getRuntimeTypeLabel(value),
+      callable: typeof value === "function",
+      preview: getRuntimePreview(value),
+    };
+  }
+
+  function formatEnvScopeTable(
+    title: string,
+    entries: EnvEntrySummary[],
+    emptyMessage: string,
+  ): string {
+    if (entries.length === 0) {
+      return [`\x1b[1;36m${title}\x1b[0m`, "", `\x1b[90m${emptyMessage}\x1b[0m`].join("\n");
+    }
+
+    const nameWidth = Math.max("Name".length, ...entries.map((entry) => entry.name.length));
+    const typeWidth = Math.max("Type".length, ...entries.map((entry) => entry.typeLabel.length));
+    const header =
+      `${"Name".padEnd(nameWidth + 2)}` +
+      `${"Type".padEnd(typeWidth + 2)}` +
+      `${"Callable".padEnd(10)}` +
+      "Preview";
+
+    const rows = entries.map((entry) =>
+      `${entry.name.padEnd(nameWidth + 2)}` +
+      `${entry.typeLabel.padEnd(typeWidth + 2)}` +
+      `${(entry.callable ? "yes" : "no").padEnd(10)}` +
+      entry.preview,
+    );
+
+    return [
+      `\x1b[1;36m${title}\x1b[0m`,
+      "",
+      header,
+      "─".repeat(header.length),
+      ...rows,
+    ].join("\n");
+  }
+
+  function formatEnvInspection(
+    name: string | undefined,
+    scope: EnvInspectScope,
+    value: unknown,
+  ): EnvInspectionResult {
+    const callableMembers =
+      value && (typeof value === "object" || typeof value === "function")
+        ? getCallablePropertyNames(value).sort()
+        : [];
+    const typeLabel = getRuntimeTypeLabel(value);
+    const callable = typeof value === "function";
+    const preview = getRuntimePreview(value);
+    const lines = [
+      `\x1b[1;36m${name ? `env.inspect(${name})` : "env.inspect(value)"}\x1b[0m`,
+      "",
+      name ? `  name:      ${name}` : "",
+      `  scope:     ${scope}`,
+      `  type:      ${typeLabel}`,
+      `  callable:  ${callable ? "yes" : "no"}`,
+      `  preview:   ${preview}`,
+      callableMembers.length > 0
+        ? `  methods:   ${callableMembers.slice(0, 8).join(", ")}${callableMembers.length > 8 ? ` … (+${callableMembers.length - 8})` : ""}`
+        : "  methods:   none",
+    ].filter(Boolean);
+
+    return new EnvInspectionResult(
+      lines.join("\n"),
+      name,
+      scope,
+      typeLabel,
+      callable,
+      preview,
+      callableMembers,
+      envInspectHelpText,
+    );
+  }
+
+  function resolveEnvTarget(nameOrValue: unknown): {
+    name: string | undefined;
+    scope: EnvInspectScope;
+    value: unknown;
+  } {
+    if (typeof nameOrValue === "string") {
+      if (deps.runtime?.hasScopeValue(nameOrValue)) {
+        return {
+          name: nameOrValue,
+          scope: "user",
+          value: deps.runtime.getScopeValue(nameOrValue),
+        };
+      }
+      const globalEntry = getApiEntries().find(([name]) => name === nameOrValue);
+      if (globalEntry) {
+        return {
+          name: nameOrValue,
+          scope: "global",
+          value: globalEntry[1],
+        };
+      }
+    }
+
+    return {
+      name: undefined,
+      scope: "value",
+      value: nameOrValue,
+    };
   }
 
   function sampleHelpText(sample: Sample): BounceResult {
@@ -1566,6 +1763,88 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "  \x1b[90mExample:\x1b[0m  sn.stop()",
     ].join("\n"));
 
+  const env = {
+    help(): BounceResult {
+      return envHelpText();
+    },
+
+    vars: Object.assign(
+      function vars(): EnvScopeResult {
+        const entries = (deps.runtime?.listScopeEntries() ?? [])
+          .map((entry) => makeEnvEntry(entry.name, "user", entry.value))
+          .sort((left, right) => left.name.localeCompare(right.name));
+
+        return new EnvScopeResult(
+          formatEnvScopeTable("Runtime Variables", entries, "No user-defined variables in scope."),
+          entries,
+          () => envScopeHelpText("vars"),
+        );
+      },
+      {
+        help: (): BounceResult => envScopeHelpText("vars"),
+      },
+    ),
+
+    globals: Object.assign(
+      function globals(): EnvScopeResult {
+        const entries = getApiEntries()
+          .map(([name, value]) => makeEnvEntry(name, "global", value))
+          .sort((left, right) => left.name.localeCompare(right.name));
+
+        return new EnvScopeResult(
+          formatEnvScopeTable("Bounce Globals", entries, "No globals available."),
+          entries,
+          () => envScopeHelpText("globals"),
+        );
+      },
+      {
+        help: (): BounceResult => envScopeHelpText("globals"),
+      },
+    ),
+
+    inspect: Object.assign(
+      function inspect(nameOrValue: unknown): EnvInspectionResult {
+        const target = resolveEnvTarget(nameOrValue);
+        return formatEnvInspection(target.name, target.scope, target.value);
+      },
+      {
+        help: (): BounceResult => envInspectHelpText(),
+      },
+    ),
+
+    functions: Object.assign(
+      function functions(nameOrValue: unknown): EnvFunctionListResult {
+        const target = resolveEnvTarget(nameOrValue);
+        const callableMembers =
+          target.value && (typeof target.value === "object" || typeof target.value === "function")
+            ? getCallablePropertyNames(target.value).sort()
+            : [];
+        const targetLabel = target.name ?? getRuntimeTypeLabel(target.value);
+        const display = callableMembers.length === 0
+          ? [
+              `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+              "",
+              "\x1b[90mNo callable members found.\x1b[0m",
+            ].join("\n")
+          : [
+              `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+              "",
+              ...callableMembers.map((name) => `  ${name}()`),
+            ].join("\n");
+
+        return new EnvFunctionListResult(
+          display,
+          getRuntimeTypeLabel(target.value),
+          callableMembers,
+          envFunctionsHelpText,
+        );
+      },
+      {
+        help: (): BounceResult => envFunctionsHelpText(),
+      },
+    ),
+  };
+
   const proj = new ProjectNamespace(
     [
       "\x1b[1;36mproj\x1b[0m — project namespace",
@@ -1759,6 +2038,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "\x1b[1;36m── Sample API ──\x1b[0m",
         "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .stop() .help()",
+        "  \x1b[33menv\x1b[0m                              Runtime introspection: .vars() .globals() .inspect() .functions()",
         "  \x1b[33mproj\x1b[0m                             Project namespace: .current() .list() .load() .rm() .help()",
         "  \x1b[33mSample\x1b[0m                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()",
         "                                   .slice() .sep() .granularize() .help()",
@@ -1772,11 +2052,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[33monsetSlice(options?)\x1b[0m             Legacy helper: vis waveform + onset overlay",
         "  \x1b[33mnmf(options?)\x1b[0m                    Legacy helper: vis waveform + NMF panel",
         "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
+        "  \x1b[33mdebug(limit?)\x1b[0m                   Show debug log entries",
+        "  \x1b[33mclearDebug()\x1b[0m                    Clear stored debug log entries",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
+        "  env.inspect(\"samp\")                                   \x1b[90m# inspect a binding\x1b[0m",
         "  proj.load(\"drums\")                                    \x1b[90m# switch project context\x1b[0m",
         "  const onsets = samp.onsets(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
         "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
@@ -2127,8 +2410,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ),
   };
 
-  return {
+  api = {
     sn,
+    env,
     vis,
     nx,
     visualizeNmf,
@@ -2143,4 +2427,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     fs,
     proj,
   };
+
+  return api;
 }
