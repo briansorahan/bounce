@@ -2,9 +2,6 @@
 
 See the brainstorming section for the full description of what each of these ideas actually entails.
 
-* Visualization
-* Projects
-* Runtime Introspection and Persistence
 * Audio Recording
 * Normalization
 * Scripts
@@ -12,6 +9,13 @@ See the brainstorming section for the full description of what each of these ide
 * Staging Area
 
 # Brainstorming
+
+## Multichannel Audio
+
+I'm wondering if there are any places in the codebase where we're intentionally ignoring
+multi-channel audio and only using the L/Mono channel?
+Maybe sn.read() does this?
+Would be nice to support multi-channel audio but it feels like it could be a big lift.
 
 ## Staging Area
 
@@ -54,13 +58,6 @@ from the REPL.
 This would probably mean that we need to define a javascript editor interface.
 Could be cool, but feels like a big lift!
 
-## Visualization
-
-Would be nice to figure out a vis API that would give users fine-grained control over
-how they are visualizing the data in Bounce.
-We already have some of this built out, but it just happens randomly when you're
-executing commands.
-
 ## Audio Recording
 
 I would love to be able to record samples directly into Bounce.
@@ -71,30 +68,6 @@ and selecting which one you want to use to record.
 
 I would like to be able to normalize a sample!
 There may be some other kinds of gain adjustments we could apply.
-
-## Runtime Introspection and Persistence
-
-There could be an API that allows you to see the variables you've defined in the current
-session along with their values.
-I also think that we should add a hook that fires when the application is closed.
-This hook should save the whole runtime environment for the project, so that
-when you start the app again and it loads the last project you were working on,
-all the variables and functions that you had defined are still there.
-
-## Projects
-
-All the state of the application could be stored in "projects".
-There would be a "default" project that is a fallback.
-There would be an API under the proj object:
-* proj.list(NAME)
-* proj.rm(NAME)
-* proj.load(NAME)
-
-The load function would create a new project if you specify a name that doesn't yet exist.
-Projects would save the state of the interpreter i.e. any variables/functions/etc that you
-had defined, as well as the state of the UI.
-
-I think the samples would also be organized into projects as well.
 
 ## Sample Lineage
 
@@ -126,3 +99,17 @@ Once you start a tutorial, there are globals added to the bounce REPL:
   * We would need to track that a sound is downloaded from freesound, and store the URL
   * Could prob fetch the license info from the URL?
   * Ability to generate an attribution document
+  
+## Ableton Link Integration
+
+* Prob comes after migrating all audio playback/voicing to a dedicated utility
+  process that runs a realtime audio thread.
+* What could we do with this?
+  * Sync to DAW
+  * Sync sample playback to transport?
+
+# Cleanup Tasks
+
+* sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
+* clearDebug() is still exposed through tab-completion.
+* vis builder pattern doesn't support tab completion for chained method calls.

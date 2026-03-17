@@ -36,6 +36,11 @@ import {
   LsResultPromise,
   GlobResultPromise,
   formatLsEntries,
+  InputsResult,
+  AudioDevice,
+  RecordingHandle,
+  type AudioInputDevice,
+  type RecordOptions,
 } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 import {
@@ -73,6 +78,9 @@ export {
   LsResultPromise,
   GlobResultPromise,
   GrainCollection,
+  InputsResult,
+  AudioDevice,
+  RecordingHandle,
 };
 
 export interface BounceApiDeps {
@@ -1692,6 +1700,111 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
   );
 
+  async function getAudioInputs(): Promise<AudioInputDevice[]> {
+    // Request permission by opening and immediately closing a stream so that
+    // device labels are populated in the subsequent enumerateDevices() call.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((d) => d.kind === "audioinput")
+      .map((d) => ({ deviceId: d.deviceId, label: d.label, groupId: d.groupId }));
+  }
+
+  function recordSample(
+    deviceId: string,
+    deviceLabel: string,
+    sampleId: string,
+    opts?: RecordOptions,
+  ): Promise<RecordingHandle> | SamplePromise {
+    const pipeline = async (): Promise<{ recorder: MediaRecorder; storagePromise: Promise<Sample> }> => {
+      const existing = await window.electron.getSampleByName(sampleId);
+      if (existing && !opts?.overwrite) {
+        throw new Error(
+          `Sample '${sampleId}' already exists. Use { overwrite: true } to replace it.`,
+        );
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false } as MediaTrackConstraints,
+      });
+
+      const chunks: Blob[] = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      const storagePromise = new Promise<Sample>((resolve, reject) => {
+        recorder.onstop = () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(chunks, { type: recorder.mimeType });
+          blob
+            .arrayBuffer()
+            .then((ab) => {
+              const audioCtx = new AudioContext();
+              return audioCtx.decodeAudioData(ab).then((decoded) => {
+                audioCtx.close();
+                return decoded;
+              });
+            })
+            .then(async (decoded) => {
+              const channelData = decoded.getChannelData(0);
+              const sr = decoded.sampleRate;
+              const ch = decoded.numberOfChannels;
+              const dur = channelData.length / sr;
+
+              const result = await window.electron.storeRecording(
+                sampleId,
+                Array.from(channelData),
+                sr,
+                ch,
+                dur,
+                opts?.overwrite ?? false,
+              );
+
+              if (result.status === "exists") {
+                throw new Error(`Sample '${sampleId}' already exists.`);
+              }
+
+              resolve(
+                bindSample({
+                  hash: result.hash!,
+                  filePath: sampleId,
+                  sampleRate: sr,
+                  channels: ch,
+                  duration: dur,
+                  id: result.id,
+                }),
+              );
+            })
+            .catch(reject);
+        };
+      });
+
+      recorder.start();
+      return { recorder, storagePromise };
+    };
+
+    if (opts?.duration !== undefined) {
+      const duration = opts.duration;
+      return new SamplePromise(
+        pipeline().then(({ recorder, storagePromise }) => {
+          setTimeout(() => recorder.stop(), duration * 1000);
+          return storagePromise;
+        }),
+      );
+    }
+
+    return pipeline().then(
+      ({ recorder, storagePromise }) =>
+        new RecordingHandle(deviceLabel, () => recorder.stop(), storagePromise),
+    );
+  }
+
   const sn = new SampleNamespace(
     [
       "\x1b[1;36msn\x1b[0m — sample namespace",
@@ -1700,6 +1813,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "  sn.list()             List stored samples and features",
       "  sn.current()          Return the currently loaded sample, if any",
       "  sn.stop()             Stop all active sample playback",
+      "  sn.inputs()           List available audio input devices",
+      "  sn.dev(index)         Open an audio input device for recording",
       "",
       "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), const samp = sn.read('x'); samp.help()",
     ].join("\n"),
@@ -1709,12 +1824,17 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "",
         "  Use sn.read() to create Sample objects. Samples then expose methods for",
         "  playback, analysis, resynthesis, and help.",
+        "  Use sn.inputs() and sn.dev() to record from a microphone or audio interface.",
         "",
         "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
         "           samp.loop()",
         "           sn.stop()",
         "           const feature = samp.nmf()",
         "           feature.sep()",
+        "           sn.inputs()",
+        "           const mic = sn.dev(0)",
+        "           const h = mic.record(\"take1\")",
+        "           h.stop()",
       ].join("\n")),
       read: (pathOrHash) => display(pathOrHash),
       list: () => list(),
@@ -1733,6 +1853,19 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         });
       },
       stop: () => stop(),
+      inputs: () => getAudioInputs().then((devs) => new InputsResult(devs)),
+      dev: async (index: number) => {
+        const devs = await getAudioInputs();
+        if (index < 0 || index >= devs.length) {
+          throw new Error(
+            `Device index ${index} out of range. Run sn.inputs() to see available devices (0–${devs.length - 1}).`,
+          );
+        }
+        const dev = devs[index];
+        return new AudioDevice(index, dev.deviceId, dev.label, 1, {
+          record: (sampleId, opts) => recordSample(dev.deviceId, dev.label, sampleId, opts),
+        });
+      },
     },
   );
 
@@ -1764,6 +1897,31 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       "  Stop all active sample playback and looping voices.",
       "",
       "  \x1b[90mExample:\x1b[0m  sn.stop()",
+    ].join("\n"));
+
+  (sn.inputs as typeof sn.inputs & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.inputs()\x1b[0m",
+      "",
+      "  List all available audio input devices.",
+      "  Triggers a microphone permission request on first call.",
+      "  Use the index shown to open a device with sn.dev(index).",
+      "",
+      "  \x1b[90mExample:\x1b[0m  sn.inputs()",
+      "           sn.dev(0)",
+    ].join("\n"));
+
+  (sn.dev as typeof sn.dev & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.dev(index)\x1b[0m",
+      "",
+      "  Open an audio input device by index (from sn.inputs()) and return an AudioDevice.",
+      "  Use AudioDevice.record() to start recording.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const mic = sn.dev(0)",
+      "           const h = mic.record(\"take1\")",
+      "           h.stop()",
+      "           mic.record(\"take2\", { duration: 5 })",
     ].join("\n"));
 
   const env = {

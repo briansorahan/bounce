@@ -644,6 +644,8 @@ export class ReplEvaluator {
     // For a single top-level expression statement, preserve the expression value.
     // For declarations / assignments / multi-statement input, run the transformed
     // body instead so top-level commands and initializers are automatically awaited.
+    // For a single-variable declaration (e.g. `const h = mic.record(...)`), also
+    // return the variable so its display text is printed to the terminal.
     const singleExpr = promoted.trim().replace(/;+$/, "");
     const singleStatements = splitTopLevelStatements(promoted).filter((statement) => statement.text.trim());
     let fn: (...args: unknown[]) => Promise<unknown>;
@@ -652,6 +654,13 @@ export class ReplEvaluator {
         "__scope__",
         ...bounceNames,
         `${prelude}\nconst __result__ = await (${singleExpr});\n${epilogue}\nreturn __result__;`,
+      );
+    } else if (singleStatements.length === 1 && declaredNames.length === 1) {
+      // Single-variable declaration: run the body and return the variable value for display.
+      fn = new AsyncFunction(
+        "__scope__",
+        ...bounceNames,
+        `${prelude}\n${autoAwaited}\n${epilogue}\nreturn ${declaredNames[0]};`,
       );
     } else {
       fn = new AsyncFunction("__scope__", ...bounceNames, `${prelude}\n${autoAwaited}\n${epilogue}`);

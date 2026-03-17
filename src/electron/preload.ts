@@ -102,4 +102,23 @@ contextBridge.exposeInMainWorld("electron", {
   fsGlob: (pattern: string): Promise<string[]> =>
     ipcRenderer.invoke("fs-glob", pattern),
   fsWalk: (dirPath: string) => ipcRenderer.invoke("fs-walk", dirPath),
+  getSampleByName: (name: string) =>
+    ipcRenderer.invoke("get-sample-by-name", name),
+  storeRecording: (
+    name: string,
+    audioData: number[],
+    sampleRate: number,
+    channels: number,
+    duration: number,
+    overwrite: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      "store-recording",
+      name,
+      audioData,
+      sampleRate,
+      channels,
+      duration,
+      overwrite,
+    ),
 });

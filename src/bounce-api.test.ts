@@ -13,6 +13,9 @@ import {
   EnvFunctionListResult,
   VisScene,
   VisStack,
+  InputsResult,
+  AudioDevice,
+  RecordingHandle,
 } from "./renderer/bounce-api.js";
 
 function makeTerminal(): { lines: string[]; cleared: boolean } & object {
@@ -181,6 +184,23 @@ const mockElectron = {
   debugLog: async () => {},
   saveReplEnv: async () => {},
   getReplEnv: async () => [],
+  getSampleByName: async (_name: string) => null,
+  storeRecording: async (
+    name: string,
+    _audioData: number[],
+    sampleRate: number,
+    channels: number,
+    duration: number,
+    _overwrite: boolean,
+  ) => ({
+    status: "ok" as const,
+    hash: "rec123abc",
+    id: 99,
+    sampleRate,
+    channels,
+    duration,
+    filePath: name,
+  }),
 };
 
 (globalThis as Record<string, unknown>).window = { electron: mockElectron };
@@ -387,6 +407,59 @@ async function main() {
 
   const corpusBuilt = await corpus.build(sn.read("/test.wav"));
   assert.ok(corpusBuilt instanceof BounceResult, "corpus.build accepts thenable sample sources");
+
+  // --- Recording namespace unit tests ---
+
+  // InputsResult
+  const inputsWithDevices = new InputsResult([
+    { deviceId: "dev1", label: "Built-in Microphone", groupId: "g1" },
+    { deviceId: "dev2", label: "Focusrite USB Audio", groupId: "g2" },
+  ]);
+  assert.ok(inputsWithDevices.toString().includes("Available audio inputs"), "InputsResult shows table header");
+  assert.ok(inputsWithDevices.toString().includes("[0]"), "InputsResult shows [0] index");
+  assert.ok(inputsWithDevices.toString().includes("Built-in Microphone"), "InputsResult shows device label");
+  assert.ok(inputsWithDevices.toString().includes("[1]"), "InputsResult shows [1] index");
+  assert.ok(inputsWithDevices.help().toString().includes("sn.inputs()"), "InputsResult.help shows sn.inputs()");
+  assert.ok(inputsWithDevices.help().toString().includes("sn.dev"), "InputsResult.help mentions sn.dev");
+
+  const inputsEmpty = new InputsResult([]);
+  assert.ok(inputsEmpty.toString().includes("No audio input devices"), "InputsResult empty state message");
+
+  // AudioDevice
+  const audioDev = new AudioDevice(0, "deviceId-abc123", "Built-in Microphone", 1, {
+    record: async () => new RecordingHandle("Built-in Microphone", () => {}, Promise.resolve({} as Sample)),
+  });
+  assert.ok(audioDev.toString().includes("AudioDevice [0]"), "AudioDevice toString includes index");
+  assert.ok(audioDev.toString().includes("Built-in Microphone"), "AudioDevice toString includes label");
+  assert.ok(audioDev.toString().includes("record("), "AudioDevice toString mentions record()");
+  assert.ok(audioDev.help().toString().includes("record("), "AudioDevice help describes record()");
+  assert.ok(audioDev.help().toString().includes("stop()"), "AudioDevice help mentions stop()");
+  assert.ok(audioDev.help().toString().includes("duration"), "AudioDevice help mentions duration option");
+
+  // RecordingHandle
+  let stopCalled = false;
+  const fakeSample = {} as Sample;
+  const handle = new RecordingHandle(
+    "Built-in Microphone",
+    () => { stopCalled = true; },
+    Promise.resolve(fakeSample),
+  );
+  assert.ok(handle.toString().includes("Recording"), "RecordingHandle toString shows recording status");
+  assert.ok(handle.toString().includes("Built-in Microphone"), "RecordingHandle toString shows device label");
+  assert.ok(handle.help().toString().includes("stop()"), "RecordingHandle help describes stop()");
+  assert.ok(handle.help().toString().includes("duration"), "RecordingHandle help mentions duration option");
+
+  const stoppedPromise = handle.stop();
+  assert.ok(stopCalled, "RecordingHandle.stop() calls the stop function");
+  assert.ok(stoppedPromise instanceof SamplePromise, "RecordingHandle.stop() returns SamplePromise");
+
+  // sn.inputs and sn.dev help text
+  const snObj = sn as typeof sn & { inputs: { help?: () => BounceResult }; dev: { help?: () => BounceResult } };
+  assert.ok(snObj.inputs.help, "sn.inputs has a help() method");
+  assert.ok(snObj.dev.help, "sn.dev has a help() method");
+  assert.ok(snObj.inputs.help!().toString().includes("sn.inputs()"), "sn.inputs.help contains sn.inputs()");
+  assert.ok(snObj.dev.help!().toString().includes("record("), "sn.dev.help mentions record(");
+  assert.ok(snObj.dev.help!().toString().includes("stop()"), "sn.dev.help mentions stop()");
 }
 
 main().catch((err) => {
