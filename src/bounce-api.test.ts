@@ -200,6 +200,7 @@ async function main() {
         [...runtimeScope.entries()].map(([name, value]) => ({ name, value })),
       hasScopeValue: (name: string) => runtimeScope.has(name),
       getScopeValue: (name: string) => runtimeScope.get(name),
+      serializeScope: () => [],
     },
   }) as Record<string, unknown>;
 
