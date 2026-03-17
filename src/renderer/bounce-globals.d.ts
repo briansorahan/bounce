@@ -172,6 +172,42 @@ declare class ProjectListResult extends BounceResult {
   help(): BounceResult;
 }
 
+type EnvEntryScope = "user" | "global";
+type EnvInspectScope = EnvEntryScope | "value";
+
+interface EnvEntrySummary {
+  name: string;
+  scope: EnvEntryScope;
+  typeLabel: string;
+  callable: boolean;
+  preview: string;
+}
+
+declare class EnvScopeResult extends BounceResult {
+  readonly entries: EnvEntrySummary[];
+  readonly length: number;
+  help(): BounceResult;
+  [Symbol.iterator](): Iterator<EnvEntrySummary>;
+}
+
+declare class EnvInspectionResult extends BounceResult {
+  readonly name: string | undefined;
+  readonly scope: EnvInspectScope;
+  readonly typeLabel: string;
+  readonly callable: boolean;
+  readonly preview: string;
+  readonly callableMembers: string[];
+  help(): BounceResult;
+}
+
+declare class EnvFunctionListResult extends BounceResult {
+  readonly targetType: string;
+  readonly functions: string[];
+  readonly length: number;
+  help(): BounceResult;
+  [Symbol.iterator](): Iterator<string>;
+}
+
 declare class GrainCollection extends BounceResult {
   length(): number;
   forEach(callback: (grain: Sample, index: number) => void | Promise<void>): Promise<void>;
@@ -197,6 +233,26 @@ interface SampleNamespace {
 }
 
 declare const sn: SampleNamespace;
+
+declare const env: {
+  help(): BounceResult;
+  vars: {
+    (): EnvScopeResult;
+    help(): BounceResult;
+  };
+  globals: {
+    (): EnvScopeResult;
+    help(): BounceResult;
+  };
+  inspect: {
+    (nameOrValue: unknown): EnvInspectionResult;
+    help(): BounceResult;
+  };
+  functions: {
+    (nameOrValue: unknown): EnvFunctionListResult;
+    help(): BounceResult;
+  };
+};
 
 interface ProjectNamespace {
   help(): BounceResult;

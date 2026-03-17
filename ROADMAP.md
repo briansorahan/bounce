@@ -33,6 +33,15 @@ maintain that?
 Probably not...
 Maybe the main database is _just_ for audio?
 
+I was thinking more about this feature last night.
+I was thinking how it's cool that we keep track of lineage for derived samples, but that
+sometimes the user might want to throw away the history and _just_ keep the resulting sample.
+Maybe this is an option that people could use when they copy samples from the session to
+the project? If this option is turned on, then the sample appears in the project db
+as a raw sample.
+Maybe this is actually how the copy should work by default?
+Maybe we don't care about tracking lineage for samples that get moved into a project?
+
 ## Multiline Editing
 
 I know that this does not work very well right now.
@@ -108,3 +117,12 @@ Once you start a tutorial, there are globals added to the bounce REPL:
 * next() goes to the next page in the tutorial
 * prev() goes back to the previous page in the tutorial
 * quit() exits the tutorial and deletes everything in the sandbox environment
+
+## Freesound Integration
+
+* Searching sounds from freesound.org
+* Downloading sounds
+* How do we honor the sound's license?
+  * We would need to track that a sound is downloaded from freesound, and store the URL
+  * Could prob fetch the license info from the URL?
+  * Ability to generate an attribution document

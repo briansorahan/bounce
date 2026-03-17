@@ -55,6 +55,11 @@ export class BounceApp {
       terminal: this.terminal,
       audioManager: this.audioManager,
       sceneManager: this.sceneManager,
+      runtime: {
+        listScopeEntries: () => this.replEvaluator.listScopeEntries(),
+        hasScopeValue: (name: string) => this.replEvaluator.hasScopeValue(name),
+        getScopeValue: (name: string) => this.replEvaluator.getScopeValue(name),
+      },
     });
     this.replEvaluator = new ReplEvaluator(bounceApi);
     this.completion.setApi(bounceApi);

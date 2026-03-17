@@ -31,7 +31,7 @@ npm run dev:electron
 # Run unit tests
 npm test
 
-# Run the Dockerized workflow locally, including Playwright e2e tests
+# Run the Dockerized tests locally, including Playwright e2e tests
 ./build.sh
 ```
 

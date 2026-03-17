@@ -3,6 +3,7 @@ import {
   isComplete,
   promoteDeclarations,
   getTopLevelVarNames,
+  getTopLevelFunctionDeclNames,
   checkReservedNames,
   autoAwaitTopLevel,
   ReplEvaluator,
@@ -81,6 +82,27 @@ function testGetTopLevelVarNames() {
 }
 
 // ---------------------------------------------------------------------------
+// getTopLevelFunctionDeclNames
+// ---------------------------------------------------------------------------
+
+function testGetTopLevelFunctionDeclNames() {
+  assert.deepStrictEqual(getTopLevelFunctionDeclNames("function foo() {}"), ["foo"]);
+  assert.deepStrictEqual(getTopLevelFunctionDeclNames("async function bar() {}"), ["bar"]);
+  assert.deepStrictEqual(
+    getTopLevelFunctionDeclNames("function foo() {}\nfunction baz() {}"),
+    ["foo", "baz"],
+  );
+  // Nested function declarations should NOT be extracted
+  assert.deepStrictEqual(getTopLevelFunctionDeclNames("function outer() { function inner() {} }"), ["outer"]);
+  // Anonymous function expressions should NOT be extracted
+  assert.deepStrictEqual(getTopLevelFunctionDeclNames("var f = function() {};"), []);
+  // Bounce globals should be excluded
+  assert.deepStrictEqual(getTopLevelFunctionDeclNames("function sn() {}"), []);
+
+  console.log("  getTopLevelFunctionDeclNames: all tests passed");
+}
+
+// ---------------------------------------------------------------------------
 // checkReservedNames
 // ---------------------------------------------------------------------------
 
@@ -120,6 +142,16 @@ function testCheckReservedNames() {
     () => checkReservedNames("const fs = {};"),
     /fs.*Bounce built-in/,
     "const fs throws",
+  );
+  assert.throws(
+    () => checkReservedNames("const env = {};"),
+    /env.*Bounce built-in/,
+    "const env throws",
+  );
+  assert.throws(
+    () => checkReservedNames("function debug() {}"),
+    /debug.*Bounce built-in/,
+    "function debug throws",
   );
 
   // Should NOT throw for non-globals or inner scope
@@ -249,6 +281,13 @@ async function testReplEvaluator() {
   await evaluator.evaluate("x = x + 1;");
   const r5 = await evaluator.evaluate("x");
   assert.strictEqual(r5, 43, "mutation persists across evals");
+  assert.strictEqual(evaluator.hasScopeValue("x"), true, "scope reports persisted variables");
+  assert.strictEqual(evaluator.getScopeValue("x"), 43, "scope lookup returns persisted value");
+  assert.deepStrictEqual(
+    evaluator.listScopeEntries().map((entry) => entry.name),
+    ["x", "y"],
+    "scope entries are listed in sorted order",
+  );
 
   // Transpile error surfaces
   await assert.rejects(
@@ -273,6 +312,7 @@ async function testReplEvaluator() {
   await evaluator.evaluate("let samp = makeSample();");
   const r9 = await evaluator.evaluate("samp.hash");
   assert.strictEqual(r9, "sample-123", "variable initializers store awaited values");
+  assert.strictEqual(evaluator.hasScopeValue("samp"), true, "awaited initializer stored in scope");
 
   await evaluator.evaluate("samp = makeSample();");
   const r10 = await evaluator.evaluate("samp.hash");
@@ -293,6 +333,18 @@ async function testReplEvaluator() {
     "awaitless chained calls execute through thenable wrappers",
   );
 
+  // Function declarations persist across evals
+  await evaluator.evaluate("function greet() { return 'hello'; }");
+  assert.strictEqual(evaluator.hasScopeValue("greet"), true, "function declaration stored in scope");
+  const r12 = await evaluator.evaluate("greet()");
+  assert.strictEqual(r12, "hello", "persisted function declaration is callable");
+
+  // Async function declarations also persist
+  await evaluator.evaluate("async function fetchVal() { return 42; }");
+  assert.strictEqual(evaluator.hasScopeValue("fetchVal"), true, "async function declaration stored in scope");
+  const r13 = await evaluator.evaluate("fetchVal()");
+  assert.strictEqual(r13, 42, "persisted async function declaration is callable");
+
   console.log("  ReplEvaluator: all tests passed");
 
   // Restore
@@ -308,6 +360,7 @@ async function main() {
   testIsComplete();
   testPromoteDeclarations();
   testGetTopLevelVarNames();
+  testGetTopLevelFunctionDeclNames();
   testCheckReservedNames();
   testAutoAwaitTopLevel();
   await testReplEvaluator();
