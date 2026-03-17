@@ -10,6 +10,13 @@ See the brainstorming section for the full description of what each of these ide
 
 # Brainstorming
 
+## Multichannel Audio
+
+I'm wondering if there are any places in the codebase where we're intentionally ignoring
+multi-channel audio and only using the L/Mono channel?
+Maybe sn.read() does this?
+Would be nice to support multi-channel audio but it feels like it could be a big lift.
+
 ## Staging Area
 
 The idea here would be that the audio stored in the main Bounce database is just stuff that the user
