@@ -2,9 +2,6 @@
 
 See the brainstorming section for the full description of what each of these ideas actually entails.
 
-* Visualization
-* Projects
-* Runtime Introspection and Persistence
 * Audio Recording
 * Normalization
 * Scripts
@@ -54,13 +51,6 @@ from the REPL.
 This would probably mean that we need to define a javascript editor interface.
 Could be cool, but feels like a big lift!
 
-## Visualization
-
-Would be nice to figure out a vis API that would give users fine-grained control over
-how they are visualizing the data in Bounce.
-We already have some of this built out, but it just happens randomly when you're
-executing commands.
-
 ## Audio Recording
 
 I would love to be able to record samples directly into Bounce.
@@ -71,30 +61,6 @@ and selecting which one you want to use to record.
 
 I would like to be able to normalize a sample!
 There may be some other kinds of gain adjustments we could apply.
-
-## Runtime Introspection and Persistence
-
-There could be an API that allows you to see the variables you've defined in the current
-session along with their values.
-I also think that we should add a hook that fires when the application is closed.
-This hook should save the whole runtime environment for the project, so that
-when you start the app again and it loads the last project you were working on,
-all the variables and functions that you had defined are still there.
-
-## Projects
-
-All the state of the application could be stored in "projects".
-There would be a "default" project that is a fallback.
-There would be an API under the proj object:
-* proj.list(NAME)
-* proj.rm(NAME)
-* proj.load(NAME)
-
-The load function would create a new project if you specify a name that doesn't yet exist.
-Projects would save the state of the interpreter i.e. any variables/functions/etc that you
-had defined, as well as the state of the UI.
-
-I think the samples would also be organized into projects as well.
 
 ## Sample Lineage
 
