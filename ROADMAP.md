@@ -99,6 +99,14 @@ Once you start a tutorial, there are globals added to the bounce REPL:
   * We would need to track that a sound is downloaded from freesound, and store the URL
   * Could prob fetch the license info from the URL?
   * Ability to generate an attribution document
+  
+## Ableton Link Integration
+
+* Prob comes after migrating all audio playback/voicing to a dedicated utility
+  process that runs a realtime audio thread.
+* What could we do with this?
+  * Sync to DAW
+  * Sync sample playback to transport?
 
 # Cleanup Tasks
 
