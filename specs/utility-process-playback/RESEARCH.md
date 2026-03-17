@@ -90,23 +90,15 @@ The user still needs responsive waveform feedback while playback runs in another
 
 ## Open Questions
 
-1. Which audio backend should the native engine use?
-   - Candidates include a custom backend layer, PortAudio, miniaudio, or another small cross-platform host API.
+All open questions resolved — see Research Findings below for decisions.
 
-2. Should the utility process host a Node native addon, or should it launch a thinner native helper process?
-   - Utility process + native addon appears to fit Bounce's existing Electron architecture best, but the final backend boundary is still open.
-
-3. What is the minimal MVP scope?
-   - Possibilities: polyphonic looping first, granular time-stretch second; or both in one transport redesign.
-
-4. Should the first version preserve the existing REPL transport API exactly, or introduce a richer transport object?
-
-5. What telemetry payload is sufficient for waveform visualization?
-   - Likely current playhead frame, loop region, sample hash/voice identifier, transport state, and dropped-event counters.
-
-6. How should sample preloading and cache eviction work for large corpora?
-
-7. Is stereo support part of this effort, or should the first version keep the current mono-oriented assumptions?
+~~1. Which audio backend should the native engine use?~~
+~~2. Should the utility process host a Node native addon, or should it launch a thinner native helper process?~~
+~~3. What is the minimal MVP scope?~~
+~~4. Should the first version preserve the existing REPL transport API exactly, or introduce a richer transport object?~~
+~~5. What telemetry payload is sufficient for waveform visualization?~~
+~~6. How should sample preloading and cache eviction work for large corpora?~~
+~~7. Is stereo support part of this effort, or should the first version keep the current mono-oriented assumptions?~~
 
 ## Research Findings
 
@@ -126,11 +118,39 @@ The user still needs responsive waveform feedback while playback runs in another
 
 8. A research-to-plan handoff should treat this as an architectural migration, not just an optimization. The work likely spans native code, main-process orchestration, preload/IPC design, renderer transport integration, caching, and validation strategy.
 
+9. **Audio backend: miniaudio.** Single-header C library, no additional build system complexity, strong cross-platform support (macOS, Linux, Windows). PortAudio is heavier and older; a custom backend would be a significant distraction.
+
+10. **Utility process structure: native addon inside the utility process.** This fits Bounce's existing node-gyp/N-API infrastructure and avoids introducing a second IPC boundary via a separate native helper process.
+
+11. **MVP scope: polyphonic looping only.** Granular time-stretch and spectral resynthesis are deferred to future specs that will build on this transport foundation. The MVP establishes the processor interface and audio thread infrastructure.
+
+12. **REPL API: preserve `sample.play()` and `sample.loop()` unchanged.** The utility process migration is a backend swap, not a user-facing API change. A richer transport object (e.g. a `Playback` handle) may be introduced in a future spec.
+
+13. **Telemetry payload: sample hash + playback position in samples (minimum).** This is sufficient for the renderer to update waveform cursors. Additional fields (loop region, voice count, dropped-event counters) may be added later.
+
+14. **Channel layout: mono for MVP.** Multichannel audio support is deferred to a separate spec. The MVP engine may be designed with channel count as a parameter, but only mono output is required initially.
+
+15. **Processor interface: polyphonic-by-default `AudioProcessor` abstraction**, inspired by CLAP's process model. Each processor manages its own voice pool internally. The interface:
+    ```cpp
+    class AudioProcessor {
+    public:
+        virtual void prepare(const float* pcm, int numSamples,
+                             double sampleRate, int maxBlockSize) = 0;
+        virtual void process(float** outputs, int numChannels,
+                             int numFrames, const EventQueue& inEvents) = 0;
+        virtual void reset() = 0;
+        virtual ~AudioProcessor() = default;
+    };
+    ```
+    Concrete implementations for MVP: `SamplePlaybackEngine`. Future implementations: `GranularEngine`, `SpectralEngine`.
+
+16. **Sample data ownership: each processor owns its PCM copy**, loaded during `prepare()` before the processor is added to the audio thread's active list. No shared sample cache in MVP; processors are self-contained. This avoids cache eviction complexity at the cost of duplicating data across simultaneous playbacks of the same sample — acceptable at Bounce's scale.
+
+17. **Processor lifecycle management: pre-allocated fixed pool with atomic flags** and a lock-free "add/remove" message queue. The audio thread applies lifecycle changes at the top of each callback. The UI thread enqueues add/remove messages; it never mutates the active processor list directly.
+
 ## Next Steps
 
-- Choose the MVP boundary for the first implementation phase.
-- Decide whether the native engine backend will be a C++ addon inside the utility process or a helper launched alongside it.
-- Define the control protocol between renderer, main process, utility process, and native engine.
-- Define the sample cache lifecycle, including how hashes map to preloaded buffers and how eviction works.
-- Decide whether the initial plan preserves the current REPL API or introduces new transport-visible objects.
-- Document testing strategy for transport correctness, cursor telemetry, and REPL-facing behavior in `PLAN.md`.
+- Write `PLAN.md` using the decisions above as the starting point.
+- Define the full IPC protocol: renderer → main → utility process → native engine (control messages) and native engine → utility process → main → renderer (telemetry).
+- Define the `EventQueue` type used in `AudioProcessor::process()`.
+- Document testing strategy for transport correctness, cursor telemetry, and REPL-facing behavior.
