@@ -126,3 +126,9 @@ Once you start a tutorial, there are globals added to the bounce REPL:
   * We would need to track that a sound is downloaded from freesound, and store the URL
   * Could prob fetch the license info from the URL?
   * Ability to generate an attribution document
+
+# Cleanup Tasks
+
+* sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
+* clearDebug() is still exposed through tab-completion.
+* vis builder pattern doesn't support tab completion for chained method calls.
