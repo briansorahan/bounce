@@ -58,12 +58,6 @@ from the REPL.
 This would probably mean that we need to define a javascript editor interface.
 Could be cool, but feels like a big lift!
 
-## Audio Recording
-
-I would love to be able to record samples directly into Bounce.
-I think this would necessitate an API for listing the system's audio input devices
-and selecting which one you want to use to record.
-
 ## Normalization
 
 I would like to be able to normalize a sample!
@@ -113,3 +107,4 @@ Once you start a tutorial, there are globals added to the bounce REPL:
 * sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
 * clearDebug() is still exposed through tab-completion.
 * vis builder pattern doesn't support tab completion for chained method calls.
+* Need to be able to do things like vis.waveform(sn.read(PATH)) i.e. shouldn't have to assign sn.read(PATH) to a variable
