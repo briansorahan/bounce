@@ -76,6 +76,18 @@ export class BounceApp {
       this.handleNMFOverlay(data);
     });
 
+    // Listen for native engine playback telemetry
+    if (window.electron.onPlaybackPosition) {
+      window.electron.onPlaybackPosition((hash, positionInSamples) => {
+        this.audioManager.updateNativePosition(hash, positionInSamples);
+      });
+    }
+    if (window.electron.onPlaybackEnded) {
+      window.electron.onPlaybackEnded((hash) => {
+        this.audioManager.removeNativePlayback(hash);
+      });
+    }
+
     window.addEventListener("bounce:project-changed", () => {
       void this.refreshForProject();
     });

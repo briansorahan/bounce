@@ -275,5 +275,9 @@ interface Window {
       duration: number,
       overwrite: boolean,
     ) => Promise<StoreRecordingResult>;
+    playSample: (hash: string, loop: boolean) => void;
+    stopSample: (hash?: string) => void;
+    onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
+    onPlaybackEnded: (callback: (hash: string) => void) => void;
   };
 }

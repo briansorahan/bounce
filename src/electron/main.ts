@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -25,6 +25,12 @@ import { SettingsStore } from "./settings-store";
 let dbManager: DatabaseManager | undefined = undefined;
 let settingsStore: SettingsStore | undefined = undefined;
 const corpusManager: CorpusManager = new CorpusManager();
+
+// ---------------------------------------------------------------------------
+// Audio engine utility process state
+// ---------------------------------------------------------------------------
+let audioEngineProcess: UtilityProcess | null = null;
+let audioEnginePort: Electron.MessagePortMain | null = null;
 
 const userDataOverride = process.env.BOUNCE_USER_DATA_PATH;
 if (userDataOverride) {
@@ -61,6 +67,8 @@ function createWindow() {
 
   mainWindow.maximize();
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+
+  startAudioEngineProcess(mainWindow);
 }
 
 ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
@@ -879,6 +887,74 @@ ipcMain.handle(
 );
 
 
+// ---------------------------------------------------------------------------
+// Audio engine utility process
+// ---------------------------------------------------------------------------
+function startAudioEngineProcess(mainWindow: BrowserWindow): void {
+  const scriptPath = path.join(__dirname, "../utility/audio-engine-process.js");
+
+  const { port1, port2 } = new MessageChannelMain();
+  audioEnginePort = port2;
+
+  audioEngineProcess = utilityProcess.fork(scriptPath, [], {
+    serviceName: "bounce-audio-engine",
+  });
+
+  // Transfer port1 to the utility process so it can receive control messages
+  audioEngineProcess.postMessage({ type: "init" }, [port1]);
+
+  // Listen for telemetry on port2
+  port2.on("message", (event) => {
+    const data = event.data as { type: string; sampleHash?: string; positionInSamples?: number };
+    if (data.type === "position" && data.sampleHash !== undefined) {
+      mainWindow.webContents.send("playback-position", {
+        hash: data.sampleHash,
+        positionInSamples: data.positionInSamples ?? 0,
+      });
+    } else if (data.type === "ended" && data.sampleHash !== undefined) {
+      mainWindow.webContents.send("playback-ended", { hash: data.sampleHash });
+    }
+  });
+  port2.start();
+
+  audioEngineProcess.on("exit", (code) => {
+    console.error(`[main] Audio engine process exited with code ${code}. Audio playback unavailable.`);
+    audioEngineProcess = null;
+    audioEnginePort = null;
+  });
+}
+
+ipcMain.on("play-sample", (_event, payload: { hash: string; loop: boolean }) => {
+  if (!dbManager || !audioEnginePort) return;
+
+  const sample = dbManager.getSampleByHash(payload.hash);
+  if (!sample || !sample.audio_data) {
+    console.error(`[main] play-sample: sample not found for hash ${payload.hash}`);
+    return;
+  }
+
+  const pcm = new Float32Array(
+    sample.audio_data.buffer,
+    sample.audio_data.byteOffset,
+    sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+  );
+
+  // Transfer the ArrayBuffer zero-copy to the utility process
+  const pcmCopy = new Float32Array(pcm);
+  audioEnginePort.postMessage(
+    { type: "play", sampleHash: payload.hash, pcm: pcmCopy, sampleRate: sample.sample_rate, loop: payload.loop },
+  );
+});
+
+ipcMain.on("stop-sample", (_event, payload?: { hash?: string }) => {
+  if (!audioEnginePort) return;
+  if (payload?.hash) {
+    audioEnginePort.postMessage({ type: "stop", sampleHash: payload.hash });
+  } else {
+    audioEnginePort.postMessage({ type: "stop-all" });
+  }
+});
+
 app.whenReady().then(() => {
   settingsStore = new SettingsStore();
   dbManager = new DatabaseManager();
@@ -914,6 +990,10 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  if (audioEngineProcess) {
+    audioEngineProcess.kill();
+    audioEngineProcess = null;
+  }
   if (dbManager) {
     dbManager.close();
   }
