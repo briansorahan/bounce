@@ -10,3 +10,6 @@
 [submodule "third_party/memory"]
 	path = third_party/memory
 	url = git@github.com:briansorahan/memory
+[submodule "third_party/miniaudio"]
+	path = third_party/miniaudio
+	url = https://github.com/mackron/miniaudio.git
