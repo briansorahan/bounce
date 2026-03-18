@@ -919,8 +919,9 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   audioEngineProcess.on("exit", (code) => {
     console.error(`[main] Audio engine process exited with code ${code}. Audio playback unavailable.`);
-    audioEngineProcess = null;
+    audioEnginePort?.close();
     audioEnginePort = null;
+    audioEngineProcess = null;
   });
 }
 
@@ -990,6 +991,11 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  // Close the MessagePort first — it's an active handle that keeps the event
+  // loop alive and would prevent app.quit() from completing if left open.
+  audioEnginePort?.close();
+  audioEnginePort = null;
+
   if (audioEngineProcess) {
     audioEngineProcess.kill();
     audioEngineProcess = null;

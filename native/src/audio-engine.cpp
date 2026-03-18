@@ -72,7 +72,9 @@ void AudioEngine::stop() {
     device_.reset();
 
     telemetryRunning_.store(false);
-    if (telemetryThread_.joinable()) telemetryThread_.join();
+    // Detach rather than join — avoids blocking if the process is exiting
+    // and the thread hasn't woken from its sleep yet.
+    if (telemetryThread_.joinable()) telemetryThread_.detach();
 }
 
 // ---------------------------------------------------------------------------

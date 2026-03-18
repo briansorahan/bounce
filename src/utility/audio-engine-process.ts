@@ -100,6 +100,9 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     }
   });
 
+  // When main closes its end of the channel, exit cleanly.
+  port.once("close", () => process.exit(0));
+
   // MessagePort in Node.js needs start() when using the EventEmitter API
   port.start();
 });
@@ -107,5 +110,5 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
 // Start receiving messages from the main process
 (parentPort as Electron.ParentPort & { start?: () => void }).start?.();
 
-// Ensure clean exit when the main process terminates
-process.once("SIGTERM", () => process.exit(0));
+// Force-exit on SIGTERM — avoids blocking in audio device destructor cleanup.
+process.once("SIGTERM", () => process.kill(process.pid, "SIGKILL"));
