@@ -1,18 +1,7 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.2) {
   const sampleRate = 44100;
@@ -64,21 +53,10 @@ test.describe("Audio Commands", () => {
     const testFile = path.join(testDir, "read-no-viz.wav");
     createTestWavFile(testFile);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `sn.read("${testFile}")`);
 
@@ -92,21 +70,10 @@ test.describe("Audio Commands", () => {
   });
 
   test("sn.read should reject non-audio files", async () => {
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, 'sn.read("file.txt")');
 
@@ -122,21 +89,10 @@ test.describe("Audio Commands", () => {
     const testFile = path.join(testDir, "play-no-viz.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.play()");
@@ -154,21 +110,10 @@ test.describe("Audio Commands", () => {
     const testFile = path.join(testDir, "stop.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.play()");
@@ -184,21 +129,10 @@ test.describe("Audio Commands", () => {
   });
 
   test("help command should show available commands", async () => {
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "help()");
 
@@ -210,21 +144,10 @@ test.describe("Audio Commands", () => {
   });
 
   test("clear command should clear terminal", async () => {
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "help()");
     await expect(window.locator(".xterm-rows")).toContainText(

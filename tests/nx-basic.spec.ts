@@ -58,8 +58,6 @@ test.describe("NMF Cross-Synthesis Basic", () => {
       audioPath,
     );
 
-    await window.waitForTimeout(500);
-
     const samples1 = await window.evaluate(async () => {
       return await window.electron.listSamples();
     });
@@ -77,7 +75,6 @@ test.describe("NMF Cross-Synthesis Basic", () => {
     }, sample1Hash);
 
     expect(analyzeResult.success).toBe(true);
-    await window.waitForTimeout(1000);
 
     // Load second time as target
     await window.evaluate(
@@ -86,8 +83,6 @@ test.describe("NMF Cross-Synthesis Basic", () => {
       },
       audioPath,
     );
-
-    await window.waitForTimeout(500);
 
     const samples2 = await window.evaluate(async () => {
       return await window.electron.listSamples();

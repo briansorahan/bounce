@@ -55,6 +55,7 @@ export class BounceApp {
       terminal: this.terminal,
       audioManager: this.audioManager,
       sceneManager: this.sceneManager,
+      onProjectLoad: () => this.refreshForProject(),
       runtime: {
         listScopeEntries: () => this.replEvaluator.listScopeEntries(),
         hasScopeValue: (name: string) => this.replEvaluator.hasScopeValue(name),
@@ -87,10 +88,6 @@ export class BounceApp {
         this.audioManager.removeNativePlayback(hash);
       });
     }
-
-    window.addEventListener("bounce:project-changed", () => {
-      void this.refreshForProject();
-    });
 
     window.addEventListener("beforeunload", () => {
       const entries = this.replEvaluator.serializeScope();

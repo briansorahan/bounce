@@ -1,18 +1,7 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
   const sampleRate = 44100;
@@ -66,21 +55,10 @@ test.describe("Onset Slice Analysis", () => {
     const testFile = path.join(__dirname, "test-onset-audio.wav");
     createTestWavFile(testFile, 0.5);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.onsets()");
@@ -112,21 +90,10 @@ test.describe("Onset Slice Analysis", () => {
     const testFile = path.join(__dirname, "test-multi-analysis.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     // First analysis
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
@@ -188,21 +155,10 @@ test.describe("Onset Slice Analysis", () => {
     createTestWavFile(firstFile, 0.25);
     createTestWavFile(secondFile, 0.35);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const a = sn.read("${firstFile}")`);
     await sendCommand(window, `const b = sn.read("${secondFile}")`);

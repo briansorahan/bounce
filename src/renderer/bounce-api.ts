@@ -87,6 +87,8 @@ export interface BounceApiDeps {
   terminal: BounceTerminal;
   audioManager: AudioManager;
   sceneManager?: VisualizationSceneManager;
+  /** Called after a project switch so proj.load() can await the full refresh. */
+  onProjectLoad?: () => Promise<void>;
   runtime?: {
     listScopeEntries(): RuntimeScopeEntry[];
     hasScopeValue(name: string): boolean;
@@ -2081,7 +2083,11 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
           await window.electron.saveReplEnv(entries);
         }
         const project = await window.electron.loadProject(name);
-        dispatchProjectChanged();
+        if (deps.onProjectLoad) {
+          await deps.onProjectLoad();
+        } else {
+          dispatchProjectChanged();
+        }
         return bindProject(project, "Loaded Project");
       },
       rm: async (name: string) => {

@@ -1,18 +1,7 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 1.0) {
   const sampleRate = 44100;
@@ -53,22 +42,11 @@ test.describe("Granularize", () => {
     const testFile = path.join(__dirname, "test-granularize.wav");
     createTestWavFile(testFile, 1.0);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     try {
       const window = await electronApp.firstWindow();
-      await window.waitForTimeout(1000);
+      await waitForReady(window);
 
       await sendCommand(window, `const samp = sn.read("${testFile}")`);
 
@@ -122,22 +100,11 @@ test.describe("Granularize", () => {
     const testFile = path.join(__dirname, "test-granularize-long.wav");
     createTestWavFile(testFile, 0.5); // short file; we fake the check via a hash manipulation test
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     try {
       const window = await electronApp.firstWindow();
-      await window.waitForTimeout(1000);
+      await waitForReady(window);
 
       // Pass a non-existent hash — should surface a clear error in the terminal
       await sendCommand(window, `sn.read("nonexistenthash00")`);

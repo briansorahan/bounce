@@ -1,28 +1,11 @@
-import { test, expect, _electron as electron } from "@playwright/test";
-import * as path from "path";
-
-const electronPath = require("electron") as string;
-
-async function launchApp() {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-    },
-  });
-}
+import { test, expect } from "@playwright/test";
+import { launchApp, waitForReady } from "./helpers";
 
 test.describe("Tab completion", () => {
   test("ghost text appears inline for a single-match partial method name", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     // Type a partial method name that has exactly one match: sn.read
     await window.keyboard.type("sn.rea");
@@ -39,7 +22,7 @@ test.describe("Tab completion", () => {
   test("Tab accepts a single-match completion and updates the input buffer", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await window.keyboard.type("sn.rea");
     await window.waitForTimeout(300);
@@ -58,7 +41,7 @@ test.describe("Tab completion", () => {
   test("Tab on a multi-match prefix shows a completion list", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     // "sn." matches multiple methods
     await window.keyboard.type("sn.");
@@ -78,7 +61,7 @@ test.describe("Tab completion", () => {
   test("pressing Tab repeatedly cycles through multi-match candidates", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await window.keyboard.type("sn.");
     await window.waitForTimeout(300);
@@ -104,7 +87,7 @@ test.describe("Tab completion", () => {
   test("ghost text disappears after submitting a command", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     // Type partial input to trigger ghost text
     await window.keyboard.type("sn.rea");
@@ -116,7 +99,6 @@ test.describe("Tab completion", () => {
 
     // Submit the completed command
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
 
     // After submission the prompt line is new; the ghost text rows should be gone
     await expect(window.locator(".xterm-rows")).not.toContainText("> read()", {

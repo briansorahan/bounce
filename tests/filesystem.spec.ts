@@ -1,32 +1,8 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-
-const electronPath = require("electron") as string;
-
-async function launchApp() {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-    },
-  });
-}
-
-async function sendCommand(window: any, command: string): Promise<void> {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) throw new Error("__bounceExecuteCommand not exposed");
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 /** Call a window.electron IPC method directly, bypassing the REPL. */
 async function callIpc<T>(
@@ -52,7 +28,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.pwd() returns an absolute path via REPL", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const cwd = await callIpc<string>(window, "fsPwd");
     expect(cwd).toMatch(/\/|[A-Za-z]:\\/);
@@ -63,7 +39,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.cd() changes the working directory", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const tmpDir = os.tmpdir();
     const newCwd = await callIpc<string>(window, "fsCd", tmpDir);
@@ -75,7 +51,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.cd() rejects a non-existent path", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     let threw = false;
     try {
@@ -95,7 +71,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.ls() lists directory contents", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const projectRoot = path.join(__dirname, "..");
     const result = await callIpc<{ entries: Array<{ name: string }>; total: number; truncated: boolean }>(
@@ -118,7 +94,7 @@ test.describe("Filesystem utilities", () => {
     try {
       const electronApp = await launchApp();
       const window = await electronApp.firstWindow();
-      await window.waitForTimeout(1000);
+      await waitForReady(window);
 
       const lsResult = await callIpc<{ entries: Array<{ name: string }> }>(
         window,
@@ -143,7 +119,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.glob() returns matched paths", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     // cd first so glob resolves against project root
     const projectRoot = path.join(__dirname, "..");
@@ -160,7 +136,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.walk() returns file entries for a directory", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const testsDir = path.join(__dirname, "..", "tests");
     const result = await callIpc<{ entries: Array<{ path: string; type: string }>; truncated: boolean }>(
@@ -179,7 +155,7 @@ test.describe("Filesystem utilities", () => {
   test("fs.walk() entries include correct FileType values", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const testsDir = path.join(__dirname, "..", "tests");
     const result = await callIpc<{ entries: Array<{ path: string; type: string }> }>(
@@ -210,7 +186,7 @@ test.describe("Filesystem utilities", () => {
 
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `fs.cd(${JSON.stringify(tmpDir)})`);
     await sendCommand(window, 'const samp = sn.read("test.wav")');
