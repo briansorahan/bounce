@@ -32,6 +32,21 @@ const corpusManager: CorpusManager = new CorpusManager();
 let audioEngineProcess: UtilityProcess | null = null;
 let audioEnginePort: Electron.MessagePortMain | null = null;
 
+function shutdownRuntimeResources(): void {
+  audioEnginePort?.close();
+  audioEnginePort = null;
+
+  if (audioEngineProcess) {
+    audioEngineProcess.kill();
+    audioEngineProcess = null;
+  }
+
+  if (dbManager) {
+    dbManager.close();
+    dbManager = undefined;
+  }
+}
+
 const userDataOverride = process.env.BOUNCE_USER_DATA_PATH;
 if (userDataOverride) {
   fs.mkdirSync(userDataOverride, { recursive: true });
@@ -990,19 +1005,12 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("window-all-closed", () => {
-  // Close the MessagePort first — it's an active handle that keeps the event
-  // loop alive and would prevent app.quit() from completing if left open.
-  audioEnginePort?.close();
-  audioEnginePort = null;
+app.on("before-quit", () => {
+  shutdownRuntimeResources();
+});
 
-  if (audioEngineProcess) {
-    audioEngineProcess.kill();
-    audioEngineProcess = null;
-  }
-  if (dbManager) {
-    dbManager.close();
-  }
+app.on("window-all-closed", () => {
+  shutdownRuntimeResources();
   if (process.platform !== "darwin") {
     app.quit();
   }

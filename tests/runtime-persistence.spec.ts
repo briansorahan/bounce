@@ -101,19 +101,13 @@ test.describe("Runtime environment persistence", () => {
     await sendCommand(window, "var x = 2");
     await sendCommand(window, 'proj.load("default")');
 
-    // Back in project A — x should be 1
-    await sendCommand(window, "x");
-
-    // Use toPass to retry until xterm.js flushes its async render cycle and
-    // the evaluation result appears in the DOM. Without this, textContent()
-    // can be read before the "1" is painted, leaving "commands: 2" from the
-    // project-load display as the last digit match.
-    await expect(async () => {
-      const terminalText = await window.locator(".xterm-rows").textContent();
-      const matches = [...(terminalText ?? "").matchAll(/\b(1|2)\b/g)];
-      const lastMatch = matches[matches.length - 1];
-      expect(lastMatch?.[0]).toBe("1");
-    }).toPass({ timeout: 5000 });
+    // Back in project A — x should be 1.
+    // Use a sentinel string so assertion is stable even when xterm row text is
+    // flattened without hard line breaks.
+    await sendCommand(window, '"__SCOPE_CHECK__" + (x === 1 ? "YES" : "NO")');
+    await expect(window.locator(".xterm-rows")).toContainText("__SCOPE_CHECK__YES", {
+      timeout: 5000,
+    });
 
     await electronApp.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });

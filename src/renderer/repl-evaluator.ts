@@ -518,6 +518,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
 export class ReplEvaluator {
   private scopeVars = new Map<string, unknown>();
   private functionSources = new Map<string, string>();
+  private scopeEpoch = 0;
 
   constructor(private bounceApi: Record<string, unknown>) {}
 
@@ -604,6 +605,7 @@ export class ReplEvaluator {
   clearScope(): void {
     this.scopeVars.clear();
     this.functionSources.clear();
+    this.scopeEpoch += 1;
   }
 
   async evaluate(source: string): Promise<unknown> {
@@ -666,6 +668,19 @@ export class ReplEvaluator {
       fn = new AsyncFunction("__scope__", ...bounceNames, `${prelude}\n${autoAwaited}\n${epilogue}`);
     }
 
-    return await fn(this.scopeVars, ...bounceValues);
+    const evalScopeEpoch = this.scopeEpoch;
+    const evalScope = {
+      has: (name: string) => this.scopeVars.has(name),
+      get: (name: string) => this.scopeVars.get(name),
+      set: (name: string, value: unknown) => {
+        if (this.scopeEpoch !== evalScopeEpoch) {
+          return this.scopeVars;
+        }
+        this.scopeVars.set(name, value);
+        return this.scopeVars;
+      },
+    };
+
+    return await fn(evalScope, ...bounceValues);
   }
 }

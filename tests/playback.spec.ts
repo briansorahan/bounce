@@ -13,6 +13,13 @@ async function getPlaybackStates(window: any): Promise<Array<{ hash: string | nu
   });
 }
 
+function getLoopAwareAdvance(previous: number, current: number, totalSamples: number): number {
+  if (totalSamples <= 0) {
+    return 0;
+  }
+  return ((current - previous) % totalSamples + totalSamples) % totalSamples;
+}
+
 function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
   const sampleRate = 44100;
   const numSamples = Math.floor(sampleRate * durationSeconds);
@@ -264,8 +271,18 @@ test.describe("Playback and Visualization", () => {
     const secondPlaybackB = firstStateB.find((state) => state.hash === secondPlaybackA?.hash);
     expect(firstPlaybackB).toBeTruthy();
     expect(secondPlaybackB).toBeTruthy();
-    expect(firstPlaybackB!.position).toBeGreaterThan(firstPlaybackA!.position);
-    expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
+    expect(
+      getLoopAwareAdvance(
+        firstPlaybackA!.position,
+        firstPlaybackB!.position,
+        firstPlaybackA!.totalSamples,
+      ),
+    ).toBeGreaterThan(0);
+    if (secondPlaybackA!.position < secondPlaybackA!.totalSamples) {
+      expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
+    } else {
+      expect(secondPlaybackB!.position).toBe(secondPlaybackA!.position);
+    }
 
     await sendCommand(window, "samp1.stop()");
     await sendCommand(window, "samp2.stop()");
