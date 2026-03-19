@@ -16,6 +16,16 @@ See the brainstorming section for the full description of what each of these ide
 
 # Brainstorming
 
+## User Configuration
+
+What all would we want to support here?
+
+### Appearance and Layout
+
+* Color schemes
+* Fonts
+* Customized prompt similar to the way folks configure PS1 for other terminal emulators
+
 ## Multichannel Audio
 
 I'm wondering if there are any places in the codebase where we're intentionally ignoring
@@ -122,9 +132,165 @@ Once you start a tutorial, there are globals added to the bounce REPL:
   * Sync sample playback to transport?
 * The live-coding instrument that we support within the audio utility process will sync with Link
 
+# AI-Generated Future Ideas
+
+## Semantic Audio Search
+
+Embed audio segments using a local model (CLAP-style audio embeddings) so you can query your corpus
+with natural language: `corpus.search("warm pad with slow attack")`. FluCoMa's KDTree is already
+there; the embedding pipeline is the missing layer.
+
+## 3D Corpus Map
+
+UMAP/t-SNE dimensionality reduction on MFCC/spectral features rendered as a navigable 3D point
+cloud in the terminal (sixel graphics or a separate WebGL window). Click a point → play the slice.
+Spatially explore your entire sample library.
+
+## Evolutionary Corpus Search
+
+"Breed" sounds by combining nearest neighbors. `corpus.breed(a, b)` finds slices that are
+spectrally between two sources, enabling gradient-based navigation through timbre space.
+
+## Rhythmic Pattern Mining
+
+Extract onset grids, quantize to tempo, and find recurring rhythmic motifs across a corpus.
+Output a "groove DNA" you can transpose to other sources.
+
+## Timbral Lineage Graph
+
+Track derivation: which slices came from which originals, which components from which NMF run.
+Visualize as a DAG in the terminal. `sample.lineage()` would be uniquely powerful.
+
+## Instrument / Role Classifier
+
+On-device classifier (tiny ONNX model) that labels each segment: pitched/percussive/noise, or
+instrument family. Automatically tag your corpus on import.
+
+## Loudness & Dynamics Fingerprint
+
+Not just RMS — full LUFS trajectory, crest factor curves, and transient density.
+`sample.dynamics()` as a counterpart to `.mfcc()`.
+
+## Live-Coding Instrument Mode
+
+Ableton Link sync (already on the roadmap) combined with a percussion pattern DSL:
+
+```js
+link.bpm(120)
+pattern("x . x x . x . .").play(corpus.slice(3))
+```
+
+No other terminal-based tool lets you do this.
+
+## Reactive Variables
+
+Observable bindings that re-run downstream analysis when their dependency changes.
+Change a sample → onsets recalculate → corpus rebuilds. Like a spreadsheet for audio.
+
+## REPL Notebook Mode
+
+Interleaved markdown cells + audio REPL cells (Jupyter for sound design). Cells are saved
+per-project, shareable as `.bnb` files. Reproducible experiments.
+
+## OSC Output
+
+`corpus.query(5).osc("localhost:57120")` fires OSC messages to SuperCollider/Max/MSP.
+Bridge the terminal world with hardware/DAW ecosystems.
+
+## Export to Code
+
+`session.export("supercollider")` or `session.export("maxmsp")` generates idiomatic code
+from your REPL session. Teach through reverse-engineering your own workflow.
+
+## Real-Time Spectrogram in Terminal
+
+Using sixel protocol or Unicode block chars, render a scrolling spectrogram directly in xterm.
+Most tools require a separate GUI window; doing this in-terminal would be iconic.
+
+## Waveform Diff
+
+`vis.diff(sampleA, sampleB)` — side-by-side spectral comparison highlighting where two sounds
+diverge. Essential for iteration-heavy sound design.
+
+## Animated Corpus Similarity Network
+
+Force-directed graph of samples where proximity = timbral similarity. Samples that share spectral
+features cluster together in real time as you add to your library.
+
+## LLM REPL Co-pilot
+
+Natural language → REPL command translation, running locally (Ollama).
+`bounce: "split this into beats and find 3 similar textures"` → generates and executes the REPL
+commands. Keeps data local, no API keys.
+
+## Parameter Suggestion Engine
+
+After running `sample.onsets()`, the system suggests NMF component count based on the spectral
+complexity it observed. Reduces the "what settings do I use?" friction for new users.
+
+## Anomaly Detection
+
+Flag outlier slices in a corpus automatically. Slices that are spectrally unlike the rest of the
+library are surfaced so users can decide whether to keep them as wildcards or remove them as noise.
+
+## Streaming Audio Pipeline
+
+Process audio in chunks as it's recorded/loaded, so analysis starts before the file is fully read.
+Critical for long-form or live-input workflows.
+
+## Plugin System
+
+User-installable FluCoMa algorithm wrappers as npm packages.
+`npm install bounce-plugin-pitch` → `sample.pitch()` appears in the REPL. Open ecosystem.
+
 # Cleanup Tasks
 
-* sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
-* clearDebug() is still exposed through tab-completion.
+## Tab Completion
+
+* clearDebug() is still exposed through tab-completion. Also need to remove things like helpFactory().
+  * General audit to make sure everything showing up in tab completion is stuff we want to expose to users.
+  * Also need to remove toString() from tab completion
 * vis builder pattern doesn't support tab completion for chained method calls.
+* We don't support tab completion for method calls that are not the outer most call, e.g. the sn.read() within vis.waveform() above
+
+## sn.help()
+
+* sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
+
+## Cleanup help() Output and Remove Legacy Functions
+
+Current output (minus the example code):
+```
+── Sample API ──
+  sn                               Sample namespace: .read() .list() .current() .stop() .help()
+  env                              Runtime introspection: .vars() .globals() .inspect() .functions()
+  proj                             Project namespace: .current() .list() .load() .rm() .help()
+  Sample                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()
+                                   .slice() .sep() .granularize() .help()
+  vis                              Visualization namespace: .waveform() .list() .remove() .clear()
+  nx(options)                      NMF cross-synthesis
+  corpus                           KDTree corpus: .build() .query() .resynthesize()
+
+── Utilities ──
+  visualizeNmf(options?)           Legacy helper: vis waveform + NMF overlay
+  visualizeNx(options?)            Legacy helper for NX visualization
+  onsetSlice(options?)             Legacy helper: vis waveform + onset overlay
+  nmf(options?)                    Legacy helper: vis waveform + NMF panel
+  fs                               Filesystem: .ls .la .cd .pwd .glob .walk
+  debug(limit?)                   Show debug log entries
+  clearDebug()                    Clear stored debug log entries
+  help()                           Show this help message
+  clear()                          Clear the terminal screen
+```
+
+* Remove visualizeNmf, visualizeNx, onsetSlice, nmf.
+* Do not show debug() or clearDebug(). We can document these in developer docs in a markdown file in the repo.
+* Sample API is a stupid heading.
+  * I don't think we should document the Sample type.
+  * Things like proj and vis are not just part of the sample API.
+  * Where does nx belong?
+  * Maybe we don't really need headings?
+
+## General Typescript Functionality
+
 * Need to be able to do things like vis.waveform(sn.read(PATH)) i.e. shouldn't have to assign sn.read(PATH) to a variable

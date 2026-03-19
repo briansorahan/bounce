@@ -12,6 +12,7 @@ import {
   EnvInspectionResult,
   EnvFunctionListResult,
   VisScene,
+  VisScenePromise,
   VisStack,
   InputsResult,
   AudioDevice,
@@ -252,7 +253,7 @@ async function main() {
   };
   const vis = api.vis as {
     help(): BounceResult;
-    waveform(sample: Sample): VisScene;
+    waveform(sample: Sample | PromiseLike<Sample>): VisScene | VisScenePromise;
     stack(): VisStack;
   };
   const proj = api.proj as {
@@ -355,6 +356,14 @@ async function main() {
   assert.equal(scene.overlay(onsetFeature), scene, "scene.overlay chains");
   assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
   assert.ok(scene.help().toString().includes("scene.show()"), "VisScene help describes show()");
+
+  const samplePromise = sn.read("abcdef1234567890");
+  const scenePromise = vis.waveform(samplePromise);
+  assert.ok(scenePromise instanceof VisScenePromise, "vis.waveform(SamplePromise) returns VisScenePromise");
+  assert.ok(vis.waveform(samplePromise).title("test") instanceof VisScenePromise, "VisScenePromise.title chains");
+  assert.ok(vis.waveform(samplePromise).overlay(onsetFeature) instanceof VisScenePromise, "VisScenePromise.overlay chains");
+  assert.ok(vis.waveform(samplePromise).panel(nmfFeature) instanceof VisScenePromise, "VisScenePromise.panel chains");
+  assert.equal(typeof scenePromise.show, "function", "VisScenePromise exposes show()");
 
   const stack = vis.stack();
   assert.ok(stack instanceof VisStack, "vis.stack returns VisStack");

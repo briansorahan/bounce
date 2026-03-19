@@ -341,6 +341,39 @@ export class VisScene extends HelpableResult {
   }
 }
 
+export class VisScenePromise implements PromiseLike<VisScene> {
+  constructor(private readonly promise: Promise<VisScene>) {}
+
+  then<TResult1 = VisScene, TResult2 = never>(
+    onfulfilled?: ((value: VisScene) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<VisScene | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  title(text: string): VisScenePromise {
+    return new VisScenePromise(this.promise.then((scene) => scene.title(text)));
+  }
+
+  overlay(feature: OnsetFeature | NmfFeature): VisScenePromise {
+    return new VisScenePromise(this.promise.then((scene) => scene.overlay(feature)));
+  }
+
+  panel(feature: NmfFeature): VisScenePromise {
+    return new VisScenePromise(this.promise.then((scene) => scene.panel(feature)));
+  }
+
+  show(): Promise<BounceResult> {
+    return this.promise.then((scene) => scene.show());
+  }
+}
+
 export class VisSceneListResult extends HelpableResult {
   constructor(
     display: string,
@@ -716,7 +749,8 @@ export class InputsResult extends BounceResult {
         "           sn.dev(0)",
         "           const mic = sn.dev(0)",
         "           const h = mic.record(\"take1\")",
-        "           h.stop()",
+        "           const samp = h.stop()",
+        "           vis.waveform(samp).show()",
       ].join("\n"),
     );
   }

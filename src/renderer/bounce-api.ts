@@ -10,6 +10,7 @@ import {
   NmfFeature,
   MfccFeature,
   VisScene,
+  VisScenePromise,
   VisStack,
   VisSceneListResult,
   SampleNamespace,
@@ -57,6 +58,7 @@ export {
   NmfFeature,
   MfccFeature,
   VisScene,
+  VisScenePromise,
   VisStack,
   VisSceneListResult,
   SampleNamespace,
@@ -2134,9 +2136,13 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
 
     waveform: Object.assign(
-      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene {
+      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene | VisScenePromise {
         if (isPromiseLike<Sample>(sampleOrPromise)) {
-          throw new Error("vis.waveform() requires a resolved Sample. Assign sn.read(...) to a variable first.");
+          return new VisScenePromise(
+            Promise.resolve(sampleOrPromise).then((sample) =>
+              bindVisScene(sample, `Waveform · ${sampleLabel(sample.filePath, sample.hash)}`),
+            ),
+          );
         }
         return bindVisScene(sampleOrPromise, `Waveform · ${sampleLabel(sampleOrPromise.filePath, sampleOrPromise.hash)}`);
       },
