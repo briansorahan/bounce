@@ -118,6 +118,13 @@ Could be cool, but feels like a big lift!
 * Strip leading and/or trailing silence below a configurable amplitude threshold.
 * Helps normalize the perceived "start" of a sample, which matters when building a corpus.
 
+### Noise Gate
+
+* Attenuate or silence regions of a sample that fall below a configurable amplitude threshold.
+* Unlike Trim Silence, operates throughout the entire sample — useful for removing room noise,
+  breath, or bleed between transients in field recordings or live takes.
+* Configurable attack, hold, and release times to avoid clicks and unnatural cutoffs.
+
 ### Crop
 
 * Extract a time-bounded region from a sample, defined by start and end points in seconds or sample frames.
@@ -309,37 +316,30 @@ User-installable FluCoMa algorithm wrappers as npm packages.
 
 ## Cleanup help() Output and Remove Legacy Functions
 
-Current output (minus the example code):
-```
-── Sample API ──
-  sn                               Sample namespace: .read() .list() .current() .stop() .help()
-  env                              Runtime introspection: .vars() .globals() .inspect() .functions()
-  proj                             Project namespace: .current() .list() .load() .rm() .help()
-  Sample                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()
-                                   .slice() .sep() .granularize() .help()
-  vis                              Visualization namespace: .waveform() .list() .remove() .clear()
-  nx(options)                      NMF cross-synthesis
-  corpus                           KDTree corpus: .build() .query() .resynthesize()
+* Remove visualizeNmf, visualizeNx, onsetSlice, nmf from help() and from the codebase.
+  * Removing visualizeNmf and visualizeNx requires migrating tests/nmf-analysis.spec.ts to use
+    sample.nmf() + vis.waveform() directly. tab-completion.test.ts also needs updating.
+* Do not show debug() or clearDebug() in help(). Document them in developer docs instead.
+* Remove the Sample type entry and all section headings — use a flat list.
+* nx(options) stays in help() until NmfFeature.nx() is implemented (see below).
 
-── Utilities ──
-  visualizeNmf(options?)           Legacy helper: vis waveform + NMF overlay
-  visualizeNx(options?)            Legacy helper for NX visualization
-  onsetSlice(options?)             Legacy helper: vis waveform + onset overlay
-  nmf(options?)                    Legacy helper: vis waveform + NMF panel
-  fs                               Filesystem: .ls .la .cd .pwd .glob .walk
-  debug(limit?)                   Show debug log entries
-  clearDebug()                    Clear stored debug log entries
-  help()                           Show this help message
-  clear()                          Clear the terminal screen
+## nx as a Method of NmfFeature
+
+Currently `nx(options)` is a top-level function that takes `sourceHash` and `targetHash` and
+performs NMF cross-synthesis. It should instead be a method on `NmfFeature` since the feature
+object already holds the bases and activations needed — no database round-trip required.
+
+```js
+// current
+const feat = samp.nmf({ components: 10 })
+nx({ sourceHash: samp.hash, targetHash: other.hash })
+
+// proposed
+const feat = samp.nmf({ components: 10 })
+feat.nx(other)               // optional: feat.nx(other, { components: 8 })
 ```
 
-* Remove visualizeNmf, visualizeNx, onsetSlice, nmf.
-* Do not show debug() or clearDebug(). We can document these in developer docs in a markdown file in the repo.
-* Sample API is a stupid heading.
-  * I don't think we should document the Sample type.
-  * Things like proj and vis are not just part of the sample API.
-  * Where does nx belong?
-  * Maybe we don't really need headings?
+Once implemented, the top-level `nx()` function and its entry in help() can be removed.
 
 ## General Typescript Functionality
 
