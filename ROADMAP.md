@@ -2,14 +2,14 @@
 
 See the brainstorming section for the full description of what each of these ideas actually entails.
 
-* Utility Process Playback (Simple Sample Playback)
+* Tutorials
+* Simple Transformations
+* Sample Lineage Visualization
 * Utility Process Granular Sample Playback
-* Normalization
 * Multichannel Audio
 * Multiline Editing
 * Live-Coding Sample Playback
 * Ableton Link Integration
-* Tutorials
 * Freesound Integration
 * Scripts
 * Staging Area
@@ -34,6 +34,11 @@ Maybe sn.read() does this?
 Would be nice to support multi-channel audio but it feels like it could be a big lift.
 Would we store each channel as a separate sample in the db, or would it make sense to store
 multiple channels encoded into a single binary blob?
+
+### Channel Transformations
+
+* **Mono Mix** — Downmix stereo (or multichannel) to a single mono sample by summing channels.
+* **Channel Extract** — Pull a single channel out of a multichannel sample as a new mono sample.
 
 ## Staging Area
 
@@ -76,10 +81,55 @@ from the REPL.
 This would probably mean that we need to define a javascript editor interface.
 Could be cool, but feels like a big lift!
 
-## Normalization
+## Simple Transformations
 
-I would like to be able to normalize a sample!
-There may be some other kinds of gain adjustments we could apply.
+### Normalization
+
+* Apply gain adjustment based on peak level detection.
+* Adjust so peak level is -1dB by default, with configurable peak target.
+
+### RMS / LUFS Normalization
+
+* Normalize by perceived loudness rather than peak level.
+* Useful when peak normalization produces inconsistent apparent loudness across samples.
+
+### Gain
+
+* Apply a fixed dB offset to a sample.
+* Simpler and more explicit than normalization when the user knows the desired adjustment.
+
+### DC Offset Removal
+
+* Remove any DC bias from the signal.
+* DC offset can cause clicks at loop points and distort analysis results.
+
+### Reverse
+
+* Reverse a sample.
+
+### Fade In / Fade Out
+
+* Apply an amplitude envelope at the start and/or end of a sample.
+* Support linear and exponential curve shapes.
+* Useful for removing clicks at sample boundaries.
+
+### Trim Silence
+
+* Strip leading and/or trailing silence below a configurable amplitude threshold.
+* Helps normalize the perceived "start" of a sample, which matters when building a corpus.
+
+### Crop
+
+* Extract a time-bounded region from a sample, defined by start and end points in seconds or sample frames.
+* The fundamental non-destructive edit — all other slicing operations could be expressed in terms of this.
+
+### Resample
+
+* Change the sample rate of a sample.
+* Corpus analysis algorithms are sensitive to sample rate — FluCoMa descriptors (e.g. MFCC, spectral
+  centroid) are computed relative to the Nyquist frequency, so comparing features across samples
+  recorded at different rates produces misleading distances. Resampling everything to a common rate
+  before building a corpus ensures that timbral queries and nearest-neighbor lookups are meaningful.
 
 ## Sample Lineage
 

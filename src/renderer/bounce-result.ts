@@ -1,5 +1,9 @@
 import type { GrainCollection } from "./grain-collection.js";
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return typeof (value as PromiseLike<T>)?.then === "function";
+}
+
 /**
  * Base class for all Bounce REPL command results.
  * Subclasses carry typed data enabling command composition.
@@ -288,6 +292,7 @@ export interface VisSceneSummary {
 export class VisScene extends HelpableResult {
   readonly overlays: Array<OnsetFeature | NmfFeature> = [];
   readonly panels: NmfFeature[] = [];
+  private readonly pendingOps: Array<Promise<void>> = [];
   private shownSceneId: string | undefined;
   public titleText: string | undefined;
 
@@ -322,18 +327,26 @@ export class VisScene extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature): VisScene {
-    this.overlays.push(feature);
+  overlay(feature: OnsetFeature | NmfFeature | PromiseLike<OnsetFeature | NmfFeature>): VisScene {
+    if (isPromiseLike<OnsetFeature | NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { this.overlays.push(f); }));
+    } else {
+      this.overlays.push(feature);
+    }
     return this;
   }
 
-  panel(feature: NmfFeature): VisScene {
-    this.panels.push(feature);
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisScene {
+    if (isPromiseLike<NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { this.panels.push(f); }));
+    } else {
+      this.panels.push(feature);
+    }
     return this;
   }
 
   show(): Promise<BounceResult> {
-    return this.bindings.show(this);
+    return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }
 
   markShown(id: string): void {
@@ -361,12 +374,16 @@ export class VisScenePromise implements PromiseLike<VisScene> {
     return new VisScenePromise(this.promise.then((scene) => scene.title(text)));
   }
 
-  overlay(feature: OnsetFeature | NmfFeature): VisScenePromise {
-    return new VisScenePromise(this.promise.then((scene) => scene.overlay(feature)));
+  overlay(feature: OnsetFeature | NmfFeature | PromiseLike<OnsetFeature | NmfFeature>): VisScenePromise {
+    return new VisScenePromise(
+      Promise.all([this.promise, Promise.resolve(feature)]).then(([scene, f]) => scene.overlay(f)),
+    );
   }
 
-  panel(feature: NmfFeature): VisScenePromise {
-    return new VisScenePromise(this.promise.then((scene) => scene.panel(feature)));
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisScenePromise {
+    return new VisScenePromise(
+      Promise.all([this.promise, Promise.resolve(feature)]).then(([scene, f]) => scene.panel(f)),
+    );
   }
 
   show(): Promise<BounceResult> {
@@ -390,6 +407,7 @@ export class VisSceneListResult extends HelpableResult {
 
 export class VisStack extends HelpableResult {
   readonly scenes: VisScene[] = [];
+  private readonly pendingOps: Array<Promise<void>> = [];
 
   constructor(private readonly bindings: VisStackBindings) {
     super("", bindings.help);
@@ -420,18 +438,28 @@ export class VisStack extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature): VisStack {
-    this.requireLatestScene().overlay(feature);
+  overlay(feature: OnsetFeature | NmfFeature | PromiseLike<OnsetFeature | NmfFeature>): VisStack {
+    const latest = this.requireLatestScene();
+    if (isPromiseLike<OnsetFeature | NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { latest.overlay(f); }));
+    } else {
+      latest.overlay(feature);
+    }
     return this;
   }
 
-  panel(feature: NmfFeature): VisStack {
-    this.requireLatestScene().panel(feature);
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisStack {
+    const latest = this.requireLatestScene();
+    if (isPromiseLike<NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { latest.panel(f); }));
+    } else {
+      latest.panel(feature);
+    }
     return this;
   }
 
   show(): Promise<BounceResult> {
-    return this.bindings.show(this);
+    return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }
 
   private requireLatestScene(): VisScene {
