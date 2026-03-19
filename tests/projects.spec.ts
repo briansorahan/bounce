@@ -1,9 +1,8 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-
-const electronPath = require("electron") as string;
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 0.2) {
   const sampleRate = 44100;
@@ -38,32 +37,6 @@ function createTestWavFile(filePath: string, durationSeconds = 0.2) {
   fs.writeFileSync(filePath, buffer);
 }
 
-async function launchApp(userDataDir: string) {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      BOUNCE_USER_DATA_PATH: userDataDir,
-    },
-  });
-}
-
-async function sendCommand(window: any, command: string): Promise<void> {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
-
 async function callIpc<T>(
   window: any,
   method: string,
@@ -87,7 +60,7 @@ test.describe("Project workflows", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-projects-userdata-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "proj.current()");
 
@@ -108,7 +81,7 @@ test.describe("Project workflows", () => {
 
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, 'proj.load("drums")');
     await expect(window.locator(".xterm-rows")).toContainText("Loaded Project", {
@@ -141,7 +114,7 @@ test.describe("Project workflows", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-projects-userdata-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, 'proj.load("drums")');
     await sendCommand(window, 'proj.rm("drums")');

@@ -59,14 +59,10 @@ test.describe("NMF Component Context", () => {
       return await window.electron.analyzeNMF([hash, "--components", "3"]);
     }, sampleHash);
 
-    await window.waitForTimeout(500);
-
     // Run sep
     await window.evaluate(async (hash) => {
       return await window.electron.sep([hash]);
     }, sampleHash);
-
-    await window.waitForTimeout(500);
 
     // Get waveform data after initial analysis
     const waveformAfterAnalyze = await window.evaluate(() => {
@@ -79,8 +75,6 @@ test.describe("NMF Component Context", () => {
       const feature = await window.electron.getMostRecentFeature(hash, "nmf");
       // Component playback happens but we won't actually wait for audio
     }, sampleHash);
-
-    await window.waitForTimeout(500);
 
     // Run visualize-nmf again - should load original sample
     await window.evaluate(async (hash) => {

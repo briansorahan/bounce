@@ -57,8 +57,6 @@ test.describe("NMF Separation", () => {
       testAudioPath,
     );
 
-    await window.waitForTimeout(1000);
-
     // Get sample hash
     const samples = await window.evaluate(async () => {
       return await window.electron.listSamples();
@@ -73,7 +71,6 @@ test.describe("NMF Separation", () => {
     }, sampleHash);
 
     expect(analyzeResult.success).toBe(true);
-    await window.waitForTimeout(500);
 
     // Run sep command
     const sepResult = await window.evaluate(async (hash) => {

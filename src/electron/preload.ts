@@ -121,4 +121,18 @@ contextBridge.exposeInMainWorld("electron", {
       duration,
       overwrite,
     ),
+  playSample: (hash: string, loop: boolean) =>
+    ipcRenderer.send("play-sample", { hash, loop }),
+  stopSample: (hash?: string) =>
+    ipcRenderer.send("stop-sample", hash ? { hash } : undefined),
+  onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => {
+    ipcRenderer.on("playback-position", (_event, data: { hash: string; positionInSamples: number }) =>
+      callback(data.hash, data.positionInSamples),
+    );
+  },
+  onPlaybackEnded: (callback: (hash: string) => void) => {
+    ipcRenderer.on("playback-ended", (_event, data: { hash: string }) =>
+      callback(data.hash),
+    );
+  },
 });

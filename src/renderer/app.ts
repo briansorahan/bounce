@@ -55,6 +55,7 @@ export class BounceApp {
       terminal: this.terminal,
       audioManager: this.audioManager,
       sceneManager: this.sceneManager,
+      onProjectLoad: () => this.refreshForProject(),
       runtime: {
         listScopeEntries: () => this.replEvaluator.listScopeEntries(),
         hasScopeValue: (name: string) => this.replEvaluator.hasScopeValue(name),
@@ -76,9 +77,17 @@ export class BounceApp {
       this.handleNMFOverlay(data);
     });
 
-    window.addEventListener("bounce:project-changed", () => {
-      void this.refreshForProject();
-    });
+    // Listen for native engine playback telemetry
+    if (window.electron.onPlaybackPosition) {
+      window.electron.onPlaybackPosition((hash, positionInSamples) => {
+        this.audioManager.updateNativePosition(hash, positionInSamples);
+      });
+    }
+    if (window.electron.onPlaybackEnded) {
+      window.electron.onPlaybackEnded((hash) => {
+        this.audioManager.removeNativePlayback(hash);
+      });
+    }
 
     window.addEventListener("beforeunload", () => {
       const entries = this.replEvaluator.serializeScope();

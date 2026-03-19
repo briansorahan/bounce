@@ -2,10 +2,16 @@
 
 See the brainstorming section for the full description of what each of these ideas actually entails.
 
-* Audio Recording
+* Utility Process Playback (Simple Sample Playback)
+* Utility Process Granular Sample Playback
 * Normalization
-* Scripts
+* Multichannel Audio
 * Multiline Editing
+* Live-Coding Sample Playback
+* Ableton Link Integration
+* Tutorials
+* Freesound Integration
+* Scripts
 * Staging Area
 
 # Brainstorming
@@ -16,6 +22,8 @@ I'm wondering if there are any places in the codebase where we're intentionally 
 multi-channel audio and only using the L/Mono channel?
 Maybe sn.read() does this?
 Would be nice to support multi-channel audio but it feels like it could be a big lift.
+Would we store each channel as a separate sample in the db, or would it make sense to store
+multiple channels encoded into a single binary blob?
 
 ## Staging Area
 
@@ -48,8 +56,8 @@ Maybe we don't care about tracking lineage for samples that get moved into a pro
 
 ## Multiline Editing
 
-I know that this does not work very well right now.
-We should take a look at making it work better!
+* Opening bracket e.g. for a function body, for loop, if block, etc should indent automatically
+* 
 
 ## Scripts
 
@@ -65,9 +73,9 @@ There may be some other kinds of gain adjustments we could apply.
 
 ## Sample Lineage
 
-We already store samples and features in a way that would allow us to track lineage.
-e.g. raw sample -> feature1, feature2 -> derived sample
-This feature would just expose that through the UI somehow.
+* Render a pretty visualization that shows the lineage of a sample
+* sample.tree()
+* Output looks like the `tree` command
 
 ## Tutorials
 
@@ -94,6 +102,17 @@ Once you start a tutorial, there are globals added to the bounce REPL:
   * Could prob fetch the license info from the URL?
   * Ability to generate an attribution document
   
+## Live-Coding Sample Playback
+
+* Create sample-playback instruments that trigger via MIDI-ish messages
+* Each MIDI note is assigned to a sample
+* Samples can be triggered with a velocity value that controls loudness
+* Simple percussion notation similar to what I did with the python version of crispy
+* IPC calls would instantiate the sample-playback instrument within the audio utility process
+* The instrument would be linked to a predefined collection of samples and automatically map them to MIDI notes
+* The instrument would also receive pattern messages and trigger the samples according to the patterns
+* The renderer defines the patterns via a DSL that is embedded in multiline string literals
+  
 ## Ableton Link Integration
 
 * Prob comes after migrating all audio playback/voicing to a dedicated utility
@@ -101,6 +120,7 @@ Once you start a tutorial, there are globals added to the bounce REPL:
 * What could we do with this?
   * Sync to DAW
   * Sync sample playback to transport?
+* The live-coding instrument that we support within the audio utility process will sync with Link
 
 # Cleanup Tasks
 

@@ -1,40 +1,15 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-
-const electronPath = require("electron") as string;
-
-async function launchApp(userDataDir: string) {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      BOUNCE_USER_DATA_PATH: userDataDir,
-    },
-  });
-}
-
-async function sendCommand(window: any, command: string): Promise<void> {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) throw new Error("__bounceExecuteCommand not exposed");
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 test.describe("env namespace runtime introspection", () => {
   test("env.help() shows the runtime introspection namespace description", async () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.help()");
 
@@ -51,7 +26,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.globals()");
 
@@ -69,7 +44,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.vars()");
 
@@ -87,7 +62,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "const answer = 42");
     await sendCommand(window, "env.vars()");
@@ -104,7 +79,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, 'env.inspect("sn")');
 
@@ -121,7 +96,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "const myNum = 99");
     await sendCommand(window, 'env.inspect("myNum")');
@@ -138,7 +113,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, 'env.functions("sn")');
 
@@ -155,7 +130,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "function greet() { return 'hi'; }");
     await sendCommand(window, "env.functions()");
@@ -172,7 +147,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.vars.help()");
 
@@ -189,7 +164,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.globals.help()");
 
@@ -206,7 +181,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.inspect.help()");
 
@@ -223,7 +198,7 @@ test.describe("env namespace runtime introspection", () => {
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-introspection-"));
     const electronApp = await launchApp(userDataDir);
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, "env.functions.help()");
 

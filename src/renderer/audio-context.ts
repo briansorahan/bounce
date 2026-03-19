@@ -46,14 +46,25 @@ interface ActivePlayback {
   readonly loop: boolean;
 }
 
+interface NativePlaybackEntry {
+  readonly hash: string;
+  readonly totalSamples: number;
+  readonly sampleRate: number;
+  positionInSamples: number;
+  ended: boolean;
+}
+
 export class AudioManager {
   private currentAudio: AudioData | null = null;
   private currentSlices: number[] | null = null;
   private audioContext: globalThis.AudioContext | null = null;
+  // Web Audio playbacks (fallback for hashless calls)
   private activePlaybacks = new Map<string, ActivePlayback>();
   private playbackSerial = 0;
   private onPlaybackUpdate: ((states: PlaybackCursorState[]) => void) | null = null;
   private animationFrameId: number | null = null;
+  // Native engine playbacks (IPC-driven)
+  private nativePlaybacks = new Map<string, NativePlaybackEntry>();
 
   setCurrentAudio(audio: AudioData): void {
     this.currentAudio = audio;
@@ -69,6 +80,22 @@ export class AudioManager {
     loop = false,
     hash?: string,
   ): Promise<void> {
+    // Use the native engine when a hash is available and the IPC channel exists.
+    if (hash && window.electron?.playSample) {
+      this.stopAudio(hash); // remove any prior playback for this hash
+      this.nativePlaybacks.set(hash, {
+        hash,
+        totalSamples: audioData.length,
+        sampleRate,
+        positionInSamples: 0,
+        ended: false,
+      });
+      window.electron.playSample(hash, loop);
+      this.syncPlaybackUpdates();
+      return;
+    }
+
+    // Fallback: Web Audio path (used for hashless corpus resynthesis, etc.)
     if (!this.audioContext) {
       const win = window as WebkitWindow;
       const AudioContextClass = window.AudioContext || win.webkitAudioContext;
@@ -142,6 +169,18 @@ export class AudioManager {
   }
 
   stopAudio(hash?: string): void {
+    // Stop native playbacks
+    if (window.electron?.stopSample) {
+      const nativeKeys = hash ? [hash] : Array.from(this.nativePlaybacks.keys());
+      for (const key of nativeKeys) {
+        if (this.nativePlaybacks.has(key)) {
+          this.nativePlaybacks.delete(key);
+        }
+      }
+      window.electron.stopSample(hash);
+    }
+
+    // Stop Web Audio playbacks
     const keys = hash ? [hash] : Array.from(this.activePlaybacks.keys());
     let stoppedAny = false;
 
@@ -167,7 +206,8 @@ export class AudioManager {
   }
 
   getIsPlaying(): boolean {
-    return this.activePlaybacks.size > 0;
+    const nativeActive = Array.from(this.nativePlaybacks.values()).some((e) => !e.ended);
+    return this.activePlaybacks.size > 0 || nativeActive;
   }
 
   getCurrentAudio(): AudioData | null {
@@ -175,25 +215,56 @@ export class AudioManager {
   }
 
   getPlaybackStates(): PlaybackCursorState[] {
-    if (!this.audioContext) {
-      return [];
+    const states: PlaybackCursorState[] = [];
+
+    // Native engine playbacks — driven by telemetry snapshots
+    for (const entry of this.nativePlaybacks.values()) {
+      states.push({
+        hash: entry.hash,
+        position: entry.positionInSamples,
+        totalSamples: entry.totalSamples,
+      });
     }
 
-    return Array.from(this.activePlaybacks.values()).map((playback) => {
-      const elapsed = this.audioContext!.currentTime - playback.startTime;
-      let position = elapsed * playback.sampleRate;
-      if (playback.loop && playback.totalSamples > 0) {
-        position %= playback.totalSamples;
-      } else {
-        position = Math.min(position, playback.totalSamples);
+    // Web Audio fallback playbacks
+    if (this.audioContext) {
+      for (const playback of this.activePlaybacks.values()) {
+        const elapsed = this.audioContext.currentTime - playback.startTime;
+        let position = elapsed * playback.sampleRate;
+        if (playback.loop && playback.totalSamples > 0) {
+          position %= playback.totalSamples;
+        } else {
+          position = Math.min(position, playback.totalSamples);
+        }
+        states.push({
+          hash: playback.hash,
+          position,
+          totalSamples: playback.totalSamples,
+        });
       }
+    }
 
-      return {
-        hash: playback.hash,
-        position,
-        totalSamples: playback.totalSamples,
-      };
-    });
+    return states;
+  }
+
+  /** Called by app.ts when playback-position telemetry arrives from main. */
+  updateNativePosition(hash: string, positionInSamples: number): void {
+    const entry = this.nativePlaybacks.get(hash);
+    if (entry) {
+      entry.positionInSamples = positionInSamples;
+      this.emitPlaybackUpdates();
+    }
+  }
+
+  /** Called by app.ts when playback-ended telemetry arrives from main. */
+  removeNativePlayback(hash: string): void {
+    const entry = this.nativePlaybacks.get(hash);
+    if (entry) {
+      entry.ended = true;
+      // Keep the entry so the cursor remains at the final position.
+      // It will be removed when stopAudio() is called explicitly.
+      this.syncPlaybackUpdates();
+    }
   }
 
   setCurrentSlices(slices: number[]): void {

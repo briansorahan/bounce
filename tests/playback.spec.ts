@@ -1,18 +1,7 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 async function getPlaybackStates(window: any): Promise<Array<{ hash: string | null; position: number; totalSamples: number }>> {
   return window.evaluate(() => {
@@ -22,6 +11,13 @@ async function getPlaybackStates(window: any): Promise<Array<{ hash: string | nu
     }
     return getter();
   });
+}
+
+function getLoopAwareAdvance(previous: number, current: number, totalSamples: number): number {
+  if (totalSamples <= 0) {
+    return 0;
+  }
+  return ((current - previous) % totalSamples + totalSamples) % totalSamples;
 }
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
@@ -113,21 +109,10 @@ test.describe("Playback and Visualization", () => {
     const testFile = path.join(testDir, "cursor-test.wav");
     createTestWavFile(testFile, 0.5);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "vis.waveform(samp).show()");
@@ -157,21 +142,10 @@ test.describe("Playback and Visualization", () => {
     const testFile = path.join(testDir, "viz-test.wav");
     createTestWavFile(testFile, 0.2);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await expect(window.locator(".visualization-scene")).toHaveCount(0);
 
@@ -187,21 +161,10 @@ test.describe("Playback and Visualization", () => {
     const testFile = path.join(testDir, "play-viz-test.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
     await sendCommand(window, "samp.play()");
@@ -218,21 +181,10 @@ test.describe("Playback and Visualization", () => {
   });
 
   test("sample.stop should work without errors", async () => {
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     const testFile = path.join(testDir, "stop-test.wav");
     createTestWavFile(testFile, 0.1);
@@ -255,21 +207,10 @@ test.describe("Playback and Visualization", () => {
     createTestWavFileWithFrequency(firstFile, 440, 1.0);
     createTestWavFileWithFrequency(secondFile, 660, 1.0);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp1 = sn.read("${firstFile}")`);
     await sendCommand(window, `const samp2 = sn.read("${secondFile}")`);
@@ -300,21 +241,10 @@ test.describe("Playback and Visualization", () => {
     createTestWavFile(firstFile, 1.2);
     createTestWavFile(secondFile, 1.0);
 
-    const electronApp = await electron.launch({
-      executablePath: electronPath,
-      args: [
-        path.join(__dirname, "../dist/electron/main.js"),
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-      ],
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      },
-    });
+    const electronApp = await launchApp();
 
     const window = await electronApp.firstWindow();
-    await window.waitForTimeout(1000);
+    await waitForReady(window);
 
     await sendCommand(window, `const samp1 = sn.read("${firstFile}")`);
     await sendCommand(window, `const samp2 = sn.read("${secondFile}")`);
@@ -341,8 +271,18 @@ test.describe("Playback and Visualization", () => {
     const secondPlaybackB = firstStateB.find((state) => state.hash === secondPlaybackA?.hash);
     expect(firstPlaybackB).toBeTruthy();
     expect(secondPlaybackB).toBeTruthy();
-    expect(firstPlaybackB!.position).toBeGreaterThan(firstPlaybackA!.position);
-    expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
+    expect(
+      getLoopAwareAdvance(
+        firstPlaybackA!.position,
+        firstPlaybackB!.position,
+        firstPlaybackA!.totalSamples,
+      ),
+    ).toBeGreaterThan(0);
+    if (secondPlaybackA!.position < secondPlaybackA!.totalSamples) {
+      expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
+    } else {
+      expect(secondPlaybackB!.position).toBe(secondPlaybackA!.position);
+    }
 
     await sendCommand(window, "samp1.stop()");
     await sendCommand(window, "samp2.stop()");
