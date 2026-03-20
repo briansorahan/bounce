@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import { ReplEnvRecord } from "../database";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 // Lazily loaded TypeScript transpiler — runs in the main process where require() is always available
@@ -22,11 +23,14 @@ export function registerReplHandlers(deps: HandlerDeps): void {
       entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
     ) => {
       try {
-        if (dbManager) {
-          dbManager.saveReplEnv(entries);
+        if (!dbManager) {
+          throw new BounceError("REPL_DB_NOT_READY", "Database not initialized");
         }
+        dbManager.saveReplEnv(entries);
       } catch (error) {
+        if (error instanceof BounceError) throw error;
         console.error("Failed to save repl env to database:", error);
+        throw new BounceError("REPL_SAVE_ENV_FAILED", `Failed to save REPL env: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
@@ -34,12 +38,13 @@ export function registerReplHandlers(deps: HandlerDeps): void {
   ipcMain.handle("get-repl-env", async (): Promise<ReplEnvRecord[]> => {
     try {
       if (!dbManager) {
-        return [];
+        throw new BounceError("REPL_DB_NOT_READY", "Database not initialized");
       }
       return dbManager.getReplEnv();
     } catch (error) {
+      if (error instanceof BounceError) throw error;
       console.error("Failed to get repl env from database:", error);
-      return [];
+      throw new BounceError("REPL_LOAD_ENV_FAILED", `Failed to get REPL env: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 

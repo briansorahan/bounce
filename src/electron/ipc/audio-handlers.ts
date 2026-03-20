@@ -7,6 +7,7 @@ import decode from "audio-decode";
 import { SettingsStore } from "../settings-store";
 import { AUDIO_EXTENSIONS, AUDIO_EXTENSIONS_NO_DOT } from "../audio-extensions";
 import { debugLog } from "../logger";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 /** Resolve a path against the stored cwd, expanding ~ and handling relative paths. */
@@ -47,7 +48,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
             filePath: sample.file_path,
           };
         }
-        throw new Error(`Sample with hash "${filePathOrHash.substring(0, 8)}..." not found in database.`);
+        throw new BounceError("SAMPLE_NOT_FOUND", `Sample with hash "${filePathOrHash.substring(0, 8)}..." not found in database.`);
       }
 
       let resolvedPath = filePathOrHash;
@@ -114,7 +115,8 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
         filePath: resolvedPath,
       };
     } catch (error) {
-      throw new Error(
+      throw new BounceError(
+        "SAMPLE_READ_FAILED",
         `Failed to read audio file: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
@@ -131,7 +133,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       duration: number,
       overwrite: boolean,
     ) => {
-      if (!dbManager) throw new Error("Database not initialised");
+      if (!dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
 
       const existing = dbManager.getSampleByPath(name);
       if (existing && !overwrite) {
@@ -159,11 +161,29 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
 
   ipcMain.on("play-sample", (_event, payload: { hash: string; loop: boolean }) => {
     const port = getAudioEnginePort();
-    if (!dbManager || !port) return;
+    if (!dbManager || !port) {
+      const mainWindow = deps.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send("playback-error", {
+          sampleHash: payload.hash,
+          code: "AUDIO_ENGINE_NOT_READY",
+          message: "Audio engine or database not available",
+        });
+      }
+      return;
+    }
 
     const sample = dbManager.getSampleByHash(payload.hash);
     if (!sample || !sample.audio_data) {
       console.error(`[main] play-sample: sample not found for hash ${payload.hash}`);
+      const mainWindow = deps.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send("playback-error", {
+          sampleHash: payload.hash,
+          code: "SAMPLE_NOT_FOUND",
+          message: `Sample not found for hash ${payload.hash}`,
+        });
+      }
       return;
     }
 

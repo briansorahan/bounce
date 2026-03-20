@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import { ProjectListRecord } from "../database";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 function toProjectData(
@@ -18,46 +19,47 @@ export function registerProjectHandlers(deps: HandlerDeps): void {
   ipcMain.handle("get-current-project", async () => {
     try {
       if (!dbManager) {
-        return null;
+        throw new BounceError("PROJECT_DB_NOT_READY", "Database not initialized");
       }
       return toProjectData(deps, dbManager.getCurrentProject());
     } catch (error) {
+      if (error instanceof BounceError) throw error;
       console.error("Failed to get current project:", error);
-      return null;
+      throw new BounceError("PROJECT_LOAD_FAILED", `Failed to get current project: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
   ipcMain.handle("list-projects", async () => {
     try {
       if (!dbManager) {
-        return [];
+        throw new BounceError("PROJECT_DB_NOT_READY", "Database not initialized");
       }
       return dbManager.listProjects().map((p) => toProjectData(deps, p));
     } catch (error) {
+      if (error instanceof BounceError) throw error;
       console.error("Failed to list projects:", error);
-      return [];
+      throw new BounceError("PROJECT_LIST_FAILED", `Failed to list projects: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
   ipcMain.handle("load-project", async (_event, name: string) => {
     try {
       if (!dbManager || !settingsStore) {
-        throw new Error("Project services not initialized");
+        throw new BounceError("PROJECT_NOT_INITIALIZED", "Project services not initialized");
       }
       const project = dbManager.loadOrCreateProject(name);
       settingsStore.setCurrentProjectName(project.name);
       return toProjectData(deps, project);
     } catch (error) {
-      throw new Error(
-        `Failed to load project: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (error instanceof BounceError) throw error;
+      throw new BounceError("PROJECT_LOAD_FAILED", `Failed to load project: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
   ipcMain.handle("remove-project", async (_event, name: string) => {
     try {
       if (!dbManager || !settingsStore) {
-        throw new Error("Project services not initialized");
+        throw new BounceError("PROJECT_NOT_INITIALIZED", "Project services not initialized");
       }
       const currentProject = dbManager.removeProject(name);
       settingsStore.setCurrentProjectName(currentProject.name);
@@ -66,9 +68,8 @@ export function registerProjectHandlers(deps: HandlerDeps): void {
         currentProject: toProjectData(deps, currentProject),
       };
     } catch (error) {
-      throw new Error(
-        `Failed to remove project: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (error instanceof BounceError) throw error;
+      throw new BounceError("PROJECT_REMOVE_FAILED", `Failed to remove project: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 }

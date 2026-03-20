@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import { OnsetSlice, BufNMF, MFCCFeature } from "../../index";
+import { BounceError } from "../../shared/bounce-error.js";
 import {
   BufNMFOptions,
   MFCCOptions,
@@ -18,7 +19,8 @@ export function registerAnalysisHandlers(): void {
 
         return Array.from(slices);
       } catch (error) {
-        throw new Error(
+        throw new BounceError(
+          "ANALYSIS_ONSET_FAILED",
           `Failed to analyze onset slices: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
@@ -41,7 +43,8 @@ export function registerAnalysisHandlers(): void {
 
         return result;
       } catch (error) {
-        throw new Error(
+        throw new BounceError(
+          "ANALYSIS_NMF_FAILED",
           `Failed to perform NMF: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
@@ -56,7 +59,8 @@ export function registerAnalysisHandlers(): void {
         const analyzer = new MFCCFeature(options || {});
         return analyzer.process(audioData);
       } catch (error) {
-        throw new Error(
+        throw new BounceError(
+          "ANALYSIS_MFCC_FAILED",
           `Failed to compute MFCCs: ${error instanceof Error ? error.message : String(error)}`,
         );
       }

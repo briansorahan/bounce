@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import { FeatureOptions } from "../database";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerFeatureHandlers(deps: HandlerDeps): void {
@@ -16,7 +17,7 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
     ) => {
       try {
         if (!dbManager) {
-          throw new Error("Database not initialized");
+          throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
         }
         const featureId = dbManager.storeFeature(
           sampleHash,
@@ -26,9 +27,8 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
         );
         return featureId;
       } catch (error) {
-        throw new Error(
-          `Failed to store feature: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        if (error instanceof BounceError) throw error;
+        throw new BounceError("FEATURE_STORE_FAILED", `Failed to store feature: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
@@ -38,12 +38,13 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
     async (_event, sampleHash?: string, featureType?: string) => {
       try {
         if (!dbManager) {
-          return null;
+          throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
         }
         return dbManager.getMostRecentFeature(sampleHash, featureType);
       } catch (error) {
+        if (error instanceof BounceError) throw error;
         console.error("Failed to get most recent feature:", error);
-        return null;
+        throw new BounceError("FEATURE_LOOKUP_FAILED", `Failed to get most recent feature: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
@@ -51,12 +52,13 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
   ipcMain.handle("list-features", async () => {
     try {
       if (!dbManager) {
-        return [];
+        throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
       }
       return dbManager.listFeatures();
     } catch (error) {
+      if (error instanceof BounceError) throw error;
       console.error("Failed to list features:", error);
-      return [];
+      throw new BounceError("FEATURE_LIST_FAILED", `Failed to list features: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 }

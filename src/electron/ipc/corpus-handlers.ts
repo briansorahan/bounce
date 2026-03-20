@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerCorpusHandlers(deps: HandlerDeps): void {
@@ -8,10 +9,11 @@ export function registerCorpusHandlers(deps: HandlerDeps): void {
     "corpus-build",
     async (_event, sourceHash: string, featureHash: string) => {
       try {
-        if (!dbManager) throw new Error("Database not ready.");
+        if (!dbManager) throw new BounceError("CORPUS_DB_NOT_READY", "Database not ready.");
         return corpusManager.build(dbManager, sourceHash, featureHash);
       } catch (error) {
-        throw new Error(`corpus-build failed: ${error instanceof Error ? error.message : String(error)}`);
+        if (error instanceof BounceError) throw error;
+        throw new BounceError("CORPUS_BUILD_FAILED", `corpus-build failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
@@ -22,7 +24,7 @@ export function registerCorpusHandlers(deps: HandlerDeps): void {
       try {
         return corpusManager.query(segmentIndex, k);
       } catch (error) {
-        throw new Error(`corpus-query failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new BounceError("CORPUS_QUERY_FAILED", `corpus-query failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
@@ -33,7 +35,7 @@ export function registerCorpusHandlers(deps: HandlerDeps): void {
       try {
         return corpusManager.resynthesize(indices);
       } catch (error) {
-        throw new Error(`corpus-resynthesize failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new BounceError("CORPUS_RESYNTHESIZE_FAILED", `corpus-resynthesize failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );

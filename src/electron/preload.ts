@@ -6,8 +6,9 @@ import type {
   NMFVisualizationData,
   OnsetSliceOptions,
 } from "./ipc-types";
+import type { ElectronAPI } from "../shared/ipc-contract";
 
-contextBridge.exposeInMainWorld("electron", {
+const api: ElectronAPI = {
   version: process.versions.electron,
   readAudioFile: (path: string) => ipcRenderer.invoke("read-audio-file", path),
   analyzeOnsetSlice: (audioData: Float32Array, options?: OnsetSliceOptions) =>
@@ -135,4 +136,9 @@ contextBridge.exposeInMainWorld("electron", {
       callback(data.hash),
     );
   },
-});
+  onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => {
+    ipcRenderer.on("playback-error", (_event, data) => callback(data));
+  },
+};
+
+contextBridge.exposeInMainWorld("electron", api);

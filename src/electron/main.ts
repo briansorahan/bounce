@@ -74,7 +74,7 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   // Listen for telemetry on port2
   port2.on("message", (event) => {
-    const data = event.data as { type: string; sampleHash?: string; positionInSamples?: number };
+    const data = event.data as { type: string; sampleHash?: string; positionInSamples?: number; code?: string; message?: string };
     if (data.type === "position" && data.sampleHash !== undefined) {
       mainWindow.webContents.send("playback-position", {
         hash: data.sampleHash,
@@ -82,6 +82,12 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
       });
     } else if (data.type === "ended" && data.sampleHash !== undefined) {
       mainWindow.webContents.send("playback-ended", { hash: data.sampleHash });
+    } else if (data.type === "error") {
+      mainWindow.webContents.send("playback-error", {
+        sampleHash: data.sampleHash,
+        code: data.code ?? "AUDIO_ENGINE_ERROR",
+        message: data.message ?? "Unknown audio engine error",
+      });
     }
   });
   port2.start();

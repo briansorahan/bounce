@@ -3,6 +3,7 @@ import { DatabaseManager } from "../database";
 import { debugLog } from "../logger";
 import { BufNMF } from "../BufNMF";
 import { BufNMFCross } from "../BufNMFCross";
+import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 interface CommandResult {
@@ -680,7 +681,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
       return await executeAnalyzeNmf(args, mainWindow, dbManager);
     } catch (error) {
       console.error("Failed to execute analyze-nmf:", error);
-      throw error;
+      throw error instanceof BounceError ? error : new BounceError("ANALYSIS_NMF_COMMAND_FAILED", `Failed to execute analyze-nmf: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
@@ -690,7 +691,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
       return await executeVisualizeNmf([sampleHash], mainWindow, dbManager);
     } catch (error) {
       console.error("Failed to execute visualize-nmf:", error);
-      throw error;
+      throw error instanceof BounceError ? error : new BounceError("ANALYSIS_VISUALIZE_NMF_FAILED", `Failed to execute visualize-nmf: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
@@ -700,7 +701,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
       return await executeSep(args, mainWindow, dbManager);
     } catch (error) {
       console.error("Failed to execute sep:", error);
-      throw error;
+      throw error instanceof BounceError ? error : new BounceError("ANALYSIS_SEP_FAILED", `Failed to execute sep: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
@@ -710,7 +711,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
       return await executeNx(args, mainWindow, dbManager);
     } catch (error) {
       console.error("Failed to execute nx:", error);
-      throw error;
+      throw error instanceof BounceError ? error : new BounceError("ANALYSIS_NX_FAILED", `Failed to execute nx: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
@@ -734,7 +735,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
         return await command(args, mainWindow, dbManager);
       } catch (error) {
         console.error(`Failed to execute command ${commandName}:`, error);
-        return `Error: ${error instanceof Error ? error.message : String(error)}`;
+        throw error instanceof BounceError ? error : new BounceError("ANALYSIS_COMMAND_FAILED", `Error: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );
