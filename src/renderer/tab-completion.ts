@@ -1,4 +1,4 @@
-import { BOUNCE_GLOBALS } from "./repl-evaluator.js";
+import { BOUNCE_GLOBALS, COMPLETION_HIDDEN_GLOBALS } from "./repl-evaluator.js";
 import { getCallablePropertyNames } from "./runtime-introspection.js";
 
 export type CompletionAction =
@@ -25,7 +25,7 @@ export class TabCompletion {
   private updateRequestId: number = 0;
 
   constructor() {
-    this.candidates = [...BOUNCE_GLOBALS].sort();
+    this.candidates = [...BOUNCE_GLOBALS].filter((g) => !COMPLETION_HIDDEN_GLOBALS.has(g)).sort();
   }
 
   setApi(api: Record<string, unknown>): void {

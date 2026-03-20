@@ -12,6 +12,15 @@ export const BOUNCE_GLOBALS = new Set([
 ]);
 
 /**
+ * Names that are valid REPL globals but should not appear in tab completion.
+ * These are developer utilities or internal functions that we don't want to
+ * surface to users.
+ */
+export const COMPLETION_HIDDEN_GLOBALS = new Set([
+  "clearDebug",
+]);
+
+/**
  * Returns true if `source` has balanced brackets/braces/parens,
  * ignoring occurrences inside strings and comments. Correctly handles
  * template literals with nested `${}` expressions.

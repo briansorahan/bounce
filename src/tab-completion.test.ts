@@ -43,7 +43,7 @@ async function testSingleMatchNamespace() {
 
 async function testMultiMatchVisualize() {
   const c = new TabCompletion();
-  await c.update("cl", 2);
+  await c.update("c", 1);
   assert.strictEqual(c.matchCount, 2);
 }
 
@@ -79,10 +79,10 @@ async function testGhostTextSingleMatchContainsSuffix() {
 
 async function testGhostTextMultiMatchContainsCandidates() {
   const c = new TabCompletion();
-  await c.update("cl", 2);
+  await c.update("c", 1);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("clear()"));
-  assert.ok(ghost.includes("clearDebug()"));
+  assert.ok(ghost.includes("corpus()"));
 }
 
 async function testResetClearsState() {
@@ -238,6 +238,48 @@ async function testPathCompletionScopesToFsString() {
   assert.strictEqual(c.matchCount, 1);
 }
 
+async function testClearDebugHiddenFromGlobalCompletion() {
+  const c = new TabCompletion();
+  await c.update("clearD", 6);
+  assert.strictEqual(c.matchCount, 0);
+}
+
+async function testHelpFactoryHiddenFromMethodCompletion() {
+  class StubWithHelpFactory {
+    help() {}
+    read() {}
+    private readonly helpFactory = () => {};
+  }
+
+  const c = new TabCompletion();
+  c.setApi({ sn: new StubWithHelpFactory() });
+  await c.update("sn.", 3);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("help()"));
+  assert.ok(ghost.includes("read()"));
+  assert.ok(!ghost.includes("helpFactory"));
+  assert.strictEqual(c.matchCount, 2);
+}
+
+async function testToStringHiddenFromMethodCompletion() {
+  class StubWithToString {
+    help() {}
+    play() {}
+    override toString(): string {
+      return "stub";
+    }
+  }
+
+  const c = new TabCompletion();
+  c.setApi({ sn: new StubWithToString() });
+  await c.update("sn.", 3);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("help()"));
+  assert.ok(ghost.includes("play()"));
+  assert.ok(!ghost.includes("toString"));
+  assert.strictEqual(c.matchCount, 2);
+}
+
 const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
   ["single match namespace", testSingleMatchNamespace],
@@ -255,6 +297,9 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["project dot completion", testProjectDotCompletion],
   ["env dot completion", testEnvDotCompletion],
   ["path completion scopes to fs string", testPathCompletionScopesToFsString],
+  ["clearDebug hidden from global completion", testClearDebugHiddenFromGlobalCompletion],
+  ["helpFactory hidden from method completion", testHelpFactoryHiddenFromMethodCompletion],
+  ["toString hidden from method completion", testToStringHiddenFromMethodCompletion],
 ];
 
 async function main() {
