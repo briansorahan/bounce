@@ -302,10 +302,42 @@ User-installable FluCoMa algorithm wrappers as npm packages.
 
 # Cleanup Tasks
 
-## Tab Completion
+## Nested/Chained Tab Completion
+
+These two things prob make sense to tackle together.
 
 * vis builder pattern doesn't support tab completion for chained method calls.
 * We don't support tab completion for method calls that are not the outer most call, e.g. the sn.read() within vis.waveform() above
+
+I'm curious if it would make sense to just import the official typescript parser, i.e. the same one
+that `tsc` uses. Apparently we can use this programatically to parse source code into an AST.
+
+### Install the package
+```
+npm install typescript --save-dev
+```
+
+### Parse a Code Snippet
+```
+import * as ts from "typescript";
+
+// Your code as a plain string
+const myInMemoryCode = `const x: number = 10;`;
+
+const sourceFile = ts.createSourceFile(
+  "virtual-file.ts",     // Just a label, no file is created on disk
+  myInMemoryCode,        // The actual string to parse
+  ts.ScriptTarget.Latest,
+  true                   // setParentNodes: allows you to walk "up" the tree
+);
+
+// You can now analyze 'sourceFile' immediately
+console.log(sourceFile.statements.length); // 1
+```
+
+Would this be a robust way to understand the structure of the code that the user is
+typing into the REPL? Would it be performant enough to not compromise the rapid
+interactivity that users will want from tab completion?
 
 ## sn.help()
 
