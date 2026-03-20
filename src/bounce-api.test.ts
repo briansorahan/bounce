@@ -6,12 +6,15 @@ import {
   SamplePromise,
   CurrentSamplePromise,
   OnsetFeature,
+  OnsetFeaturePromise,
   NmfFeature,
+  NmfFeaturePromise,
   MfccFeature,
   EnvScopeResult,
   EnvInspectionResult,
   EnvFunctionListResult,
   VisScene,
+  VisScenePromise,
   VisStack,
   InputsResult,
   AudioDevice,
@@ -252,7 +255,7 @@ async function main() {
   };
   const vis = api.vis as {
     help(): BounceResult;
-    waveform(sample: Sample): VisScene;
+    waveform(sample: Sample | PromiseLike<Sample>): VisScene | VisScenePromise;
     stack(): VisStack;
   };
   const proj = api.proj as {
@@ -355,6 +358,57 @@ async function main() {
   assert.equal(scene.overlay(onsetFeature), scene, "scene.overlay chains");
   assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
   assert.ok(scene.help().toString().includes("scene.show()"), "VisScene help describes show()");
+
+  const samplePromise = sn.read("abcdef1234567890");
+  const scenePromise = vis.waveform(samplePromise);
+  assert.ok(scenePromise instanceof VisScenePromise, "vis.waveform(SamplePromise) returns VisScenePromise");
+  assert.ok(vis.waveform(samplePromise).title("test") instanceof VisScenePromise, "VisScenePromise.title chains");
+  assert.ok(vis.waveform(samplePromise).overlay(onsetFeature) instanceof VisScenePromise, "VisScenePromise.overlay chains");
+  assert.ok(vis.waveform(samplePromise).panel(nmfFeature) instanceof VisScenePromise, "VisScenePromise.panel chains");
+  assert.equal(typeof scenePromise.show, "function", "VisScenePromise exposes show()");
+
+  // VisScene / VisScenePromise / VisStack accept promise-typed feature args
+  const onsetPromise = sample.onsets();
+  const nmfPromise = sample.nmf();
+  assert.ok(onsetPromise instanceof OnsetFeaturePromise, "sample.onsets() returns OnsetFeaturePromise");
+  assert.ok(nmfPromise instanceof NmfFeaturePromise, "sample.nmf() returns NmfFeaturePromise");
+
+  // Use already-resolved promises for population tests so one microtask flush is sufficient
+  const resolvedOnsetPromise: PromiseLike<OnsetFeature> = Promise.resolve(onsetFeature);
+  const resolvedNmfPromise: PromiseLike<NmfFeature> = Promise.resolve(nmfFeature);
+
+  // VisScene.overlay / panel accept PromiseLike feature args, return same VisScene
+  const sceneWithPromiseOverlay = vis.waveform(sample) as VisScene;
+  assert.ok(sceneWithPromiseOverlay instanceof VisScene, "vis.waveform(sample) still returns VisScene");
+  assert.equal(sceneWithPromiseOverlay.overlay(onsetPromise), sceneWithPromiseOverlay, "VisScene.overlay(OnsetFeaturePromise) chains and returns same VisScene");
+  assert.equal(sceneWithPromiseOverlay.panel(nmfPromise), sceneWithPromiseOverlay, "VisScene.panel(NmfFeaturePromise) chains and returns same VisScene");
+
+  const scene2 = vis.waveform(sample) as VisScene;
+  scene2.overlay(resolvedOnsetPromise);
+  scene2.panel(resolvedNmfPromise);
+  await Promise.resolve(); // drain one microtask tick so the .then() handlers fire
+  assert.equal(scene2.overlays.length, 1, "VisScene.overlay(promise) populates overlays once resolved");
+  assert.equal(scene2.panels.length, 1, "VisScene.panel(promise) populates panels once resolved");
+
+  // VisScenePromise.overlay / panel accept PromiseLike feature args, return VisScenePromise
+  const scenePromiseWithPromiseOverlay = vis.waveform(samplePromise);
+  assert.ok(scenePromiseWithPromiseOverlay instanceof VisScenePromise, "VisScenePromise with promise overlay is still VisScenePromise");
+  assert.ok(scenePromiseWithPromiseOverlay.overlay(onsetPromise) instanceof VisScenePromise, "VisScenePromise.overlay(OnsetFeaturePromise) chains");
+  assert.ok(scenePromiseWithPromiseOverlay.panel(nmfPromise) instanceof VisScenePromise, "VisScenePromise.panel(NmfFeaturePromise) chains");
+
+  // VisStack.overlay / panel accept PromiseLike feature args, return same VisStack
+  const stack2 = vis.stack();
+  stack2.waveform(sample);
+  assert.equal(stack2.overlay(onsetPromise), stack2, "VisStack.overlay(OnsetFeaturePromise) chains and returns same VisStack");
+  assert.equal(stack2.panel(nmfPromise), stack2, "VisStack.panel(NmfFeaturePromise) chains and returns same VisStack");
+
+  const stack3 = vis.stack();
+  stack3.waveform(sample);
+  stack3.overlay(resolvedOnsetPromise);
+  stack3.panel(resolvedNmfPromise);
+  await Promise.resolve();
+  assert.equal(stack3.scenes[0].overlays.length, 1, "VisStack.overlay(promise) populates latest scene overlays once resolved");
+  assert.equal(stack3.scenes[0].panels.length, 1, "VisStack.panel(promise) populates latest scene panels once resolved");
 
   const stack = vis.stack();
   assert.ok(stack instanceof VisStack, "vis.stack returns VisStack");

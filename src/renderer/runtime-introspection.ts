@@ -12,13 +12,20 @@ function truncate(input: string, maxLength: number): string {
   return input.length > maxLength ? `${input.slice(0, maxLength - 1)}…` : input;
 }
 
+/**
+ * Property names that should never appear in tab completion for method access.
+ * These are either JS runtime internals or private implementation details
+ * that leak through TypeScript's compiled output.
+ */
+const HIDDEN_PROPERTIES = new Set(["toString", "helpFactory"]);
+
 export function getCallablePropertyNames(obj: object): string[] {
   const names = new Set<string>();
   let current: object | null = obj;
 
   while (current !== null && current !== Object.prototype) {
     for (const name of Object.getOwnPropertyNames(current)) {
-      if (name === "constructor") continue;
+      if (name === "constructor" || HIDDEN_PROPERTIES.has(name)) continue;
       const descriptor = Object.getOwnPropertyDescriptor(current, name);
       if (descriptor && typeof descriptor.value === "function") {
         names.add(name);

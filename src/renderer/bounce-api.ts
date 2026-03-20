@@ -8,8 +8,10 @@ import {
   Sample,
   OnsetFeature,
   NmfFeature,
+  NxFeature,
   MfccFeature,
   VisScene,
+  VisScenePromise,
   VisStack,
   VisSceneListResult,
   SampleNamespace,
@@ -27,6 +29,7 @@ import {
   CurrentSamplePromise,
   OnsetFeaturePromise,
   NmfFeaturePromise,
+  NxFeaturePromise,
   MfccFeaturePromise,
   GrainCollectionPromise,
   type SampleSummaryFeature,
@@ -55,8 +58,10 @@ export {
   Sample,
   OnsetFeature,
   NmfFeature,
+  NxFeature,
   MfccFeature,
   VisScene,
+  VisScenePromise,
   VisStack,
   VisSceneListResult,
   SampleNamespace,
@@ -71,6 +76,7 @@ export {
   CurrentSamplePromise,
   OnsetFeaturePromise,
   NmfFeaturePromise,
+  NxFeaturePromise,
   MfccFeaturePromise,
   GrainCollectionPromise,
   LsResult,
@@ -494,6 +500,20 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     ].join("\n"));
   }
 
+  function nxFeatureHelpText(feature: NxFeature): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mNxFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
+      `  components : ${feature.components}`,
+      `  source     : ${feature.sourceSampleHash.substring(0, 8)}`,
+      ``,
+      `\x1b[90mMethods:\x1b[0m`,
+      `  .playComponent(index?)   play a resynthesized component`,
+      ``,
+      `\x1b[90mVisualize:\x1b[0m`,
+      `  vis.waveform(samp).overlay(samp.nx(other)).show()`,
+    ].join("\n"));
+  }
+
   function makeSampleDisplayText(
     sample: {
       hash: string;
@@ -636,6 +656,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         onsets: (options) => analyze(bound, options),
         nmf: (options) => analyzeNmf(bound, options),
         mfcc: (options) => analyzeMFCC(bound, options),
+        nx: (other, options) => analyzeNx(bound, other, options),
       },
     );
     return bound;
@@ -710,6 +731,33 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       numCoeffs,
       {
         help: (): BounceResult => mfccHelpText(bound),
+      },
+    );
+    return bound;
+  }
+
+  function bindNxFeature(
+    target: Sample,
+    featureHash: string,
+    components: number,
+    sourceSampleHash: string,
+    sourceFeatureHash: string,
+    bases: number[][] | undefined,
+    activations: number[][] | undefined,
+  ): NxFeature {
+    const bound: NxFeature = new NxFeature(
+      `\x1b[32mNX cross-synthesis complete (${components} components)\x1b[0m`,
+      target,
+      featureHash,
+      undefined,
+      components,
+      sourceSampleHash,
+      sourceFeatureHash,
+      bases,
+      activations,
+      {
+        playComponent: (index = 0) => playComponent(index, bound),
+        help: () => nxFeatureHelpText(bound),
       },
     );
     return bound;
@@ -991,6 +1039,46 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     );
   }
 
+  async function analyzeNx(
+    target: Sample,
+    other: Sample | PromiseLike<Sample>,
+    options?: { components?: number },
+  ): Promise<NxFeature> {
+    const resolvedOther = await Promise.resolve(other);
+    const existingNmf = await window.electron.getMostRecentFeature(resolvedOther.hash, "nmf");
+    if (!existingNmf) {
+      terminal.writeln("\x1b[36mAuto-computing NMF on source sample...\x1b[0m");
+      const nmfResult = await window.electron.analyzeNMF([resolvedOther.hash]);
+      if (!nmfResult.success) {
+        throw new Error(`Failed to auto-compute NMF on source: ${nmfResult.message}`);
+      }
+    }
+    terminal.writeln("\x1b[36mRunning NMF cross-synthesis...\x1b[0m");
+    const args = [target.hash, resolvedOther.hash];
+    if (options?.components !== undefined) {
+      args.push("--components", String(options.components));
+    }
+    const result = await window.electron.nx(args);
+    if (!result.success) throw new Error(result.message);
+    const feature = await window.electron.getMostRecentFeature(target.hash, "nmf-cross");
+    if (!feature) throw new Error("NX feature could not be loaded after cross-synthesis.");
+    const data = JSON.parse(feature.feature_data) as {
+      bases: number[][];
+      activations: number[][];
+      sourceSampleHash: string;
+      sourceFeatureHash: string;
+    };
+    return bindNxFeature(
+      target,
+      feature.feature_hash,
+      data.bases.length,
+      data.sourceSampleHash,
+      data.sourceFeatureHash,
+      data.bases,
+      data.activations,
+    );
+  }
+
   const slice = Object.assign(
     async function slice(
       source?: OnsetFeature | Sample | PromiseLike<Sample> | SliceOptions,
@@ -1094,36 +1182,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
         "           const feature = samp.nmf({ components: 4 })",
         "           feature.sep()",
-      ].join("\n")),
-    },
-  );
-
-  const nx = Object.assign(
-    async function nx(options?: NxOptions): Promise<BounceResult> {
-      if (!options?.targetHash || !options?.sourceHash) {
-        throw new Error("nx() requires options.targetHash and options.sourceHash");
-      }
-
-      const args: string[] = [options.targetHash, options.sourceHash];
-      if (options.components !== undefined) args.push("--components", String(options.components));
-
-      const result = await window.electron.nx(args);
-      if (result.success) {
-        return new BounceResult(`\x1b[32m${result.message}\x1b[0m`);
-      } else {
-        throw new Error(result.message);
-      }
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mnx(options)\x1b[0m",
-        "",
-        "  NMF cross-synthesis — applies the spectral components of a source audio",
-        "  to the temporal structure of a target audio.",
-        "",
-        "  \x1b[33moptions\x1b[0m  targetHash (required), sourceHash (required), components",
-        "",
-        "  \x1b[90mExample:\x1b[0m  nx({ targetHash: \"a1b2c3d4\", sourceHash: \"e5f6a7b8\" })",
       ].join("\n")),
     },
   );
@@ -1283,17 +1341,18 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   );
 
   const playComponent = Object.assign(
-    async function playComponent(index = 0, source?: NmfFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
+    async function playComponent(index = 0, source?: NmfFeature | NxFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
       const currentHash = getCurrentHash();
 
       const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
-        : resolvedSource instanceof NmfFeature
+        : (resolvedSource instanceof NmfFeature || resolvedSource instanceof NxFeature)
           ? resolvedSource.sourceHash
           : currentHash;
 
-      const feature = await window.electron.getMostRecentFeature(lookupHash, "nmf");
+      const featureType = resolvedSource instanceof NxFeature ? "nmf-cross" : "nmf";
+      const feature = await window.electron.getMostRecentFeature(lookupHash, featureType);
       if (!feature) {
         throw new Error("No NMF analysis found. Run sample.nmf() first.");
       }
@@ -1361,222 +1420,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  \x1b[90mExample:\x1b[0m  const feature = samp.nmf()",
         "           feature.sep()",
         "           feature.playComponent(0)",
-      ].join("\n")),
-    },
-  );
-
-  const visualizeNmf = Object.assign(
-    async function visualizeNmf(_options?: VisualizeNmfOptions): Promise<BounceResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
-      }
-
-      const current = await window.electron.getSampleByHash(audio.hash);
-      if (!current) {
-        throw new Error(`Sample ${audio.hash} not found in database`);
-      }
-
-      const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
-      if (!feature) {
-        throw new Error("No NMF analysis found. Run sample.nmf() first.");
-      }
-
-      const featureData = JSON.parse(feature.feature_data) as {
-        bases?: number[][];
-        activations?: number[][];
-        components?: number;
-      };
-
-      const sample = bindSample({
-        id: current.id,
-        hash: current.hash,
-        filePath: current.file_path ?? undefined,
-        sampleRate: current.sample_rate,
-        channels: current.channels,
-        duration: current.duration,
-      });
-      const boundFeature = bindNmfFeature(
-        sample,
-        feature.feature_hash,
-        undefined,
-        featureData.components ?? featureData.activations?.length,
-        undefined,
-        undefined,
-        featureData.bases,
-        featureData.activations,
-        `\x1b[32mNMF feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
-      );
-
-      return bindVisScene(sample, `NMF Overlay · ${sampleLabel(sample.filePath, sample.hash)}`)
-        .overlay(boundFeature)
-        .show();
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mvisualizeNmf(options?)\x1b[0m",
-        "",
-        "  Compatibility helper: create a new vis scene with the current sample",
-        "  waveform and the most recent NMF overlay.",
-        "",
-        "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
-        "",
-        "  \x1b[90mExample:\x1b[0m  visualizeNmf()",
-      ].join("\n")),
-    },
-  );
-
-  const visualizeNx = Object.assign(
-    async function visualizeNx(options?: VisualizeNxOptions): Promise<BounceResult> {
-      const audio = audioManager.getCurrentAudio();
-      const targetHash = options?.featureHash ?? audio?.hash;
-      if (!targetHash) {
-        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
-      }
-
-      const sample = await window.electron.getSampleByHash(targetHash);
-      if (!sample) {
-        throw new Error(`Sample ${targetHash} not found`);
-      }
-
-      const sampleAudioData = new Float32Array(
-        sample.audio_data.buffer,
-        sample.audio_data.byteOffset,
-        sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
-      );
-
-      audioManager.setCurrentAudio({
-        audioData: sampleAudioData,
-        sampleRate: sample.sample_rate,
-        duration: sample.duration,
-        filePath: sample.file_path ?? undefined,
-        hash: sample.hash,
-        visualize: () => "NX Visualization",
-        analyzeOnsetSlice: async () => ({ slices: [], visualize: () => "Not available" }),
-      });
-
-      await window.electron.sendCommand("visualize-nx", [targetHash]);
-      return new BounceResult(`\x1b[32mNX visualization overlaid for ${targetHash.substring(0, 8)}\x1b[0m`);
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mvisualizeNx(options?)\x1b[0m",
-        "",
-        "  Overlay the NMF cross-synthesis result on the current waveform. Requires",
-        "  nx() to have been run first.",
-        "",
-        "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored feature",
-        "",
-        "  \x1b[90mExample:\x1b[0m  visualizeNx()",
-      ].join("\n")),
-    },
-  );
-
-  const onsetSlice = Object.assign(
-    async function onsetSlice(_options?: OnsetSliceVisOptions): Promise<BounceResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
-      }
-
-      const feature = await window.electron.getMostRecentFeature(audio.hash, "onset-slice");
-      if (!feature) {
-        throw new Error("No onset analysis found. Run sample.onsets() first.");
-      }
-
-      const slicesData = JSON.parse(feature.feature_data) as number[];
-      const current = await window.electron.getSampleByHash(audio.hash);
-      if (!current) {
-        throw new Error(`Sample ${audio.hash} not found in database`);
-      }
-      const sample = bindSample({
-        id: current.id,
-        hash: current.hash,
-        filePath: current.file_path ?? undefined,
-        sampleRate: current.sample_rate,
-        channels: current.channels,
-        duration: current.duration,
-      });
-      const boundFeature = bindOnsetFeature(
-        sample,
-        feature.feature_hash,
-        slicesData,
-        undefined,
-        `\x1b[32mOnset feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
-      );
-      return bindVisScene(sample, `Onset Overlay · ${sampleLabel(sample.filePath, sample.hash)}`)
-        .overlay(boundFeature)
-        .show();
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36monsetSlice(options?)\x1b[0m",
-        "",
-        "  Compatibility helper: create a new vis scene with the current sample",
-        "  waveform and the most recent onset overlay.",
-        "",
-        "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored onset-slice feature",
-        "",
-        "  \x1b[90mExample:\x1b[0m  onsetSlice()",
-      ].join("\n")),
-    },
-  );
-
-  const nmf = Object.assign(
-    async function nmf(_options?: NmfVisOptions): Promise<BounceResult> {
-      const audio = audioManager.getCurrentAudio();
-      if (!audio?.hash) {
-        throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
-      }
-
-      const feature = await window.electron.getMostRecentFeature(audio.hash, "nmf");
-      if (!feature) {
-        throw new Error("No NMF analysis found. Run sample.nmf() first.");
-      }
-
-      const nmfData = JSON.parse(feature.feature_data) as {
-        components: number;
-        bases: number[][];
-        activations: number[][];
-      };
-      const current = await window.electron.getSampleByHash(audio.hash);
-      if (!current) {
-        throw new Error(`Sample ${audio.hash} not found in database`);
-      }
-      const sample = bindSample({
-        id: current.id,
-        hash: current.hash,
-        filePath: current.file_path ?? undefined,
-        sampleRate: current.sample_rate,
-        channels: current.channels,
-        duration: current.duration,
-      });
-      const boundFeature = bindNmfFeature(
-        sample,
-        feature.feature_hash,
-        undefined,
-        nmfData.components,
-        undefined,
-        undefined,
-        nmfData.bases,
-        nmfData.activations,
-        `\x1b[32mNMF feature ${feature.feature_hash.substring(0, 8)} ready\x1b[0m`,
-      );
-
-      return bindVisScene(sample, `NMF Panel · ${sampleLabel(sample.filePath, sample.hash)}`)
-        .panel(boundFeature)
-        .show();
-    },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mnmf(options?)\x1b[0m",
-        "",
-        "  Compatibility helper: create a new vis scene with the current sample",
-        "  waveform and a detailed NMF panel.",
-        "",
-        "  \x1b[33moptions\x1b[0m  featureHash — use a specific stored NMF feature",
-        "",
-        "  \x1b[90mExample:\x1b[0m  nmf()",
       ].join("\n")),
     },
   );
@@ -2134,9 +1977,13 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     },
 
     waveform: Object.assign(
-      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene {
+      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene | VisScenePromise {
         if (isPromiseLike<Sample>(sampleOrPromise)) {
-          throw new Error("vis.waveform() requires a resolved Sample. Assign sn.read(...) to a variable first.");
+          return new VisScenePromise(
+            Promise.resolve(sampleOrPromise).then((sample) =>
+              bindVisScene(sample, `Waveform · ${sampleLabel(sample.filePath, sample.hash)}`),
+            ),
+          );
         }
         return bindVisScene(sampleOrPromise, `Waveform · ${sampleLabel(sampleOrPromise.filePath, sampleOrPromise.hash)}`);
       },
@@ -2228,24 +2075,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       return new BounceResult([
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
-        "\x1b[1;36m── Sample API ──\x1b[0m",
         "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .list() .current() .stop() .help()",
         "  \x1b[33menv\x1b[0m                              Runtime introspection: .vars() .globals() .inspect() .functions()",
         "  \x1b[33mproj\x1b[0m                             Project namespace: .current() .list() .load() .rm() .help()",
-        "  \x1b[33mSample\x1b[0m                           .play() .loop() .stop() .display() .onsets() .nmf() .mfcc()",
-        "                                   .slice() .sep() .granularize() .help()",
         "  \x1b[33mvis\x1b[0m                              Visualization namespace: .waveform() .list() .remove() .clear()",
-        "  \x1b[33mnx(options)\x1b[0m                      NMF cross-synthesis",
         "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",
-        "",
-        "\x1b[1;36m── Utilities ──\x1b[0m",
-        "  \x1b[33mvisualizeNmf(options?)\x1b[0m           Legacy helper: vis waveform + NMF overlay",
-        "  \x1b[33mvisualizeNx(options?)\x1b[0m            Legacy helper for NX visualization",
-        "  \x1b[33monsetSlice(options?)\x1b[0m             Legacy helper: vis waveform + onset overlay",
-        "  \x1b[33mnmf(options?)\x1b[0m                    Legacy helper: vis waveform + NMF panel",
         "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
-        "  \x1b[33mdebug(limit?)\x1b[0m                   Show debug log entries",
-        "  \x1b[33mclearDebug()\x1b[0m                    Clear stored debug log entries",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
         "",
@@ -2255,7 +2090,9 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
         "  proj.load(\"drums\")                                    \x1b[90m# switch project context\x1b[0m",
         "  const onsets = samp.onsets(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
         "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
-        "  vis.waveform(samp).overlay(onsets).show()               \x1b[90m# explicit visualization\x1b[0m",
+        "  vis.waveform(samp).overlay(onsets).show()               \x1b[90m# visualize onsets\x1b[0m",
+        "  vis.waveform(samp).overlay(samp.nmf()).show()           \x1b[90m# visualize NMF\x1b[0m",
+        "  vis.waveform(samp1).overlay(samp1.nx(samp2)).show()    \x1b[90m# NMF cross-synthesis\x1b[0m",
         "  corpus.build(samp) → corpus.query(0, 5)                 \x1b[90m# corpus search\x1b[0m",
         "",
         "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), vis.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
@@ -2606,11 +2443,6 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     sn,
     env,
     vis,
-    nx,
-    visualizeNmf,
-    visualizeNx,
-    onsetSlice,
-    nmf,
     clearDebug,
     debug,
     help,

@@ -2,11 +2,6 @@ export const BOUNCE_GLOBALS = new Set([
   "sn",
   "env",
   "vis",
-  "nx",
-  "visualizeNmf",
-  "visualizeNx",
-  "onsetSlice",
-  "nmf",
   "clearDebug",
   "debug",
   "help",
@@ -14,6 +9,15 @@ export const BOUNCE_GLOBALS = new Set([
   "corpus",
   "fs",
   "proj",
+]);
+
+/**
+ * Names that are valid REPL globals but should not appear in tab completion.
+ * These are developer utilities or internal functions that we don't want to
+ * surface to users.
+ */
+export const COMPLETION_HIDDEN_GLOBALS = new Set([
+  "clearDebug",
 ]);
 
 /**

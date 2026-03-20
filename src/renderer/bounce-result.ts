@@ -1,5 +1,9 @@
 import type { GrainCollection } from "./grain-collection.js";
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return typeof (value as PromiseLike<T>)?.then === "function";
+}
+
 /**
  * Base class for all Bounce REPL command results.
  * Subclasses carry typed data enabling command composition.
@@ -44,6 +48,7 @@ export interface SampleMethodBindings {
   onsets: (options?: AnalyzeOptions) => Promise<OnsetFeature>;
   nmf: (options?: NmfOptions) => Promise<NmfFeature>;
   mfcc: (options?: MFCCOptions) => Promise<MfccFeature>;
+  nx: (other: Sample | PromiseLike<Sample>, options?: { components?: number }) => Promise<NxFeature>;
 }
 
 function unavailableSampleBindings(name: string): SampleMethodBindings {
@@ -76,6 +81,9 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
     },
     mfcc: async () => {
       throw new Error(`${name} does not support MFCC analysis in this context.`);
+    },
+    nx: async () => {
+      throw new Error(`${name} does not support NMF cross-synthesis in this context.`);
     },
   };
 }
@@ -136,6 +144,10 @@ export class Sample extends HelpableResult {
   mfcc(options?: MFCCOptions): MfccFeaturePromise {
     return new MfccFeaturePromise(this.bindings.mfcc(options));
   }
+
+  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+    return new NxFeaturePromise(this.bindings.nx(other, options));
+  }
 }
 
 /**
@@ -174,6 +186,11 @@ export interface OnsetFeatureBindings {
 export interface NmfFeatureBindings {
   help: HelpFactory;
   sep: (options?: SepOptions) => Promise<BounceResult>;
+  playComponent: (index?: number) => Promise<Sample>;
+}
+
+export interface NxFeatureBindings {
+  help: HelpFactory;
   playComponent: (index?: number) => Promise<Sample>;
 }
 
@@ -252,6 +269,27 @@ export class NmfFeature extends FeatureResult {
   }
 }
 
+export class NxFeature extends FeatureResult {
+  constructor(
+    display: string,
+    source: Sample,
+    featureHash: string,
+    options: Record<string, unknown> | undefined,
+    public readonly components: number,
+    public readonly sourceSampleHash: string,
+    public readonly sourceFeatureHash: string,
+    public readonly bases: number[][] | undefined,
+    public readonly activations: number[][] | undefined,
+    private readonly bindings: NxFeatureBindings,
+  ) {
+    super(display, source, featureHash, "nmf-cross", options, bindings.help);
+  }
+
+  playComponent(index = 0): SamplePromise {
+    return new SamplePromise(this.bindings.playComponent(index));
+  }
+}
+
 export class MfccFeature extends FeatureResult {
   constructor(
     display: string,
@@ -286,8 +324,9 @@ export interface VisSceneSummary {
 }
 
 export class VisScene extends HelpableResult {
-  readonly overlays: Array<OnsetFeature | NmfFeature> = [];
+  readonly overlays: Array<OnsetFeature | NmfFeature | NxFeature> = [];
   readonly panels: NmfFeature[] = [];
+  private readonly pendingOps: Array<Promise<void>> = [];
   private shownSceneId: string | undefined;
   public titleText: string | undefined;
 
@@ -322,22 +361,67 @@ export class VisScene extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature): VisScene {
-    this.overlays.push(feature);
+  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisScene {
+    if (isPromiseLike<OnsetFeature | NmfFeature | NxFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { this.overlays.push(f); }));
+    } else {
+      this.overlays.push(feature);
+    }
     return this;
   }
 
-  panel(feature: NmfFeature): VisScene {
-    this.panels.push(feature);
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisScene {
+    if (isPromiseLike<NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { this.panels.push(f); }));
+    } else {
+      this.panels.push(feature);
+    }
     return this;
   }
 
   show(): Promise<BounceResult> {
-    return this.bindings.show(this);
+    return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }
 
   markShown(id: string): void {
     this.shownSceneId = id;
+  }
+}
+
+export class VisScenePromise implements PromiseLike<VisScene> {
+  constructor(private readonly promise: Promise<VisScene>) {}
+
+  then<TResult1 = VisScene, TResult2 = never>(
+    onfulfilled?: ((value: VisScene) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<VisScene | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  title(text: string): VisScenePromise {
+    return new VisScenePromise(this.promise.then((scene) => scene.title(text)));
+  }
+
+  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisScenePromise {
+    return new VisScenePromise(
+      Promise.all([this.promise, Promise.resolve(feature)]).then(([scene, f]) => scene.overlay(f)),
+    );
+  }
+
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisScenePromise {
+    return new VisScenePromise(
+      Promise.all([this.promise, Promise.resolve(feature)]).then(([scene, f]) => scene.panel(f)),
+    );
+  }
+
+  show(): Promise<BounceResult> {
+    return this.promise.then((scene) => scene.show());
   }
 }
 
@@ -357,6 +441,7 @@ export class VisSceneListResult extends HelpableResult {
 
 export class VisStack extends HelpableResult {
   readonly scenes: VisScene[] = [];
+  private readonly pendingOps: Array<Promise<void>> = [];
 
   constructor(private readonly bindings: VisStackBindings) {
     super("", bindings.help);
@@ -387,18 +472,28 @@ export class VisStack extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature): VisStack {
-    this.requireLatestScene().overlay(feature);
+  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisStack {
+    const latest = this.requireLatestScene();
+    if (isPromiseLike<OnsetFeature | NmfFeature | NxFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { latest.overlay(f); }));
+    } else {
+      latest.overlay(feature);
+    }
     return this;
   }
 
-  panel(feature: NmfFeature): VisStack {
-    this.requireLatestScene().panel(feature);
+  panel(feature: NmfFeature | PromiseLike<NmfFeature>): VisStack {
+    const latest = this.requireLatestScene();
+    if (isPromiseLike<NmfFeature>(feature)) {
+      this.pendingOps.push(Promise.resolve(feature).then((f) => { latest.panel(f); }));
+    } else {
+      latest.panel(feature);
+    }
     return this;
   }
 
   show(): Promise<BounceResult> {
-    return this.bindings.show(this);
+    return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }
 
   private requireLatestScene(): VisScene {
@@ -716,7 +811,8 @@ export class InputsResult extends BounceResult {
         "           sn.dev(0)",
         "           const mic = sn.dev(0)",
         "           const h = mic.record(\"take1\")",
-        "           h.stop()",
+        "           const samp = h.stop()",
+        "           vis.waveform(samp).show()",
       ].join("\n"),
     );
   }
@@ -824,6 +920,10 @@ export class SamplePromise implements PromiseLike<Sample> {
   mfcc(options?: MFCCOptions): MfccFeaturePromise {
     return new MfccFeaturePromise(this.promise.then((sample) => sample.mfcc(options)));
   }
+
+  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+    return new NxFeaturePromise(this.promise.then((sample) => sample.nx(other, options)));
+  }
 }
 
 export class CurrentSamplePromise implements PromiseLike<Sample | null> {
@@ -894,6 +994,10 @@ export class CurrentSamplePromise implements PromiseLike<Sample | null> {
   mfcc(options?: MFCCOptions): MfccFeaturePromise {
     return new MfccFeaturePromise(this.requireSample().then((sample) => sample.mfcc(options)));
   }
+
+  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+    return new NxFeaturePromise(this.requireSample().then((sample) => sample.nx(other, options)));
+  }
 }
 
 export class OnsetFeaturePromise implements PromiseLike<OnsetFeature> {
@@ -947,6 +1051,31 @@ export class NmfFeaturePromise implements PromiseLike<NmfFeature> {
 
   sep(options?: SepOptions): Promise<BounceResult> {
     return this.promise.then((feature) => feature.sep(options));
+  }
+
+  playComponent(index = 0): SamplePromise {
+    return new SamplePromise(this.promise.then((feature) => feature.playComponent(index)));
+  }
+}
+
+export class NxFeaturePromise implements PromiseLike<NxFeature> {
+  constructor(private readonly promise: Promise<NxFeature>) {}
+
+  then<TResult1 = NxFeature, TResult2 = never>(
+    onfulfilled?: ((value: NxFeature) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<NxFeature | TResult> {
+    return this.promise.catch(onrejected);
+  }
+
+  help(): Promise<BounceResult> {
+    return this.promise.then((feature) => feature.help());
   }
 
   playComponent(index = 0): SamplePromise {

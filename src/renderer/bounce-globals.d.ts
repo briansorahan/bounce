@@ -27,27 +27,6 @@ interface SepOptions {
   iterations?: number;
 }
 
-interface NxOptions {
-  sourceHash?: string;
-  targetHash?: string;
-  components?: number;
-}
-
-interface VisualizeNmfOptions {
-  featureHash?: string;
-}
-
-interface VisualizeNxOptions {
-  featureHash?: string;
-}
-
-interface OnsetSliceVisOptions {
-  featureHash?: string;
-}
-
-interface NmfVisOptions {
-  featureHash?: string;
-}
 
 interface MFCCOptions {
   numCoeffs?: number;
@@ -336,31 +315,6 @@ declare const vis: {
     (): BounceResult;
     help(): BounceResult;
   };
-};
-
-declare const nx: {
-  (options?: NxOptions): ReplValue<Promise<BounceResult>>;
-  help(): BounceResult;
-};
-
-declare const visualizeNmf: {
-  (options?: VisualizeNmfOptions): ReplValue<Promise<BounceResult>>;
-  help(): BounceResult;
-};
-
-declare const visualizeNx: {
-  (options?: VisualizeNxOptions): ReplValue<Promise<BounceResult>>;
-  help(): BounceResult;
-};
-
-declare const onsetSlice: {
-  (options?: OnsetSliceVisOptions): ReplValue<Promise<BounceResult>>;
-  help(): BounceResult;
-};
-
-declare const nmf: {
-  (options?: NmfVisOptions): ReplValue<Promise<BounceResult>>;
-  help(): BounceResult;
 };
 
 declare const clearDebug: {
