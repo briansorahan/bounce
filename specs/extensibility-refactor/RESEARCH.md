@@ -2,7 +2,7 @@
 
 **Spec:** specs/extensibility-refactor  
 **Created:** 2026-03-20  
-**Status:** In Progress
+**Status:** Complete
 
 ## Problem Statement
 
@@ -362,17 +362,17 @@ This refactor is primarily structural — it should not change any user-facing b
 
 No platform-specific concerns for this refactor — it is purely a TypeScript structural change. The native C++ addon layer is not affected.
 
-## Open Questions
+## Resolved Questions
 
-1. **Incremental vs. big-bang?** — Should we refactor one module at a time (e.g., extract filesystem namespace first), or do a coordinated refactor of all modules? Incremental is safer but may require temporary shims.
+1. **Incremental, leaf-to-root.** Extract namespaces one at a time, starting with the least coupled (e.g., `fs`) and working toward the most connected (`sn`). Dependency analysis shows leaf namespaces like `fs` have zero inbound dependencies from other namespaces and only need result classes + IPC calls — no temporary shims required if extracted in the right order.
 
-2. **Result type protocol** — Should IPC calls return `{ ok: true, data } | { ok: false, error }` discriminated unions, or should they continue using throw/catch with structured `BounceError` objects? The discriminated union approach is more explicit but changes every call site.
+2. **Throw/catch with `BounceError`, `code: string`.** Continue using throw/catch (matches existing pattern, avoids rewriting every call site). `BounceError` is a base class with `code: string` — no central enum or union. Each domain module owns its own error code constants as string conventions (e.g., `SAMPLE_NOT_FOUND`, `FS_ERROR`, `CORPUS_EMPTY`). This avoids merge conflict bottlenecks when developing features in parallel.
 
-3. **Shared types package** — Should `src/shared/` be a separate directory for types used across all three processes (main, renderer, utility), or should each process import from the process that defines the contract?
+3. **`src/shared/` for cross-process contracts.** Types used across process boundaries (IPC contract, audio engine protocol, `BounceError`, error codes) go in `src/shared/`. Each process imports from this directory.
 
-4. **Database refactor scope** — `database.ts` (1,229 lines) is large but relatively well-organized. Should it be split in this refactor, or left for a separate spec?
+4. **Defer `database.ts` refactor.** It is 1,229 lines but well-organized by domain (projects → logging → history → samples → features → derived samples). Splitting it won't unblock roadmap features. Leave for a separate spec.
 
-5. **How much of bounce-result.ts's class hierarchy do we preserve?** — The ~30 classes work well for the REPL's thenable/chainable API. But the promise wrapper boilerplate is repetitive. A generic `BouncePromise<T>` could cut this significantly.
+5. **Defer `BouncePromise<T>` generic.** The existing per-type promise wrappers work and each has different chainable methods. A generic base is a potential optimization but needs careful design and is not a blocker.
 
 ## Research Findings Summary
 

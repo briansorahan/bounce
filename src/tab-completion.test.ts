@@ -265,7 +265,7 @@ async function testToStringHiddenFromMethodCompletion() {
   class StubWithToString {
     help() {}
     play() {}
-    override toString(): string {
+    toString(): string {
       return "stub";
     }
   }

@@ -304,43 +304,9 @@ User-installable FluCoMa algorithm wrappers as npm packages.
 
 ## Tab Completion
 
-* clearDebug() is still exposed through tab-completion. Also need to remove things like helpFactory().
-  * General audit to make sure everything showing up in tab completion is stuff we want to expose to users.
-  * Also need to remove toString() from tab completion
 * vis builder pattern doesn't support tab completion for chained method calls.
 * We don't support tab completion for method calls that are not the outer most call, e.g. the sn.read() within vis.waveform() above
 
 ## sn.help()
 
 * sn.help() output sucks. We should enforce a consistent approach for the help() output of all top-level objects.
-
-## Cleanup help() Output and Remove Legacy Functions
-
-* Remove visualizeNmf, visualizeNx, onsetSlice, nmf from help() and from the codebase.
-  * Removing visualizeNmf and visualizeNx requires migrating tests/nmf-analysis.spec.ts to use
-    sample.nmf() + vis.waveform() directly. tab-completion.test.ts also needs updating.
-* Do not show debug() or clearDebug() in help(). Document them in developer docs instead.
-* Remove the Sample type entry and all section headings — use a flat list.
-* nx(options) stays in help() until NmfFeature.nx() is implemented (see below).
-
-## nx as a Method of NmfFeature
-
-Currently `nx(options)` is a top-level function that takes `sourceHash` and `targetHash` and
-performs NMF cross-synthesis. It should instead be a method on `NmfFeature` since the feature
-object already holds the bases and activations needed — no database round-trip required.
-
-```js
-// current
-const feat = samp.nmf({ components: 10 })
-nx({ sourceHash: samp.hash, targetHash: other.hash })
-
-// proposed
-const feat = samp.nmf({ components: 10 })
-feat.nx(other)               // optional: feat.nx(other, { components: 8 })
-```
-
-Once implemented, the top-level `nx()` function and its entry in help() can be removed.
-
-## General Typescript Functionality
-
-* Need to be able to do things like vis.waveform(sn.read(PATH)) i.e. shouldn't have to assign sn.read(PATH) to a variable
