@@ -1,11 +1,11 @@
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import type { PlaybackCursorState } from "./audio-context.js";
 import { type NMFOverlayData, WaveformVisualizer } from "./waveform-visualizer.js";
-import type { NmfFeature, OnsetFeature, Sample } from "./bounce-result.js";
+import type { NmfFeature, NxFeature, OnsetFeature, Sample } from "./bounce-result.js";
 
 export interface RenderableVisScene {
   readonly sample: Sample;
-  readonly overlays: readonly (OnsetFeature | NmfFeature)[];
+  readonly overlays: readonly (OnsetFeature | NmfFeature | NxFeature)[];
   readonly panels: readonly NmfFeature[];
   readonly titleText?: string;
   markShown(id: string): void;
@@ -59,6 +59,9 @@ export class VisualizationSceneManager {
     const nmfOverlay = scene.overlays.find(
       (feature): feature is NmfFeature => feature.featureType === "nmf",
     );
+    const nxOverlay = scene.overlays.find(
+      (feature): feature is NxFeature => feature.featureType === "nmf-cross",
+    );
 
     waveformVisualizer.drawWaveform(
       audioFileData.channelData,
@@ -66,11 +69,12 @@ export class VisualizationSceneManager {
       onsetOverlay?.slices,
     );
 
-    if (nmfOverlay?.activations) {
+    const activeOverlay = nmfOverlay ?? nxOverlay;
+    if (activeOverlay?.activations) {
       const overlayData: NMFOverlayData = {
-        components: nmfOverlay.components ?? nmfOverlay.activations.length,
-        bases: nmfOverlay.bases ?? [],
-        activations: nmfOverlay.activations,
+        components: activeOverlay.components ?? activeOverlay.activations.length,
+        bases: activeOverlay.bases ?? [],
+        activations: activeOverlay.activations,
       };
       waveformVisualizer.setNMFOverlay(overlayData);
     }

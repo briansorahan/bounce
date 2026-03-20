@@ -43,8 +43,8 @@ async function testSingleMatchNamespace() {
 
 async function testMultiMatchVisualize() {
   const c = new TabCompletion();
-  await c.update("vi", 2);
-  assert.strictEqual(c.matchCount, 3);
+  await c.update("cl", 2);
+  assert.strictEqual(c.matchCount, 2);
 }
 
 async function testSingleMatchProjectNamespace() {
@@ -79,16 +79,15 @@ async function testGhostTextSingleMatchContainsSuffix() {
 
 async function testGhostTextMultiMatchContainsCandidates() {
   const c = new TabCompletion();
-  await c.update("vi", 2);
+  await c.update("cl", 2);
   const ghost = c.ghostText();
-  assert.ok(ghost.includes("vis()"));
-  assert.ok(ghost.includes("visualizeNmf()"));
-  assert.ok(ghost.includes("visualizeNx()"));
+  assert.ok(ghost.includes("clear()"));
+  assert.ok(ghost.includes("clearDebug()"));
 }
 
 async function testResetClearsState() {
   const c = new TabCompletion();
-  await c.update("vi", 2);
+  await c.update("cl", 2);
   c.ghostText();
   c.reset();
   assert.strictEqual(c.matchCount, 0);
