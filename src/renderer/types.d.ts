@@ -293,7 +293,7 @@ interface Window {
       duration: number,
       overwrite: boolean,
     ) => Promise<StoreRecordingResult>;
-    playSample: (hash: string, loop: boolean) => void;
+    playSample: (hash: string, loop: boolean, loopStart?: number, loopEnd?: number) => void;
     stopSample: (hash?: string) => void;
     // Instrument API
     defineInstrument: (instrumentId: string, kind: string, polyphony: number) => void;

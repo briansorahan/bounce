@@ -82,7 +82,12 @@ void AudioEngine::stop() {
 // Control API (called from JS / utility-process thread)
 // ---------------------------------------------------------------------------
 void AudioEngine::play(const std::string& hash, const float* pcm,
-                       int numSamples, double sampleRate, bool loop) {
+                       int numSamples, double sampleRate, bool loop,
+                       double loopStartSec, double loopEndSec) {
+    int loopStartSample = static_cast<int>(loopStartSec * sampleRate);
+    int loopEndSample   = loopEndSec < 0.0
+                          ? -1
+                          : static_cast<int>(loopEndSec * sampleRate);
     auto proc = std::make_shared<SamplePlaybackEngine>(
         hash, loop,
         [this](const std::string& h) {
@@ -94,7 +99,8 @@ void AudioEngine::play(const std::string& hash, const float* pcm,
             int w = ringWritePos_.load(std::memory_order_relaxed);
             ring_[w % kRingSize] = std::move(ev);
             ringWritePos_.store(w + 1, std::memory_order_release);
-        });
+        },
+        loopStartSample, loopEndSample);
 
     proc->prepare(pcm, numSamples, sampleRate, 512);
 

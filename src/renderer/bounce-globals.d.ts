@@ -65,7 +65,7 @@ declare class Sample extends BounceResult {
 
   help(): BounceResult;
   play(): ReplValue<Promise<Sample>>;
-  loop(): ReplValue<Promise<Sample>>;
+  readonly loop: ((opts?: { loopStart?: number; loopEnd?: number }) => ReplValue<Promise<Sample>>) & { help: () => BounceResult };
   stop(): BounceResult;
   display(): ReplValue<Promise<Sample>>;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;

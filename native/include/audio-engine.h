@@ -38,7 +38,8 @@ public:
 
     // Legacy playback API (backward compat)
     void play(const std::string& hash, const float* pcm, int numSamples,
-              double sampleRate, bool loop);
+              double sampleRate, bool loop,
+              double loopStartSec = 0.0, double loopEndSec = -1.0);
     void stopSample(const std::string& hash);
     void stopAll();
 

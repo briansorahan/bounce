@@ -122,8 +122,8 @@ const api: ElectronAPI = {
       duration,
       overwrite,
     ),
-  playSample: (hash: string, loop: boolean) =>
-    ipcRenderer.send("play-sample", { hash, loop }),
+  playSample: (hash: string, loop: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.send("play-sample", { hash, loop, loopStart, loopEnd }),
   stopSample: (hash?: string) =>
     ipcRenderer.send("stop-sample", hash ? { hash } : undefined),
 

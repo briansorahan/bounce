@@ -32,7 +32,7 @@ const { AudioEngine } = require(addonPath) as {
 };
 
 interface AudioEngineNative {
-  play(hash: string, pcm: Float32Array, sampleRate: number, loop: boolean): void;
+  play(hash: string, pcm: Float32Array, sampleRate: number, loop: boolean, loopStart?: number, loopEnd?: number): void;
   stop(hash: string): void;
   stopAll(): void;
   onPosition(cb: (hash: string, positionInSamples: number) => void): void;
@@ -103,7 +103,7 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     switch (data.type) {
       case "play":
         if (engine && data.sampleHash && data.pcm && data.sampleRate !== undefined && data.loop !== undefined) {
-          engine.play(data.sampleHash, data.pcm, data.sampleRate, data.loop);
+          engine.play(data.sampleHash, data.pcm, data.sampleRate, data.loop, data.loopStart, data.loopEnd);
         }
         break;
       case "stop":

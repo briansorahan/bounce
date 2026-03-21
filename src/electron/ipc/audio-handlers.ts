@@ -159,7 +159,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     },
   );
 
-  ipcMain.on("play-sample", (_event, payload: { hash: string; loop: boolean }) => {
+  ipcMain.on("play-sample", (_event, payload: { hash: string; loop: boolean; loopStart?: number; loopEnd?: number }) => {
     const port = getAudioEnginePort();
     if (!deps.dbManager || !port) {
       const mainWindow = deps.getMainWindow();
@@ -196,7 +196,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     // Transfer the ArrayBuffer zero-copy to the utility process
     const pcmCopy = new Float32Array(pcm);
     port.postMessage(
-      { type: "play", sampleHash: payload.hash, pcm: pcmCopy, sampleRate: sample.sample_rate, loop: payload.loop },
+      { type: "play", sampleHash: payload.hash, pcm: pcmCopy, sampleRate: sample.sample_rate, loop: payload.loop, loopStart: payload.loopStart, loopEnd: payload.loopEnd },
     );
   });
 

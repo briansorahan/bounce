@@ -1,6 +1,6 @@
 export type AudioEngineCommand =
   // Legacy (backward compat)
-  | { type: "play"; sampleHash: string; pcm: Float32Array; sampleRate: number; loop: boolean }
+  | { type: "play"; sampleHash: string; pcm: Float32Array; sampleRate: number; loop: boolean; loopStart?: number; loopEnd?: number }
   | { type: "stop"; sampleHash: string }
   | { type: "stop-all" }
   // Instrument lifecycle

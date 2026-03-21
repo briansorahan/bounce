@@ -79,6 +79,8 @@ export class AudioManager {
     sampleRate: number,
     loop = false,
     hash?: string,
+    loopStart?: number,
+    loopEnd?: number,
   ): Promise<void> {
     // Use the native engine when a hash is available and the IPC channel exists.
     if (hash && window.electron?.playSample) {
@@ -90,7 +92,7 @@ export class AudioManager {
         positionInSamples: 0,
         ended: false,
       });
-      window.electron.playSample(hash, loop);
+      window.electron.playSample(hash, loop, loopStart, loopEnd);
       this.syncPlaybackUpdates();
       return;
     }
@@ -125,6 +127,8 @@ export class AudioManager {
     const sourceNode = this.audioContext.createBufferSource();
     sourceNode.buffer = buffer;
     sourceNode.loop = loop;
+    if (loop && loopStart !== undefined) sourceNode.loopStart = loopStart;
+    if (loop && loopEnd !== undefined && loopEnd >= 0) sourceNode.loopEnd = loopEnd;
     sourceNode.connect(this.audioContext.destination);
 
     sourceNode.onended = () => {

@@ -531,7 +531,7 @@ export interface IpcHandleContract {
 
 export interface IpcSendContract {
   "play-sample": {
-    data: { hash: string; loop: boolean };
+    data: { hash: string; loop: boolean; loopStart?: number; loopEnd?: number };
   };
   "stop-sample": {
     data: { hash?: string } | undefined;
@@ -664,7 +664,7 @@ export interface ElectronAPI {
   fsWalk: (dirPath: string) => Promise<FsWalkResult>;
 
   // Playback (one-way renderer → main)
-  playSample: (hash: string, loop: boolean) => void;
+  playSample: (hash: string, loop: boolean, loopStart?: number, loopEnd?: number) => void;
   stopSample: (hash?: string) => void;
 
   // Instruments (one-way renderer → main)

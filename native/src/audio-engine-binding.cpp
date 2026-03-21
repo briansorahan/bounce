@@ -80,13 +80,13 @@ AudioEngineWrapper::~AudioEngineWrapper() {
 }
 
 // ---------------------------------------------------------------------------
-// play(hash: string, pcm: Float32Array, sampleRate: number, loop: boolean)
+// play(hash, pcm, sampleRate, loop, loopStart?, loopEnd?)
 // ---------------------------------------------------------------------------
 Napi::Value AudioEngineWrapper::Play(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
     if (info.Length() < 4) {
-        Napi::TypeError::New(env, "play(hash, pcm, sampleRate, loop) requires 4 arguments")
+        Napi::TypeError::New(env, "play(hash, pcm, sampleRate, loop[, loopStart, loopEnd]) requires at least 4 arguments")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -95,11 +95,13 @@ Napi::Value AudioEngineWrapper::Play(const Napi::CallbackInfo& info) {
     auto        typedArr  = info[1].As<Napi::Float32Array>();
     double      sr        = info[2].As<Napi::Number>().DoubleValue();
     bool        loop      = info[3].As<Napi::Boolean>().Value();
+    double      loopStart = (info.Length() >= 5 && info[4].IsNumber()) ? info[4].As<Napi::Number>().DoubleValue() : 0.0;
+    double      loopEnd   = (info.Length() >= 6 && info[5].IsNumber()) ? info[5].As<Napi::Number>().DoubleValue() : -1.0;
 
     const float* pcm     = typedArr.Data();
     int          nSamples = static_cast<int>(typedArr.ElementLength());
 
-    engine_->play(hash, pcm, nSamples, sr, loop);
+    engine_->play(hash, pcm, nSamples, sr, loop, loopStart, loopEnd);
     return env.Undefined();
 }
 
