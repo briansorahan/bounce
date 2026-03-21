@@ -168,19 +168,19 @@ instrument.list()                     // show all defined instruments
 
 No new platform-specific concerns. The instrument abstraction is implemented entirely in portable C++17 and TypeScript. Miniaudio handles platform audio I/O as before.
 
-## Open Questions
+## Open Questions — Resolved
 
-1. **Note numbering**: Should note numbers follow MIDI convention (0–127) or be arbitrary string keys (sample hashes)? For a sampler, mapping note → sample hash is natural. MIDI numbers could be a later addition.
+1. **Note numbering**: Use MIDI convention (0–127). Mapping note numbers to sample hashes is the sampler's job.
 
-2. **Parameter system**: What parameters should a SamplerInstrument expose initially? Volume and pan are obvious candidates. Should parameters be per-instrument or per-voice?
+2. **Parameter system**: Start with sane defaults — volume 1.0, polyphony 16. Parameters are per-instrument initially; per-voice modulation can come later.
 
-3. **Instrument namespace name**: `instrument` is clear but verbose. `inst` is shorter. Could also use `synth` following SuperCollider convention. The namespace name should be decided before implementation.
+3. **Instrument namespace name**: `inst` — concise and clear.
 
-4. **Max voices**: Should the per-instrument voice limit be configurable at definition time, or fixed? A reasonable default (e.g. 16) with an option to override seems right.
+4. **Max voices**: Configurable at definition time via a `polyphony` parameter (default 16). Controls maximum concurrent voices for the instrument.
 
-5. **Database schema**: Should instruments be a new top-level table, or stored as a feature type in the existing `features` table? A dedicated `instruments` table seems cleaner given the distinct lifecycle (create/update/delete vs. compute-once features).
+5. **Database schema**: Dedicated `instruments` table — cleaner than overloading `features` given the distinct lifecycle (create/update/delete vs. compute-once).
 
-6. **Playback position telemetry**: Currently, position is reported per-processor. With instruments, should telemetry be per-instrument or per-voice? Per-voice is more useful for visualization but generates more traffic.
+6. **Playback position telemetry**: Per-voice, but **optional**. Telemetry is off by default and gated by subscribe/unsubscribe IPC messages per instrument. The renderer subscribes when a waveform scene is displayed and unsubscribes when dismissed. This avoids flooding the ring buffer when no visualization is active. Two new IPC messages: `subscribe-telemetry { instrumentId }` and `unsubscribe-telemetry { instrumentId }`. The instrument checks a `telemetryEnabled_` flag in its `process()` loop — zero cost when disabled.
 
 ## Research Findings
 
@@ -224,12 +224,14 @@ New message types needed:
 
 | Message | Direction | Purpose |
 |---------|-----------|---------|
-| `define-instrument` | TS → Native | Create instrument of a given type |
+| `define-instrument` | TS → Native | Create instrument of a given type with config (polyphony, etc.) |
 | `free-instrument` | TS → Native | Destroy instrument, release resources |
-| `load-sample` | TS → Native | Cache PCM data in an instrument |
-| `note-on` | TS → Native | Trigger a voice |
-| `note-off` | TS → Native | Release a voice |
-| `set-param` | TS → Native | Modify instrument/voice parameter |
+| `load-sample` | TS → Native | Cache PCM data in an instrument, mapped to a MIDI note |
+| `note-on` | TS → Native | Trigger a voice (note 0–127, velocity) |
+| `note-off` | TS → Native | Release a voice (note 0–127) |
+| `set-param` | TS → Native | Modify instrument parameter (volume, etc.) |
+| `subscribe-telemetry` | TS → Native | Enable per-voice position telemetry for an instrument |
+| `unsubscribe-telemetry` | TS → Native | Disable telemetry for an instrument |
 
 These map to new `ControlMsg::Op` variants processed at block boundaries, same as today.
 
