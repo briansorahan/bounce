@@ -121,6 +121,15 @@ export interface InstrumentSampleRecord {
   loop_end: number;
 }
 
+export interface BackgroundErrorRecord {
+  id: number;
+  source: string;
+  code: string;
+  message: string;
+  dismissed: number;
+  created_at: string;
+}
+
 export class DatabaseManager {
   public db: Database.Database;
   private currentProjectId: number | null = null;
@@ -152,6 +161,7 @@ export class DatabaseManager {
       () => this.migrate005_projects(),
       () => this.migrate006_replEnv(),
       () => this.migrate007_instruments(),
+      () => this.migrate008_backgroundErrors(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -532,6 +542,22 @@ export class DatabaseManager {
       );
 
       CREATE INDEX idx_instrument_samples_instrument ON instrument_samples(instrument_id);
+    `);
+  }
+
+  private migrate008_backgroundErrors(): void {
+    this.db.exec(`
+      CREATE TABLE background_errors (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        source     TEXT NOT NULL,
+        code       TEXT NOT NULL,
+        message    TEXT NOT NULL,
+        dismissed  INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX idx_background_errors_dismissed
+      ON background_errors(dismissed);
     `);
   }
 
@@ -1333,5 +1359,36 @@ LIMIT 1
       .prepare("DELETE FROM instrument_samples WHERE instrument_id = ? AND sample_hash = ? AND note_number = ?")
       .run(instrumentId, sampleHash, noteNumber);
     return result.changes > 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background errors
+  // ---------------------------------------------------------------------------
+
+  addBackgroundError(source: string, code: string, message: string): number {
+    const result = this.db
+      .prepare("INSERT INTO background_errors (source, code, message) VALUES (?, ?, ?)")
+      .run(source, code, message);
+    return Number(result.lastInsertRowid);
+  }
+
+  getActiveBackgroundErrors(): BackgroundErrorRecord[] {
+    return this.db
+      .prepare("SELECT * FROM background_errors WHERE dismissed = 0 ORDER BY created_at DESC")
+      .all() as BackgroundErrorRecord[];
+  }
+
+  dismissBackgroundError(id: number): boolean {
+    const result = this.db
+      .prepare("UPDATE background_errors SET dismissed = 1 WHERE id = ? AND dismissed = 0")
+      .run(id);
+    return result.changes > 0;
+  }
+
+  dismissAllBackgroundErrors(): number {
+    const result = this.db
+      .prepare("UPDATE background_errors SET dismissed = 1 WHERE dismissed = 0")
+      .run();
+    return result.changes;
   }
 }

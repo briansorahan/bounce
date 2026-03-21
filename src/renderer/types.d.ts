@@ -135,6 +135,15 @@ interface DebugLogEntry {
   created_at: string;
 }
 
+interface BackgroundErrorRecord {
+  id: number;
+  source: string;
+  code: string;
+  message: string;
+  dismissed: number;
+  created_at: string;
+}
+
 interface NMFVisualizationData {
   sampleHash: string;
   nmfData: {
@@ -316,5 +325,9 @@ interface Window {
     onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
     onPlaybackEnded: (callback: (hash: string) => void) => void;
     onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;
+    // Background errors
+    getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
+    dismissBackgroundError: (id: number) => Promise<boolean>;
+    dismissAllBackgroundErrors: () => Promise<number>;
   };
 }

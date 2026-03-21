@@ -196,6 +196,42 @@
         height: 320px;
         display: block;
       }
+
+      #status-line {
+        flex: none;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        background: #181818;
+        border-top: 1px solid #333;
+        font-family: Menlo, Monaco, "Courier New", monospace;
+        font-size: 12px;
+        color: #888;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
+      #status-line .status-indicator {
+        font-size: 10px;
+        line-height: 1;
+      }
+
+      #status-line .status-indicator.ok {
+        color: #0dbc79;
+      }
+
+      #status-line .status-indicator.error {
+        color: #cd3131;
+      }
+
+      #status-line .status-text {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
     </style>
   </head>
   <body>
@@ -206,6 +242,10 @@
         <canvas id="waveform-canvas"></canvas>
       </div>
       <div id="visualization-stack"></div>
+    </div>
+    <div id="status-line">
+      <span class="status-indicator ok">●</span>
+      <span class="status-text">Ready</span>
     </div>
 
     <script type="module" src="main.js"></script>

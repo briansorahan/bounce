@@ -157,6 +157,15 @@ export interface InstrumentSampleRecord {
   note_number: number;
 }
 
+export interface BackgroundErrorRecord {
+  id: number;
+  source: string;
+  code: string;
+  message: string;
+  dismissed: number;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -340,6 +349,11 @@ export const IpcChannel = {
   SetInstrumentParam: "set-instrument-param",
   SubscribeInstrumentTelemetry: "subscribe-instrument-telemetry",
   UnsubscribeInstrumentTelemetry: "unsubscribe-instrument-telemetry",
+
+  // Background errors
+  GetBackgroundErrors: "get-background-errors",
+  DismissBackgroundError: "dismiss-background-error",
+  DismissAllBackgroundErrors: "dismiss-all-background-errors",
 
   // One-way main → renderer
   PlaybackPosition: "playback-position",
@@ -535,6 +549,20 @@ export interface IpcHandleContract {
     request: [dirPath: string];
     response: FsWalkResult;
   };
+
+  // Background errors
+  "get-background-errors": {
+    request: [];
+    response: BackgroundErrorRecord[];
+  };
+  "dismiss-background-error": {
+    request: [id: number];
+    response: boolean;
+  };
+  "dismiss-all-background-errors": {
+    request: [];
+    response: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +726,11 @@ export interface ElectronAPI {
   removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<boolean>;
   listDbInstruments: () => Promise<InstrumentRecord[]>;
   getDbInstrumentSamples: (instrumentName: string) => Promise<InstrumentSampleRecord[]>;
+
+  // Background errors
+  getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
+  dismissBackgroundError: (id: number) => Promise<boolean>;
+  dismissAllBackgroundErrors: () => Promise<number>;
 
   // Event listeners (one-way main → renderer)
   onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
