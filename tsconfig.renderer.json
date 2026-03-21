@@ -12,8 +12,7 @@
     "resolveJsonModule": true
   },
   "include": [
-    "src/renderer/**/*",
-    "src/shared/**/*"
+    "src/renderer/**/*"
   ],
   "exclude": [
     "node_modules",
