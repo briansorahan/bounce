@@ -128,7 +128,9 @@ Before considering work complete:
 
 ### Step 7: Completion
 
-- Ensure IMPL.md has final status
+Before considering work done:
+- Ensure the `**Status:**` header line at the top of IMPL.md reads `**Status:** Complete` — this is the canonical marker that prune-specs and other tooling use to identify finished work
+- Fill in the `## Final Status` section at the bottom of IMPL.md: completion date, summary, and verification checklist
 - Commit all spec files with implementation
 - Specs remain in repo as documentation
 

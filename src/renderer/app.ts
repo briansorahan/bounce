@@ -88,6 +88,11 @@ export class BounceApp {
         this.audioManager.removeNativePlayback(hash);
       });
     }
+    if (window.electron.onPlaybackError) {
+      window.electron.onPlaybackError((data) => {
+        this.terminal.writeln(`\x1b[31m[playback error] ${data.code}: ${data.message}\x1b[0m`);
+      });
+    }
 
     window.addEventListener("beforeunload", () => {
       const entries = this.replEvaluator.serializeScope();
