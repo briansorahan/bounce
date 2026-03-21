@@ -83,8 +83,7 @@ export interface FeatureRecord {
 export interface SampleRecord {
   id: number;
   hash: string;
-  file_path: string | null;
-  audio_data: Uint8Array;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
@@ -93,25 +92,24 @@ export interface SampleRecord {
 export interface SampleListRecord {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
-  data_size: number;
+  display_name: string | null;
   created_at: string;
 }
 
 export interface FeatureListRecord {
   sample_hash: string;
   feature_type: string;
-  file_path: string;
+  display_name: string | null;
   options: string | null;
   feature_count: number;
   feature_hash: string;
 }
 
 export interface SampleFeatureLink {
-  project_id: number;
   sample_hash: string;
   source_hash: string;
   feature_hash: string;
@@ -119,9 +117,8 @@ export interface SampleFeatureLink {
 }
 
 export interface DerivedSampleSummary {
-  project_id: number;
   source_hash: string;
-  source_file_path: string | null;
+  source_display_name: string | null;
   feature_hash: string;
   feature_type: string;
   derived_count: number;
@@ -155,6 +152,15 @@ export interface InstrumentSampleRecord {
   instrument_id: number;
   sample_hash: string;
   note_number: number;
+}
+
+export interface BackgroundErrorRecord {
+  id: number;
+  source: string;
+  code: string;
+  message: string;
+  dismissed: number;
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,10 +210,11 @@ export type StoreRecordingResult =
 export interface SampleByNameResult {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
+  display_name: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +347,11 @@ export const IpcChannel = {
   SetInstrumentParam: "set-instrument-param",
   SubscribeInstrumentTelemetry: "subscribe-instrument-telemetry",
   UnsubscribeInstrumentTelemetry: "unsubscribe-instrument-telemetry",
+
+  // Background errors
+  GetBackgroundErrors: "get-background-errors",
+  DismissBackgroundError: "dismiss-background-error",
+  DismissAllBackgroundErrors: "dismiss-all-background-errors",
 
   // One-way main → renderer
   PlaybackPosition: "playback-position",
@@ -535,6 +547,20 @@ export interface IpcHandleContract {
     request: [dirPath: string];
     response: FsWalkResult;
   };
+
+  // Background errors
+  "get-background-errors": {
+    request: [];
+    response: BackgroundErrorRecord[];
+  };
+  "dismiss-background-error": {
+    request: [id: number];
+    response: boolean;
+  };
+  "dismiss-all-background-errors": {
+    request: [];
+    response: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +724,11 @@ export interface ElectronAPI {
   removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<boolean>;
   listDbInstruments: () => Promise<InstrumentRecord[]>;
   getDbInstrumentSamples: (instrumentName: string) => Promise<InstrumentSampleRecord[]>;
+
+  // Background errors
+  getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
+  dismissBackgroundError: (id: number) => Promise<boolean>;
+  dismissAllBackgroundErrors: () => Promise<number>;
 
   // Event listeners (one-way main → renderer)
   onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;

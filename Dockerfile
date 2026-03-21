@@ -13,7 +13,6 @@ COPY binding.gyp \
      tsconfig.renderer.json \
      /build/
 
-COPY flucoma-core /build/flucoma-core
 COPY native /build/native
 COPY third_party /build/third_party
 

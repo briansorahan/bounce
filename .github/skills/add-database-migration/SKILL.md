@@ -46,9 +46,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 
 ```typescript
 const migrations: Array<() => void> = [
-  () => this.migrate001_baseTables(),
-  () => this.migrate002_sampleFilePathNullable(),
-  () => this.migrate003_samplesFeatures(),
+  () => this.migrate001_initialSchema(),
   // add new migrations here
 ];
 
@@ -74,7 +72,7 @@ Each migration runs **once** and is then recorded. On subsequent startups all mi
 Add a new private method to `DatabaseManager`. Name it `migrate00N_shortDescription`:
 
 ```typescript
-private migrate004_addMyNewTable(): void {
+private migrate002_addMyNewTable(): void {
   this.db.exec(`
     CREATE TABLE IF NOT EXISTS my_new_table (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,10 +89,8 @@ Append to the `migrations` array in `initializeTables()`:
 
 ```typescript
 const migrations: Array<() => void> = [
-  () => this.migrate001_baseTables(),
-  () => this.migrate002_sampleFilePathNullable(),
-  () => this.migrate003_samplesFeatures(),
-  () => this.migrate004_addMyNewTable(), // ← add here
+  () => this.migrate001_initialSchema(),
+  () => this.migrate002_addMyNewTable(), // ← add here
 ];
 ```
 

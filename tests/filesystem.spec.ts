@@ -173,7 +173,7 @@ test.describe("Filesystem utilities", () => {
   test("sn.read() resolves relative path against cwd", async () => {
     const srcWav = path.join(
       __dirname,
-      "../flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
+      "../third_party/flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
     );
     if (!fs.existsSync(srcWav)) {
       console.log("Skipping relative-path sn.read test: test WAV not found");

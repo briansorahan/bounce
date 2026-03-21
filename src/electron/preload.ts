@@ -162,6 +162,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke("list-db-instruments"),
   getDbInstrumentSamples: (instrumentName: string) =>
     ipcRenderer.invoke("get-db-instrument-samples", instrumentName),
+  getBackgroundErrors: () =>
+    ipcRenderer.invoke("get-background-errors"),
+  dismissBackgroundError: (id: number) =>
+    ipcRenderer.invoke("dismiss-background-error", id),
+  dismissAllBackgroundErrors: () =>
+    ipcRenderer.invoke("dismiss-all-background-errors"),
   onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => {
     ipcRenderer.on("playback-position", (_event, data: { hash: string; positionInSamples: number }) =>
       callback(data.hash, data.positionInSamples),

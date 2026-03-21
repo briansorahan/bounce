@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { GranularizeOptions } from "../database";
 import { BounceError } from "../../shared/bounce-error.js";
+import { resolveAudioData } from "../audio-resolver";
 import type { HandlerDeps } from "./register";
 
 export function registerSampleHandlers(deps: HandlerDeps): void {
@@ -22,7 +23,13 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
       if (!deps.dbManager) {
         throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
       }
-      return deps.dbManager.getSampleByHash(hash);
+      const sample = deps.dbManager.getSampleByHash(hash);
+      if (!sample) return undefined;
+      // Include display_name for renderer convenience
+      const rawMeta = deps.dbManager.getRawMetadata(sample.hash);
+      const recMeta = rawMeta ? undefined : deps.dbManager.getRecordedMetadata(sample.hash);
+      const display_name = rawMeta?.file_path ?? recMeta?.name ?? null;
+      return { ...sample, display_name };
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to get sample:", error);
@@ -40,7 +47,7 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
         .filter((s) => s.hash.startsWith(prefix))
         .map((s) => ({
           hash: s.hash.substring(0, 8),
-          filePath: s.file_path,
+          filePath: s.display_name,
         }));
     } catch {
       return [];
@@ -49,12 +56,15 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("get-sample-by-name", async (_event, name: string) => {
     if (!deps.dbManager) return null;
-    const sample = deps.dbManager.getSampleByPath(name);
+    // Try recording name first, then file path
+    const sample =
+      deps.dbManager.getSampleByRecordingName(name) ??
+      deps.dbManager.getSampleByFilePath(name);
     if (!sample) return null;
     return {
       id: sample.id,
       hash: sample.hash,
-      file_path: sample.file_path,
+      sample_type: sample.sample_type,
       sample_rate: sample.sample_rate,
       channels: sample.channels,
       duration: sample.duration,
@@ -68,7 +78,8 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
         if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return deps.dbManager.createSliceSamples(sampleHash, featureHash);
+        const resolved = await resolveAudioData(deps.dbManager, sampleHash);
+        return deps.dbManager.createSliceSamples(sampleHash, featureHash, resolved.audioData);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("SAMPLE_SLICE_FAILED", `Failed to create slice samples: ${error instanceof Error ? error.message : String(error)}`);
@@ -104,7 +115,14 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
         if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return deps.dbManager.getDerivedSampleByIndex(sourceHash, featureHash, index) ?? null;
+        const sample = deps.dbManager.getDerivedSampleByIndex(sourceHash, featureHash, index);
+        if (!sample) return null;
+        // Resolve audio on the fly so the renderer gets it in the response
+        const resolved = await resolveAudioData(deps.dbManager, sample.hash);
+        return {
+          ...sample,
+          audio_data: Buffer.from(resolved.audioData.buffer, resolved.audioData.byteOffset, resolved.audioData.byteLength),
+        };
       } catch (error) {
         if (error instanceof BounceError) throw error;
         console.error("Failed to get derived sample by index:", error);
@@ -133,7 +151,8 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
         if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return deps.dbManager.granularize(sourceHash, options ?? {});
+        const resolved = await resolveAudioData(deps.dbManager, sourceHash);
+        return deps.dbManager.granularize(sourceHash, options ?? {}, resolved.audioData);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("SAMPLE_GRANULARIZE_FAILED", `Failed to granularize sample: ${error instanceof Error ? error.message : String(error)}`);

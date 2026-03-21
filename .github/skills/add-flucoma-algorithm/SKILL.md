@@ -14,14 +14,14 @@ This skill guides you through wrapping a new FluCoMa algorithm as a Node.js nati
 ## When to Use This Skill
 
 Use this skill when you need to:
-- Add a new FluCoMa algorithm from `flucoma-core` to the Node.js bindings
+- Add a new FluCoMa algorithm from `third_party/flucoma-core` to the Node.js bindings
 - Create N-API wrappers for C++ audio processing classes
 - Expose FluCoMa functionality to TypeScript/JavaScript
 
 ## Prerequisites
 
 Before starting, ensure:
-- The FluCoMa algorithm exists in `flucoma-core/include/flucoma/algorithms/public/`
+- The FluCoMa algorithm exists in `third_party/flucoma-core/include/flucoma/algorithms/public/`
 - You understand the algorithm's parameters and behavior
 - The algorithm uses FluCoMa's standard allocator pattern
 
@@ -33,9 +33,9 @@ Create `native/src/{algorithm_name}.cpp` following this pattern:
 
 ```cpp
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/YourAlgorithm.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/YourAlgorithm.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 #include <vector>
 #include <memory>
 

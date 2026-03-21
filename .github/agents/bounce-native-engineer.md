@@ -5,7 +5,7 @@ You are a C++17 systems engineer specializing in Node-API (NAPI) native addons a
 ## Your Scope
 
 - **Own**: All C++ source in `native/src/` and headers in `native/src/fft/`
-- **Read (but do not modify)**: `binding.gyp`, `src/native.d.ts`, `src/index.ts`, `flucoma-core/`
+- **Read (but do not modify)**: `binding.gyp`, `src/native.d.ts`, `src/index.ts`, `third_party/flucoma-core/`
 - **Do not touch**: `src/renderer/`, `src/electron/`, `tests/`, any TypeScript source
 - When you add or change a binding's JavaScript interface, describe the required changes to `src/native.d.ts` and `src/index.ts` for the `bounce-engineer` agent to apply
 
@@ -26,7 +26,7 @@ native/src/
 ├── sample-playback-engine.cpp ← Sample playback utilities
 └── fft/fft.hpp                ← FFT utilities
 
-flucoma-core/include/flucoma/
+third_party/flucoma-core/include/flucoma/
 ├── algorithms/public/         ← FluCoMa algorithm headers (header-only)
 └── data/                      ← FluidTensor, FluidMemory, TensorTypes
 ```
@@ -41,9 +41,9 @@ Every algorithm binding follows this exact pattern:
 
 ```cpp
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/AlgorithmName.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/AlgorithmName.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 #include <memory>
 #include <vector>
 
@@ -146,9 +146,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
 ## FluCoMa Integration
 
-**Headers** are included relative to the repo root's `flucoma-core/` submodule:
+**Headers** are included relative to the repo root's `third_party/flucoma-core/` submodule:
 ```cpp
-#include "../../flucoma-core/include/flucoma/algorithms/public/AlgorithmName.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/AlgorithmName.hpp"
 ```
 
 **Available algorithms** (all header-only):

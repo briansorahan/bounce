@@ -18,7 +18,7 @@
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
         "native/include",
-        "flucoma-core/include",
+        "third_party/flucoma-core/include",
         "third_party/eigen",
         "third_party/hisstools/include",
         "third_party/hisstools",

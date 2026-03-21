@@ -8,7 +8,7 @@
 
 See `RESEARCH.md` for full details. Summary:
 - MFCC pipeline: `STFT::processFrame` → `STFT::magnitude` (static) → `MelBands::processFrame` → `DCT::processFrame`
-- All algorithms are header-only in `flucoma-core/include`
+- All algorithms are header-only in `third_party/flucoma-core/include`
 - Pattern follows `onset_feature.cpp` (frame loop, N-API ObjectWrap, constructor options)
 - Key difference from `OnsetFeature`: output is a **vector per frame**, not a scalar
 
@@ -38,11 +38,11 @@ No new components. Fits directly into the existing native binding pattern:
 
 ```cpp
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/STFT.hpp"
-#include "../../flucoma-core/include/flucoma/algorithms/public/MelBands.hpp"
-#include "../../flucoma-core/include/flucoma/algorithms/public/DCT.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/STFT.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/MelBands.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/DCT.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 
 class MFCCFeature : public Napi::ObjectWrap<MFCCFeature> {
   // Constructor options:

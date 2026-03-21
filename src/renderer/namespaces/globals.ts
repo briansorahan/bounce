@@ -19,6 +19,7 @@ export function buildGlobals(deps: NamespaceDeps) {
         "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
         "  \x1b[33mhelp()\x1b[0m                           Show this help message",
         "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
+        "  \x1b[33merrors()\x1b[0m                         Show background errors (status line red = errors pending)",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
@@ -119,5 +120,78 @@ export function buildGlobals(deps: NamespaceDeps) {
     },
   );
 
-  return { help, clear, debug, clearDebug };
+  const errors = Object.assign(
+    async function errors(): Promise<BounceResult> {
+      const items = await window.electron.getBackgroundErrors();
+      if (items.length === 0) {
+        return new BounceResult("\x1b[32m● No background errors\x1b[0m");
+      }
+      const lines: string[] = [
+        `\x1b[1;31m● ${items.length} background error${items.length === 1 ? "" : "s"}:\x1b[0m`,
+        "",
+      ];
+      for (const err of items) {
+        lines.push(
+          `  \x1b[33mid ${err.id}\x1b[0m  \x1b[90m${err.created_at}\x1b[0m  [\x1b[36m${err.source}\x1b[0m] \x1b[31m${err.code}\x1b[0m`,
+        );
+        lines.push(`         ${err.message}`);
+        lines.push("");
+      }
+      lines.push(
+        "\x1b[90mDismiss:\x1b[0m  errors.dismiss(id)  |  errors.dismissAll()",
+      );
+      return new BounceResult(lines.join("\n"));
+    },
+    {
+      dismiss: Object.assign(
+        async function dismiss(id: number): Promise<BounceResult> {
+          const ok = await window.electron.dismissBackgroundError(id);
+          return ok
+            ? new BounceResult(`\x1b[32mDismissed error ${id}\x1b[0m`)
+            : new BounceResult(`\x1b[33mNo active error with id ${id}\x1b[0m`);
+        },
+        {
+          help: (): BounceResult => new BounceResult([
+            "\x1b[1;36merrors.dismiss(id)\x1b[0m",
+            "",
+            "  Dismiss a specific background error by its numeric id.",
+            "",
+            "  \x1b[90mExample:\x1b[0m  errors.dismiss(3)",
+          ].join("\n")),
+        },
+      ),
+      dismissAll: Object.assign(
+        async function dismissAll(): Promise<BounceResult> {
+          const count = await window.electron.dismissAllBackgroundErrors();
+          return count > 0
+            ? new BounceResult(`\x1b[32mDismissed ${count} error${count === 1 ? "" : "s"}\x1b[0m`)
+            : new BounceResult("\x1b[32mNo active errors to dismiss\x1b[0m");
+        },
+        {
+          help: (): BounceResult => new BounceResult([
+            "\x1b[1;36merrors.dismissAll()\x1b[0m",
+            "",
+            "  Dismiss all active background errors.",
+            "",
+            "  \x1b[90mExample:\x1b[0m  errors.dismissAll()",
+          ].join("\n")),
+        },
+      ),
+      help: (): BounceResult => new BounceResult([
+        "\x1b[1;36merrors()\x1b[0m",
+        "",
+        "  Show active background errors from main or utility processes.",
+        "  When the status line shows a red indicator, use this to see details.",
+        "",
+        "  \x1b[33merrors.dismiss(id)\x1b[0m   Dismiss a single error by id",
+        "  \x1b[33merrors.dismissAll()\x1b[0m  Dismiss all active errors",
+        "",
+        "  \x1b[90mExample:\x1b[0m  errors()",
+        "           errors.dismiss(3)",
+        "           errors.dismissAll()",
+      ].join("\n")),
+    },
+  );
+
+  return { help, clear, debug, clearDebug, errors };
 }

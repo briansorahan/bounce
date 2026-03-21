@@ -8,6 +8,7 @@ import { SettingsStore } from "../settings-store";
 import { AUDIO_EXTENSIONS, AUDIO_EXTENSIONS_NO_DOT } from "../audio-extensions";
 import { debugLog } from "../logger";
 import { BounceError } from "../../shared/bounce-error.js";
+import { resolveAudioData } from "../audio-resolver";
 import type { HandlerDeps } from "./register";
 
 /** Resolve a path against the stored cwd, expanding ~ and handling relative paths. */
@@ -39,13 +40,14 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
           found: !!sample,
         });
         if (sample) {
-          const audioData = new Float32Array(sample.audio_data.buffer);
+          const resolved = await resolveAudioData(deps.dbManager, sample.hash);
+          const rawMeta = deps.dbManager.getRawMetadata(sample.hash);
           return {
-            channelData: Array.from(audioData),
-            sampleRate: sample.sample_rate,
+            channelData: Array.from(resolved.audioData),
+            sampleRate: resolved.sampleRate,
             duration: sample.duration,
             hash: sample.hash,
-            filePath: sample.file_path,
+            filePath: rawMeta?.file_path ?? undefined,
           };
         }
         throw new BounceError("SAMPLE_NOT_FOUND", `Sample with hash "${filePathOrHash.substring(0, 8)}..." not found in database.`);
@@ -97,10 +99,9 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
 
       // Store in database
       if (deps.dbManager) {
-        deps.dbManager.storeSample(
+        deps.dbManager.storeRawSample(
           hash,
           resolvedPath,
-          audioDataBuffer,
           sampleRate,
           audioBuffer.numberOfChannels,
           duration,
@@ -135,7 +136,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     ) => {
       if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
 
-      const existing = deps.dbManager.getSampleByPath(name);
+      const existing = deps.dbManager.getSampleByRecordingName(name);
       if (existing && !overwrite) {
         return { status: "exists" as const };
       }
@@ -144,7 +145,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       const audioDataBuffer = Buffer.from(pcm.buffer);
       const hash = crypto.createHash("sha256").update(audioDataBuffer).digest("hex");
 
-      deps.dbManager.storeSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
+      deps.dbManager.storeRecordedSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
 
       const stored = deps.dbManager.getSampleByHash(hash);
       return {
@@ -174,7 +175,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     }
 
     const sample = deps.dbManager.getSampleByHash(payload.hash);
-    if (!sample || !sample.audio_data) {
+    if (!sample) {
       console.error(`[main] play-sample: sample not found for hash ${payload.hash}`);
       const mainWindow = deps.getMainWindow();
       if (mainWindow) {
@@ -187,17 +188,24 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       return;
     }
 
-    const pcm = new Float32Array(
-      sample.audio_data.buffer,
-      sample.audio_data.byteOffset,
-      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
-    );
-
-    // Transfer the ArrayBuffer zero-copy to the utility process
-    const pcmCopy = new Float32Array(pcm);
-    port.postMessage(
-      { type: "play", sampleHash: payload.hash, pcm: pcmCopy, sampleRate: sample.sample_rate, loop: payload.loop, loopStart: payload.loopStart, loopEnd: payload.loopEnd },
-    );
+    resolveAudioData(deps.dbManager, sample.hash)
+      .then(({ audioData }) => {
+        const pcmCopy = new Float32Array(audioData);
+        port.postMessage(
+          { type: "play", sampleHash: sample.hash, pcm: pcmCopy, sampleRate: sample.sample_rate, loop: payload.loop, loopStart: payload.loopStart, loopEnd: payload.loopEnd },
+        );
+      })
+      .catch((err) => {
+        console.error(`[main] play-sample: failed to resolve audio for ${payload.hash}:`, err);
+        const mainWindow = deps.getMainWindow();
+        if (mainWindow) {
+          mainWindow.webContents.send("playback-error", {
+            sampleHash: payload.hash,
+            code: "AUDIO_RESOLVE_FAILED",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
   });
 
   ipcMain.on("stop-sample", (_event, payload?: { hash?: string }) => {
@@ -238,26 +246,26 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     if (!deps.dbManager || !port) return;
 
     const sample = deps.dbManager.getSampleByHash(payload.sampleHash);
-    if (!sample || !sample.audio_data) return;
+    if (!sample) return;
 
-    const pcm = new Float32Array(
-      sample.audio_data.buffer,
-      sample.audio_data.byteOffset,
-      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
-    );
-    const pcmCopy = new Float32Array(pcm);
-
-    port.postMessage({
-      type: "load-instrument-sample",
-      instrumentId: payload.instrumentId,
-      note: payload.note,
-      pcm: pcmCopy,
-      sampleRate: sample.sample_rate,
-      sampleHash: payload.sampleHash,
-      loop: !!payload.loop,
-      loopStart: payload.loopStart ?? 0,
-      loopEnd: payload.loopEnd ?? -1,
-    });
+    resolveAudioData(deps.dbManager, sample.hash)
+      .then(({ audioData }) => {
+        const pcmCopy = new Float32Array(audioData);
+        port.postMessage({
+          type: "load-instrument-sample",
+          instrumentId: payload.instrumentId,
+          note: payload.note,
+          pcm: pcmCopy,
+          sampleRate: sample.sample_rate,
+          sampleHash: sample.hash,
+          loop: !!payload.loop,
+          loopStart: payload.loopStart ?? 0,
+          loopEnd: payload.loopEnd ?? -1,
+        });
+      })
+      .catch((err) => {
+        console.error(`[main] load-instrument-sample: failed to resolve audio for ${payload.sampleHash}:`, err);
+      });
   });
 
   ipcMain.on("instrument-note-on", (_event, payload: {

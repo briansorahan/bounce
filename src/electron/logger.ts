@@ -15,3 +15,13 @@ export function debugLog(
     dbManagerInstance.addDebugLog(level, message, data);
   }
 }
+
+export function logBackgroundError(
+  source: string,
+  code: string,
+  message: string,
+): void {
+  if (dbManagerInstance) {
+    dbManagerInstance.addBackgroundError(source, code, message);
+  }
+}

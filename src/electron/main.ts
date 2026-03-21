@@ -6,6 +6,7 @@ import { setDatabaseManager } from "./logger";
 import { CorpusManager } from "./corpus-manager";
 import { SettingsStore } from "./settings-store";
 import { registerAllHandlers } from "./ipc/register";
+import { logBackgroundError } from "./logger";
 
 let dbManager: DatabaseManager | undefined = undefined;
 let settingsStore: SettingsStore | undefined = undefined;
@@ -94,6 +95,13 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   audioEngineProcess.on("exit", (code) => {
     console.error(`[main] Audio engine process exited with code ${code}. Audio playback unavailable.`);
+    if (code !== 0 && code !== null) {
+      logBackgroundError(
+        "audio-engine",
+        "AUDIO_ENGINE_EXITED",
+        `Audio engine process exited with code ${code}. Audio playback is unavailable.`,
+      );
+    }
     audioEnginePort?.close();
     audioEnginePort = null;
     audioEngineProcess = null;

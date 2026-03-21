@@ -25,7 +25,7 @@ Bounce already exposes `OnsetFeature` and `OnsetSlice` as native N-API bindings.
 Audio samples → STFT → magnitude → MelBands.processFrame → DCT.processFrame → MFCC coefficients
 ```
 
-### Relevant files in `flucoma-core/`
+### Relevant files in `third_party/flucoma-core/`
 
 | File | Role |
 |------|------|
@@ -100,7 +100,7 @@ Full buffer: `numFrames × numCoeffs` — returned as a JS `Array` of `Array<num
 - Must use N-API (`node-gyp`, `napi.h`) — same as all other native bindings
 - C++17 (existing code uses structured bindings, `std::unique_ptr`, etc.)
 - Must link against flucoma-core headers (header-only library)
-- Eigen is used internally by MelBands/DCT — already available via flucoma-core
+- Eigen is used internally by MelBands/DCT — already available via third_party/flucoma-core
 
 ## Audio Processing Considerations
 
@@ -133,7 +133,7 @@ No immediate terminal UI changes required for the binding itself. The feature da
 
 ## Research Findings
 
-- All three algorithms (STFT, MelBands, DCT) are header-only and available in flucoma-core
+- All three algorithms (STFT, MelBands, DCT) are header-only and available in third_party/flucoma-core
 - The pipeline is straightforward: construct each algorithm once, call `init`, then loop frames
 - `STFT::magnitude()` is a static helper — no instance needed for the magnitude step
 - The `STFTBufferedProcess` used in `MFCCClient` is unnecessary for batch processing; direct `STFT::processFrame` + `STFT::magnitude` is cleaner
