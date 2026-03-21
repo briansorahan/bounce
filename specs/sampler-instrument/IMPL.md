@@ -2,7 +2,7 @@
 
 **Spec:** specs/sampler-instrument  
 **Created:** 2026-03-21  
-**Status:** In Progress
+**Status:** Complete
 
 ## Context
 
@@ -92,11 +92,12 @@ persistence, and the `inst` REPL namespace.
 - Backward compatibility verified
 
 **What's Left:**
-- E2E Playwright tests (requires Docker via ./build.sh)
+- Nothing — spec complete
 
-**Next Steps:**
-- Run ./build.sh for full E2E verification
-- Create tests/instrument.spec.ts
+**Completed:**
+- 15 Playwright tests in tests/instrument.spec.ts (all passing)
+- Fixed silent DB error handling — errors now logged to console + debugLog
+- Full build.sh passes: 85 tests passed, 0 failed
 
 **Blockers/Notes:**
 - None
