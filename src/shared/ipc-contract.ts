@@ -83,8 +83,7 @@ export interface FeatureRecord {
 export interface SampleRecord {
   id: number;
   hash: string;
-  file_path: string | null;
-  audio_data: Uint8Array;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
@@ -93,18 +92,18 @@ export interface SampleRecord {
 export interface SampleListRecord {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
-  data_size: number;
+  display_name: string | null;
   created_at: string;
 }
 
 export interface FeatureListRecord {
   sample_hash: string;
   feature_type: string;
-  file_path: string;
+  display_name: string | null;
   options: string | null;
   feature_count: number;
   feature_hash: string;
@@ -121,7 +120,7 @@ export interface SampleFeatureLink {
 export interface DerivedSampleSummary {
   project_id: number;
   source_hash: string;
-  source_file_path: string | null;
+  source_display_name: string | null;
   feature_hash: string;
   feature_type: string;
   derived_count: number;
@@ -213,10 +212,11 @@ export type StoreRecordingResult =
 export interface SampleByNameResult {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
+  display_name: string | null;
 }
 
 // ---------------------------------------------------------------------------

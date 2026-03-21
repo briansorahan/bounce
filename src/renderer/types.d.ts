@@ -47,21 +47,22 @@ interface FeatureData {
 interface SampleData {
   id: number;
   hash: string;
-  file_path: string | null;
-  audio_data: Buffer;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
+  display_name?: string | null;
+  audio_data?: Buffer;
 }
 
 interface SampleListData {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: string;
   sample_rate: number;
   channels: number;
   duration: number;
-  data_size: number;
+  display_name: string | null;
   created_at: string;
 }
 
@@ -74,7 +75,7 @@ interface SampleFeatureLinkData {
 
 interface DerivedSampleSummaryData {
   source_hash: string;
-  source_file_path: string | null;
+  source_display_name: string | null;
   feature_hash: string;
   feature_type: string;
   derived_count: number;
@@ -83,7 +84,7 @@ interface DerivedSampleSummaryData {
 interface FeatureListData {
   sample_hash: string;
   feature_type: string;
-  file_path: string | null;
+  display_name: string | null;
   options: string | null;
   feature_count: number;
   feature_hash: string;

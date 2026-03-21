@@ -12,14 +12,35 @@ export interface DebugLogEntry {
   created_at: string;
 }
 
+export type SampleType = "raw" | "derived" | "recorded" | "freesound";
+
 export interface SampleRecord {
   id: number;
   hash: string;
-  file_path: string | null;
-  audio_data: Buffer;
+  sample_type: SampleType;
   sample_rate: number;
   channels: number;
   duration: number;
+}
+
+export interface RawSampleMetadata {
+  project_id: number;
+  sample_hash: string;
+  file_path: string;
+}
+
+export interface RecordedSampleMetadata {
+  project_id: number;
+  sample_hash: string;
+  name: string;
+  audio_data: Buffer;
+}
+
+export interface FreesoundSampleMetadata {
+  project_id: number;
+  sample_hash: string;
+  url: string;
+  audio_data: Buffer;
 }
 
 export interface FeatureRecord {
@@ -34,18 +55,18 @@ export interface FeatureRecord {
 export interface SampleListRecord {
   id: number;
   hash: string;
-  file_path: string | null;
+  sample_type: SampleType;
+  display_name: string | null;
   sample_rate: number;
   channels: number;
   duration: number;
-  data_size: number;
   created_at: string;
 }
 
 export interface FeatureListRecord {
   sample_hash: string;
   feature_type: string;
-  file_path: string;
+  display_name: string | null;
   options: string | null;
   feature_count: number;
   feature_hash: string;
@@ -62,7 +83,7 @@ export interface SampleFeatureLink {
 export interface DerivedSampleSummary {
   project_id: number;
   source_hash: string;
-  source_file_path: string | null;
+  source_display_name: string | null;
   feature_hash: string;
   feature_type: string;
   derived_count: number;
@@ -162,6 +183,7 @@ export class DatabaseManager {
       () => this.migrate006_replEnv(),
       () => this.migrate007_instruments(),
       () => this.migrate008_backgroundErrors(),
+      () => this.migrate009_samplesDataModelRefactor(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -561,6 +583,107 @@ export class DatabaseManager {
     `);
   }
 
+  private migrate009_samplesDataModelRefactor(): void {
+    this.db.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      this.db.exec(`
+        DROP TABLE IF EXISTS samples_features;
+        DROP TABLE IF EXISTS features;
+        DROP TABLE IF EXISTS samples;
+
+        CREATE TABLE samples (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          hash TEXT NOT NULL,
+          sample_type TEXT NOT NULL CHECK(sample_type IN ('raw', 'derived', 'recorded', 'freesound')),
+          sample_rate INTEGER NOT NULL,
+          channels INTEGER NOT NULL,
+          duration REAL NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(project_id, hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_project_hash ON samples(project_id, hash);
+        CREATE INDEX idx_samples_project_type ON samples(project_id, sample_type);
+
+        CREATE TABLE samples_raw_metadata (
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          PRIMARY KEY (project_id, sample_hash),
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_raw_metadata_file_path
+        ON samples_raw_metadata(project_id, file_path);
+
+        CREATE TABLE samples_recorded_metadata (
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          audio_data BLOB NOT NULL,
+          PRIMARY KEY (project_id, sample_hash),
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_recorded_metadata_name
+        ON samples_recorded_metadata(project_id, name);
+
+        CREATE TABLE samples_freesound_metadata (
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          url TEXT NOT NULL,
+          audio_data BLOB NOT NULL,
+          PRIMARY KEY (project_id, sample_hash),
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
+        );
+
+        CREATE TABLE features (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          feature_hash TEXT NOT NULL,
+          feature_type TEXT NOT NULL,
+          feature_data TEXT NOT NULL,
+          options TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(project_id, sample_hash, feature_hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_features_project_sample ON features(project_id, sample_hash);
+        CREATE INDEX idx_features_project_type ON features(project_id, feature_type);
+        CREATE INDEX idx_features_project_hash ON features(project_id, feature_hash);
+
+        CREATE TABLE samples_features (
+          project_id INTEGER NOT NULL,
+          sample_hash TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          feature_hash TEXT NOT NULL,
+          index_order INTEGER NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (project_id, sample_hash),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, source_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
+          FOREIGN KEY (project_id, source_hash, feature_hash) REFERENCES features(project_id, sample_hash, feature_hash) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_samples_features_project_source
+        ON samples_features(project_id, source_hash);
+
+        CREATE INDEX idx_samples_features_project_feature
+        ON samples_features(project_id, source_hash, feature_hash);
+
+        DELETE FROM instrument_samples;
+      `);
+    } finally {
+      this.db.exec("PRAGMA foreign_keys = ON;");
+    }
+  }
+
   private normalizeProjectName(name: string): string {
     const normalized = name.trim();
     if (!normalized) {
@@ -799,49 +922,168 @@ export class DatabaseManager {
     this.db.close();
   }
 
-  storeSample(
+  storeRawSample(
     hash: string,
-    filePath: string | null,
+    filePath: string,
+    sampleRate: number,
+    channels: number,
+    duration: number,
+  ): void {
+    const projectId = this.requireCurrentProjectId();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO samples (project_id, hash, sample_type, sample_rate, channels, duration)
+           VALUES (?, ?, 'raw', ?, ?, ?)
+           ON CONFLICT(project_id, hash) DO UPDATE SET
+             sample_rate = excluded.sample_rate,
+             channels = excluded.channels,
+             duration = excluded.duration`,
+        )
+        .run(projectId, hash, sampleRate, channels, duration);
+      this.db
+        .prepare(
+          `INSERT INTO samples_raw_metadata (project_id, sample_hash, file_path)
+           VALUES (?, ?, ?)
+           ON CONFLICT(project_id, sample_hash) DO UPDATE SET
+             file_path = excluded.file_path`,
+        )
+        .run(projectId, hash, filePath);
+    })();
+  }
+
+  storeRecordedSample(
+    hash: string,
+    name: string,
     audioData: Buffer,
     sampleRate: number,
     channels: number,
     duration: number,
   ): void {
     const projectId = this.requireCurrentProjectId();
-    const stmt = this.db.prepare(`
-      INSERT INTO samples (project_id, hash, file_path, audio_data, sample_rate, channels, duration)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(project_id, hash) DO UPDATE SET
-        file_path = excluded.file_path,
-        audio_data = excluded.audio_data,
-        sample_rate = excluded.sample_rate,
-        channels = excluded.channels,
-        duration = excluded.duration
-    `);
-    stmt.run(projectId, hash, filePath, audioData, sampleRate, channels, duration);
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO samples (project_id, hash, sample_type, sample_rate, channels, duration)
+           VALUES (?, ?, 'recorded', ?, ?, ?)
+           ON CONFLICT(project_id, hash) DO UPDATE SET
+             sample_rate = excluded.sample_rate,
+             channels = excluded.channels,
+             duration = excluded.duration`,
+        )
+        .run(projectId, hash, sampleRate, channels, duration);
+      this.db
+        .prepare(
+          `INSERT INTO samples_recorded_metadata (project_id, sample_hash, name, audio_data)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project_id, sample_hash) DO UPDATE SET
+             name = excluded.name,
+             audio_data = excluded.audio_data`,
+        )
+        .run(projectId, hash, name, audioData);
+    })();
+  }
+
+  storeFreesoundSample(
+    hash: string,
+    url: string,
+    audioData: Buffer,
+    sampleRate: number,
+    channels: number,
+    duration: number,
+  ): void {
+    const projectId = this.requireCurrentProjectId();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO samples (project_id, hash, sample_type, sample_rate, channels, duration)
+           VALUES (?, ?, 'freesound', ?, ?, ?)
+           ON CONFLICT(project_id, hash) DO UPDATE SET
+             sample_rate = excluded.sample_rate,
+             channels = excluded.channels,
+             duration = excluded.duration`,
+        )
+        .run(projectId, hash, sampleRate, channels, duration);
+      this.db
+        .prepare(
+          `INSERT INTO samples_freesound_metadata (project_id, sample_hash, url, audio_data)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project_id, sample_hash) DO UPDATE SET
+             url = excluded.url,
+             audio_data = excluded.audio_data`,
+        )
+        .run(projectId, hash, url, audioData);
+    })();
   }
 
   getSampleByHash(hash: string): SampleRecord | undefined {
     const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
-      FROM samples 
+      SELECT id, hash, sample_type, sample_rate, channels, duration
+      FROM samples
       WHERE project_id = ? AND hash LIKE ? || '%'
       LIMIT 1
     `);
     return stmt.get(projectId, hash) as SampleRecord | undefined;
   }
 
-  getSampleByPath(filePath: string): SampleRecord | undefined {
+  getSampleByFilePath(filePath: string): SampleRecord | undefined {
     const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT id, hash, file_path, audio_data, sample_rate, channels, duration 
-      FROM samples 
-      WHERE project_id = ? AND file_path = ? 
-      ORDER BY id DESC 
+      SELECT s.id, s.hash, s.sample_type, s.sample_rate, s.channels, s.duration
+      FROM samples s
+      JOIN samples_raw_metadata rm ON s.project_id = rm.project_id AND s.hash = rm.sample_hash
+      WHERE s.project_id = ? AND rm.file_path = ?
+      ORDER BY s.id DESC
       LIMIT 1
     `);
     return stmt.get(projectId, filePath) as SampleRecord | undefined;
+  }
+
+  getSampleByRecordingName(name: string): SampleRecord | undefined {
+    const projectId = this.requireCurrentProjectId();
+    const stmt = this.db.prepare(`
+      SELECT s.id, s.hash, s.sample_type, s.sample_rate, s.channels, s.duration
+      FROM samples s
+      JOIN samples_recorded_metadata rm ON s.project_id = rm.project_id AND s.hash = rm.sample_hash
+      WHERE s.project_id = ? AND rm.name = ?
+      ORDER BY s.id DESC
+      LIMIT 1
+    `);
+    return stmt.get(projectId, name) as SampleRecord | undefined;
+  }
+
+  getRawMetadata(hash: string): RawSampleMetadata | undefined {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare(
+        `SELECT project_id, sample_hash, file_path
+         FROM samples_raw_metadata
+         WHERE project_id = ? AND sample_hash = ?`,
+      )
+      .get(projectId, hash) as RawSampleMetadata | undefined;
+  }
+
+  getRecordedMetadata(hash: string): RecordedSampleMetadata | undefined {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare(
+        `SELECT project_id, sample_hash, name, audio_data
+         FROM samples_recorded_metadata
+         WHERE project_id = ? AND sample_hash = ?`,
+      )
+      .get(projectId, hash) as RecordedSampleMetadata | undefined;
+  }
+
+  getFreesoundMetadata(hash: string): FreesoundSampleMetadata | undefined {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare(
+        `SELECT project_id, sample_hash, url, audio_data
+         FROM samples_freesound_metadata
+         WHERE project_id = ? AND sample_hash = ?`,
+      )
+      .get(projectId, hash) as FreesoundSampleMetadata | undefined;
   }
 
   private computeFeatureHash(
@@ -928,33 +1170,32 @@ export class DatabaseManager {
     sourceHash: string,
     featureHash: string,
     index: number,
-    audioData: Buffer,
     sampleRate: number,
     channels: number,
     duration: number,
   ): string {
     const projectId = this.requireCurrentProjectId();
-    // Hash includes provenance to ensure uniqueness per derivation
-    const hashInput = `${sourceHash}:${featureHash}:${index}:`;
+    const hashInput = `${sourceHash}:${featureHash}:${index}`;
     const hash = crypto
       .createHash("sha256")
       .update(hashInput)
-      .update(audioData)
       .digest("hex");
 
-    this.db
-      .prepare(
-        `INSERT OR IGNORE INTO samples (project_id, hash, file_path, audio_data, sample_rate, channels, duration)
-         VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-      )
-      .run(projectId, hash, audioData, sampleRate, channels, duration);
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO samples (project_id, hash, sample_type, sample_rate, channels, duration)
+           VALUES (?, ?, 'derived', ?, ?, ?)`,
+        )
+        .run(projectId, hash, sampleRate, channels, duration);
 
-    this.db
-      .prepare(
-        `INSERT OR REPLACE INTO samples_features (project_id, sample_hash, source_hash, feature_hash, index_order)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(projectId, hash, sourceHash, featureHash, index);
+      this.db
+        .prepare(
+          `INSERT OR REPLACE INTO samples_features (project_id, sample_hash, source_hash, feature_hash, index_order)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(projectId, hash, sourceHash, featureHash, index);
+    })();
 
     return hash;
   }
@@ -962,6 +1203,7 @@ export class DatabaseManager {
   createSliceSamples(
     sourceHash: string,
     featureHash: string,
+    _sourceAudio: Float32Array,
   ): { hash: string; index: number }[] {
     const projectId = this.requireCurrentProjectId();
     const sample = this.getSampleByHash(sourceHash);
@@ -984,29 +1226,18 @@ export class DatabaseManager {
     }
 
     const positions = JSON.parse(feature.feature_data) as number[];
-    const audioData = new Float32Array(
-      sample.audio_data.buffer,
-      sample.audio_data.byteOffset,
-      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
-    );
 
     const results: { hash: string; index: number }[] = [];
 
     for (let i = 0; i < positions.length - 1; i++) {
       const start = positions[i];
       const end = positions[i + 1];
-      const sliceAudio = audioData.slice(start, end);
-      const sliceBuffer = Buffer.from(
-        sliceAudio.buffer,
-        sliceAudio.byteOffset,
-        sliceAudio.byteLength,
-      );
-      const duration = sliceAudio.length / sample.sample_rate;
+      const sliceLength = end - start;
+      const duration = sliceLength / sample.sample_rate;
       const hash = this.createDerivedSample(
         sample.hash,
         feature.feature_hash,
         i,
-        sliceBuffer,
         sample.sample_rate,
         sample.channels,
         duration,
@@ -1020,6 +1251,7 @@ export class DatabaseManager {
   granularize(
     sourceHash: string,
     options: GranularizeOptions,
+    sourceAudio: Float32Array,
   ): { grainHashes: Array<string | null>; featureHash: string; sampleRate: number; grainDuration: number } {
     const sample = this.getSampleByHash(sourceHash);
     if (!sample) {
@@ -1045,8 +1277,7 @@ export class DatabaseManager {
     const grainSizeSamples = Math.round((grainSizeMs * sampleRate) / 1000);
     const hopSizeSamples = Math.round((hopSizeMs * sampleRate) / 1000);
     const startSample = Math.round((startTimeMs * sampleRate) / 1000);
-    const totalFrames =
-      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT;
+    const totalFrames = sourceAudio.length;
     const endSample = Math.min(
       Math.round((endTimeMs * sampleRate) / 1000),
       totalFrames,
@@ -1083,12 +1314,6 @@ export class DatabaseManager {
       options as FeatureOptions,
     );
 
-    const audioData = new Float32Array(
-      sample.audio_data.buffer,
-      sample.audio_data.byteOffset,
-      totalFrames,
-    );
-
     // Convert dBFS silence threshold to linear RMS
     const silenceThresholdLinear =
       silenceThresholdDb === -Infinity
@@ -1100,7 +1325,7 @@ export class DatabaseManager {
 
     for (let i = 0; i < grainStartPositions.length; i++) {
       const start = grainStartPositions[i];
-      const grainAudio = audioData.slice(start, start + grainSizeSamples);
+      const grainAudio = sourceAudio.slice(start, start + grainSizeSamples);
 
       // Compute RMS and skip silent grains
       let sumSq = 0;
@@ -1113,16 +1338,10 @@ export class DatabaseManager {
         continue;
       }
 
-      const grainBuffer = Buffer.from(
-        grainAudio.buffer,
-        grainAudio.byteOffset,
-        grainAudio.byteLength,
-      );
       const hash = this.createDerivedSample(
         sample.hash,
         featureHash,
         i,
-        grainBuffer,
         sampleRate,
         channels,
         grainDuration,
@@ -1147,6 +1366,16 @@ export class DatabaseManager {
     return stmt.all(projectId, sourceHash, `${featureHash}%`) as SampleFeatureLink[];
   }
 
+  getDerivedSampleLink(sampleHash: string): SampleFeatureLink | undefined {
+    const projectId = this.requireCurrentProjectId();
+    const stmt = this.db.prepare(`
+      SELECT project_id, sample_hash, source_hash, feature_hash, index_order
+      FROM samples_features
+      WHERE project_id = ? AND sample_hash = ?
+    `);
+    return stmt.get(projectId, sampleHash) as SampleFeatureLink | undefined;
+  }
+
   getDerivedSampleByIndex(
     sourceHash: string,
     featureHash: string,
@@ -1154,7 +1383,7 @@ export class DatabaseManager {
   ): SampleRecord | undefined {
     const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT s.id, s.hash, s.file_path, s.audio_data, s.sample_rate, s.channels, s.duration
+      SELECT s.id, s.hash, s.sample_type, s.sample_rate, s.channels, s.duration
       FROM samples s
       JOIN samples_features sf ON s.project_id = sf.project_id AND s.hash = sf.sample_hash
       WHERE sf.project_id = ? AND sf.source_hash = ? AND sf.feature_hash LIKE ? AND sf.index_order = ?
@@ -1170,7 +1399,7 @@ export class DatabaseManager {
       SELECT
         sf.project_id,
         sf.source_hash,
-        s.file_path as source_file_path,
+        COALESCE(rm.file_path, rec.name) as source_display_name,
         sf.feature_hash,
         f.feature_type,
         COUNT(*) as derived_count
@@ -1180,6 +1409,8 @@ export class DatabaseManager {
         ON sf.project_id = f.project_id
        AND sf.source_hash = f.sample_hash
        AND sf.feature_hash = f.feature_hash
+      LEFT JOIN samples_raw_metadata rm ON s.project_id = rm.project_id AND s.hash = rm.sample_hash
+      LEFT JOIN samples_recorded_metadata rec ON s.project_id = rec.project_id AND s.hash = rec.sample_hash
       WHERE sf.project_id = ?
       GROUP BY sf.project_id, sf.source_hash, sf.feature_hash
       ORDER BY sf.source_hash
@@ -1190,18 +1421,21 @@ export class DatabaseManager {
   listSamples(): SampleListRecord[] {
     const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT 
-        id, 
-        hash, 
-        file_path, 
-        sample_rate, 
-        channels, 
-        duration,
-        length(audio_data) as data_size,
-        created_at
-      FROM samples 
-      WHERE project_id = ? AND file_path IS NOT NULL
-      ORDER BY id DESC
+      SELECT
+        s.id,
+        s.hash,
+        s.sample_type,
+        COALESCE(rm.file_path, rec.name, fm.url) as display_name,
+        s.sample_rate,
+        s.channels,
+        s.duration,
+        s.created_at
+      FROM samples s
+      LEFT JOIN samples_raw_metadata rm ON s.project_id = rm.project_id AND s.hash = rm.sample_hash
+      LEFT JOIN samples_recorded_metadata rec ON s.project_id = rec.project_id AND s.hash = rec.sample_hash
+      LEFT JOIN samples_freesound_metadata fm ON s.project_id = fm.project_id AND s.hash = fm.sample_hash
+      WHERE s.project_id = ? AND s.sample_type != 'derived'
+      ORDER BY s.id DESC
     `);
     return stmt.all(projectId) as SampleListRecord[];
   }
@@ -1209,17 +1443,20 @@ export class DatabaseManager {
   listFeatures(): FeatureListRecord[] {
     const projectId = this.requireCurrentProjectId();
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         f.sample_hash,
         f.feature_type,
-        s.file_path,
+        COALESCE(rm.file_path, rec.name, fm.url) as display_name,
         f.options,
         COUNT(*) as feature_count,
         MAX(f.feature_hash) as feature_hash
       FROM features f
       JOIN samples s ON f.project_id = s.project_id AND f.sample_hash = s.hash
+      LEFT JOIN samples_raw_metadata rm ON s.project_id = rm.project_id AND s.hash = rm.sample_hash
+      LEFT JOIN samples_recorded_metadata rec ON s.project_id = rec.project_id AND s.hash = rec.sample_hash
+      LEFT JOIN samples_freesound_metadata fm ON s.project_id = fm.project_id AND s.hash = fm.sample_hash
       WHERE f.project_id = ?
-      GROUP BY f.sample_hash, f.feature_type, s.file_path, f.options
+      GROUP BY f.sample_hash, f.feature_type, display_name, f.options
       ORDER BY MAX(f.id) DESC
     `);
     return stmt.all(projectId) as FeatureListRecord[];

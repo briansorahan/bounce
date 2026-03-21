@@ -1,5 +1,6 @@
 import { MFCCFeature, SpectralShapeFeature, Normalization, KDTree } from "../index";
 import type { DatabaseManager } from "./database";
+import { resolveAudioData } from "./audio-resolver";
 
 export interface CorpusSegment {
   hash: string;
@@ -50,11 +51,11 @@ export class CorpusManager {
    * Fetches all slices for (sourceHash, featureHash), extracts 20-dim features
    * (13 MFCCs + 7 SpectralShape), normalises, and inserts into the KDTree.
    */
-  build(
+  async build(
     dbManager: DatabaseManager,
     sourceHash: string,
     featureHash: string,
-  ): CorpusBuildResult {
+  ): Promise<CorpusBuildResult> {
     const links = dbManager.getDerivedSamples(sourceHash, featureHash);
 
     if (links.length === 0) {
@@ -75,11 +76,8 @@ export class CorpusManager {
       const record = dbManager.getSampleByHash(link.sample_hash);
       if (!record) continue;
 
-      const audio = new Float32Array(
-        record.audio_data.buffer,
-        record.audio_data.byteOffset,
-        record.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
-      );
+      const resolved = await resolveAudioData(dbManager, link.sample_hash);
+      const audio = resolved.audioData;
 
       // 13 averaged MFCC coefficients
       const mfccFrames = this.mfcc.process(audio);

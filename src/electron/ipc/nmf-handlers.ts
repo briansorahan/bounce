@@ -4,6 +4,7 @@ import { debugLog } from "../logger";
 import { BufNMF } from "../BufNMF";
 import { BufNMFCross } from "../BufNMFCross";
 import { BounceError } from "../../shared/bounce-error.js";
+import { resolveAudioData } from "../audio-resolver";
 import type { HandlerDeps } from "./register";
 
 interface CommandResult {
@@ -57,14 +58,7 @@ async function executeAnalyzeNmf(
 
   try {
     // Look up sample in the current project context
-    const sample = dbManager.getSampleByHash(sampleHash) as
-      | {
-          hash: string;
-          duration: number;
-          sample_rate: number;
-          audio_data: Buffer;
-        }
-      | undefined;
+    const sample = dbManager.getSampleByHash(sampleHash);
 
     if (!sample) {
       debugLog("error", "[AnalyzeNMF] Sample not found", { sampleHash });
@@ -80,13 +74,9 @@ async function executeAnalyzeNmf(
       sampleRate: sample.sample_rate,
     });
 
-    // Use audio data from sample blob in database
-    const audioBuffer = sample.audio_data as Buffer;
-    const audioData = new Float32Array(
-      audioBuffer.buffer,
-      audioBuffer.byteOffset,
-      audioBuffer.byteLength / 4,
-    );
+    // Resolve audio data for this sample
+    const resolved = await resolveAudioData(dbManager, sample.hash);
+    const audioData = resolved.audioData;
 
     if (!audioData || audioData.length === 0) {
       debugLog("error", "[AnalyzeNMF] No audio data in sample");
@@ -394,13 +384,9 @@ async function executeSep(
     const hopSize = options.hopSize || fftSize / 2;
     const windowSize = options.windowSize || fftSize;
 
-    // Get original audio data
-    const audioBuffer = sample.audio_data as Buffer;
-    const audioData = new Float32Array(
-      audioBuffer.buffer,
-      audioBuffer.byteOffset,
-      audioBuffer.byteLength / Float32Array.BYTES_PER_ELEMENT,
-    );
+    // Resolve audio data for this sample
+    const resolved = await resolveAudioData(dbManager, sample.hash);
+    const audioData = resolved.audioData;
 
     debugLog("info", "[Sep] Starting component resynthesis", {
       numComponents,
@@ -426,14 +412,10 @@ async function executeSep(
         i,
       );
 
-      // Convert to Buffer for storage
-      const componentBuffer = Buffer.from(componentAudio.buffer);
-
       const derivedHash = dbManager.createDerivedSample(
         sample.hash,
         feature.feature_hash,
         i,
-        componentBuffer,
         sample.sample_rate,
         sample.channels,
         componentAudio.length / sample.sample_rate,
@@ -556,13 +538,9 @@ async function executeNx(
     const hopSize = sourceOptions.hopSize || fftSize / 2;
     const windowSize = sourceOptions.windowSize || fftSize;
 
-    // Get target audio data
-    const targetAudioBuffer = targetSample.audio_data as Buffer;
-    const targetAudioData = new Float32Array(
-      targetAudioBuffer.buffer,
-      targetAudioBuffer.byteOffset,
-      targetAudioBuffer.byteLength / Float32Array.BYTES_PER_ELEMENT,
-    );
+    // Resolve target audio data
+    const resolved = await resolveAudioData(dbManager, targetSample.hash);
+    const targetAudioData = resolved.audioData;
 
     debugLog("info", "[NX] Starting cross-synthesis", {
       targetLength: targetAudioData.length,
@@ -634,13 +612,10 @@ async function executeNx(
         i,
       );
 
-      const componentBuffer = Buffer.from(componentAudio.buffer);
-
       const derivedHash = dbManager.createDerivedSample(
         targetSample.hash,
         storedFeature.feature_hash,
         i,
-        componentBuffer,
         targetSample.sample_rate,
         targetSample.channels,
         componentAudio.length / targetSample.sample_rate,

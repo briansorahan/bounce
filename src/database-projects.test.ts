@@ -17,17 +17,13 @@ function withTempDb(fn: (dbPath: string) => void): void {
   }
 }
 
-function makeAudioBuffer(values: number[]): Buffer {
-  return Buffer.from(new Float32Array(values).buffer);
-}
-
 async function main() {
   withTempDb((dbPath) => {
     const db = new DatabaseManager(dbPath);
 
     assert.equal(db.getCurrentProject().name, "default", "default project is auto-created");
 
-    db.storeSample("sharedhash", "/default.wav", makeAudioBuffer([0.1, 0.2]), 44100, 1, 0.001);
+    db.storeRawSample("sharedhash", "/default.wav", 44100, 1, 0.001);
     db.storeFeature("sharedhash", "onset-slice", [0, 1, 2]);
     db.addCommand("sn.read('/default.wav')");
 
@@ -38,7 +34,7 @@ async function main() {
     assert.equal(db.getCurrentProject().name, "drums", "loadOrCreateProject switches current project");
     assert.equal(db.getCommandHistory().length, 0, "new project starts with empty history");
 
-    db.storeSample("sharedhash", "/drums.wav", makeAudioBuffer([0.3, 0.4]), 48000, 1, 0.001);
+    db.storeRawSample("sharedhash", "/drums.wav", 48000, 1, 0.001);
     db.storeFeature("sharedhash", "nmf", [1, 2, 3]);
     db.addCommand("proj.load('drums')");
 

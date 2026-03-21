@@ -12,7 +12,7 @@ This is a **breaking change** — no migration of existing data.
 
 ## Approach Summary
 
-1. Add new migration (`migrate008`) that drops and recreates `samples`, `features`, `samples_features` tables with the new schema
+1. Add new migration (`migrate009`) that drops and recreates `samples`, `features`, `samples_features` tables with the new schema
 2. Add 3 new metadata tables: `samples_raw_metadata`, `samples_recorded_metadata`, `samples_freesound_metadata`
 3. Add a `resolveAudioData()` method to `DatabaseManager` that knows how to load audio based on `sample_type`
 4. Update all code that reads/writes the `samples` table to use the new schema
@@ -63,7 +63,7 @@ None.
 - Add new interfaces: `RawSampleMetadata`, `RecordedSampleMetadata`, `FreesoundSampleMetadata`
 - Update `SampleListRecord` — replace `data_size` with `sample_type`
 
-**Migration** (new `migrate008_samplesDataModelRefactor`):
+**Migration** (new `migrate009_samplesDataModelRefactor`):
 - Drop `samples`, `features`, `samples_features` tables (breaking)
 - Recreate `samples` with new schema (no `file_path`, no `audio_data`, add `sample_type`)
 - Recreate `features` and `samples_features` (unchanged schema, just need fresh tables since they FK to samples)
@@ -237,7 +237,7 @@ No new Playwright tests needed — the refactor should be invisible to the REPL 
 ## Implementation Order
 
 ### Phase 1: Schema & Types
-1. Add `migrate008_samplesDataModelRefactor()` to `database.ts`
+1. Add `migrate009_samplesDataModelRefactor()` to `database.ts`
 2. Update `SampleRecord` and related interfaces
 3. Add new interfaces for metadata records
 

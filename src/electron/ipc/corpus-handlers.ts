@@ -10,7 +10,7 @@ export function registerCorpusHandlers(deps: HandlerDeps): void {
     async (_event, sourceHash: string, featureHash: string) => {
       try {
         if (!deps.dbManager) throw new BounceError("CORPUS_DB_NOT_READY", "Database not ready.");
-        return corpusManager.build(deps.dbManager, sourceHash, featureHash);
+        return await corpusManager.build(deps.dbManager, sourceHash, featureHash);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("CORPUS_BUILD_FAILED", `corpus-build failed: ${error instanceof Error ? error.message : String(error)}`);

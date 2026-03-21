@@ -779,7 +779,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         bindSample({
           id: sample.id,
           hash: sample.hash,
-          filePath: sample.file_path ?? undefined,
+          filePath: sample.display_name ?? undefined,
           sampleRate: sample.sample_rate,
           channels: sample.channels,
           duration: sample.duration,
@@ -790,7 +790,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         featureHash: feature.feature_hash,
         featureType: feature.feature_type,
         featureCount: feature.feature_count,
-        filePath: feature.file_path ?? undefined,
+        filePath: feature.display_name ?? undefined,
         options: feature.options,
       }));
 
@@ -801,7 +801,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         for (const sample of samples) {
           const shortHash = sample.hash.substring(0, 8);
           const basename =
-            (sample.file_path ?? sample.hash).split("/").pop() ?? shortHash;
+            (sample.display_name ?? sample.hash).split("/").pop() ?? shortHash;
           const channelsStr = sample.channels === 1 ? "mono" : "stereo";
           lines.push(
             `  \x1b[33m${shortHash}\x1b[0m ${basename.padEnd(25)} ${sample.sample_rate}Hz ${channelsStr.padEnd(6)} ${sample.duration.toFixed(2)}s`,
@@ -1221,7 +1221,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         return bindSample({
           id: current.id,
           hash: current.hash,
-          filePath: current.file_path ?? undefined,
+          filePath: current.display_name ?? undefined,
           sampleRate: current.sample_rate,
           channels: current.channels,
           duration: current.duration,
