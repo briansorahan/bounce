@@ -142,6 +142,21 @@ export interface GranularizeOptions {
   silenceThreshold?: number;
 }
 
+export interface InstrumentRecord {
+  id: number;
+  project_id: number;
+  name: string;
+  kind: string;
+  config_json: string | null;
+  created_at: string;
+}
+
+export interface InstrumentSampleRecord {
+  instrument_id: number;
+  sample_hash: string;
+  note_number: number;
+}
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -306,6 +321,17 @@ export const IpcChannel = {
   // One-way renderer → main
   PlaySample: "play-sample",
   StopSample: "stop-sample",
+
+  // Instruments (one-way renderer → main)
+  DefineInstrument: "define-instrument",
+  FreeInstrument: "free-instrument",
+  LoadInstrumentSample: "load-instrument-sample",
+  InstrumentNoteOn: "instrument-note-on",
+  InstrumentNoteOff: "instrument-note-off",
+  InstrumentStopAll: "instrument-stop-all",
+  SetInstrumentParam: "set-instrument-param",
+  SubscribeInstrumentTelemetry: "subscribe-instrument-telemetry",
+  UnsubscribeInstrumentTelemetry: "unsubscribe-instrument-telemetry",
 
   // One-way main → renderer
   PlaybackPosition: "playback-position",
@@ -510,6 +536,33 @@ export interface IpcSendContract {
   "stop-sample": {
     data: { hash?: string } | undefined;
   };
+  "define-instrument": {
+    data: { instrumentId: string; kind: string; polyphony: number };
+  };
+  "free-instrument": {
+    data: { instrumentId: string };
+  };
+  "load-instrument-sample": {
+    data: { instrumentId: string; note: number; sampleHash: string };
+  };
+  "instrument-note-on": {
+    data: { instrumentId: string; note: number; velocity: number };
+  };
+  "instrument-note-off": {
+    data: { instrumentId: string; note: number };
+  };
+  "instrument-stop-all": {
+    data: { instrumentId: string };
+  };
+  "set-instrument-param": {
+    data: { instrumentId: string; paramId: number; value: number };
+  };
+  "subscribe-instrument-telemetry": {
+    data: { instrumentId: string };
+  };
+  "unsubscribe-instrument-telemetry": {
+    data: { instrumentId: string };
+  };
 }
 
 export interface IpcPushContract {
@@ -613,6 +666,25 @@ export interface ElectronAPI {
   // Playback (one-way renderer → main)
   playSample: (hash: string, loop: boolean) => void;
   stopSample: (hash?: string) => void;
+
+  // Instruments (one-way renderer → main)
+  defineInstrument: (instrumentId: string, kind: string, polyphony: number) => void;
+  freeInstrument: (instrumentId: string) => void;
+  loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string) => void;
+  instrumentNoteOn: (instrumentId: string, note: number, velocity: number) => void;
+  instrumentNoteOff: (instrumentId: string, note: number) => void;
+  instrumentStopAll: (instrumentId: string) => void;
+  setInstrumentParam: (instrumentId: string, paramId: number, value: number) => void;
+  subscribeInstrumentTelemetry: (instrumentId: string) => void;
+  unsubscribeInstrumentTelemetry: (instrumentId: string) => void;
+
+  // Instrument DB persistence
+  createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) => Promise<InstrumentRecord>;
+  deleteDbInstrument: (name: string) => Promise<boolean>;
+  addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<void>;
+  removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<boolean>;
+  listDbInstruments: () => Promise<InstrumentRecord[]>;
+  getDbInstrumentSamples: (instrumentName: string) => Promise<InstrumentSampleRecord[]>;
 
   // Event listeners (one-way main → renderer)
   onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;

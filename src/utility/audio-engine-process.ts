@@ -37,6 +37,16 @@ interface AudioEngineNative {
   stopAll(): void;
   onPosition(cb: (hash: string, positionInSamples: number) => void): void;
   onEnded(cb: (hash: string) => void): void;
+  // Instrument API
+  defineInstrument(id: string, kind: string, polyphony: number): void;
+  freeInstrument(id: string): void;
+  loadInstrumentSample(instrumentId: string, note: number, pcm: Float32Array, sampleRate: number, sampleHash: string): void;
+  instrumentNoteOn(instrumentId: string, note: number, velocity: number): void;
+  instrumentNoteOff(instrumentId: string, note: number): void;
+  instrumentStopAll(instrumentId: string): void;
+  setInstrumentParam(instrumentId: string, paramId: number, value: number): void;
+  subscribeInstrumentTelemetry(instrumentId: string): void;
+  unsubscribeInstrumentTelemetry(instrumentId: string): void;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -78,6 +88,13 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     pcm?: Float32Array;
     sampleRate?: number;
     loop?: boolean;
+    instrumentId?: string;
+    kind?: string;
+    polyphony?: number;
+    note?: number;
+    velocity?: number;
+    paramId?: number;
+    value?: number;
   }}) => {
     const data = msg.data;
 
@@ -94,6 +111,51 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
         break;
       case "stop-all":
         engine?.stopAll();
+        break;
+      case "define-instrument":
+        if (engine && data.instrumentId && data.kind && data.polyphony !== undefined) {
+          engine.defineInstrument(data.instrumentId, data.kind, data.polyphony);
+        }
+        break;
+      case "free-instrument":
+        if (engine && data.instrumentId) {
+          engine.freeInstrument(data.instrumentId);
+        }
+        break;
+      case "load-instrument-sample":
+        if (engine && data.instrumentId && data.note !== undefined && data.pcm && data.sampleRate !== undefined && data.sampleHash) {
+          engine.loadInstrumentSample(data.instrumentId, data.note, data.pcm, data.sampleRate, data.sampleHash);
+        }
+        break;
+      case "instrument-note-on":
+        if (engine && data.instrumentId && data.note !== undefined && data.velocity !== undefined) {
+          engine.instrumentNoteOn(data.instrumentId, data.note, data.velocity);
+        }
+        break;
+      case "instrument-note-off":
+        if (engine && data.instrumentId && data.note !== undefined) {
+          engine.instrumentNoteOff(data.instrumentId, data.note);
+        }
+        break;
+      case "instrument-stop-all":
+        if (engine && data.instrumentId) {
+          engine.instrumentStopAll(data.instrumentId);
+        }
+        break;
+      case "set-instrument-param":
+        if (engine && data.instrumentId && data.paramId !== undefined && data.value !== undefined) {
+          engine.setInstrumentParam(data.instrumentId, data.paramId, data.value);
+        }
+        break;
+      case "subscribe-instrument-telemetry":
+        if (engine && data.instrumentId) {
+          engine.subscribeInstrumentTelemetry(data.instrumentId);
+        }
+        break;
+      case "unsubscribe-instrument-telemetry":
+        if (engine && data.instrumentId) {
+          engine.unsubscribeInstrumentTelemetry(data.instrumentId);
+        }
         break;
       default:
         console.warn(`[audio-engine-process] Unknown message type: ${data.type}`);

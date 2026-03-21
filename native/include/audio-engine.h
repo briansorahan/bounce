@@ -8,8 +8,9 @@
 #include <thread>
 #include <vector>
 
-// Forward declaration — miniaudio is included only in the .cpp
+// Forward declarations
 struct ma_device;
+class Instrument;
 
 struct TelemetryEvent {
     enum class Kind { Position, Ended };
@@ -35,10 +36,27 @@ public:
     bool start();
     void stop();
 
+    // Legacy playback API (backward compat)
     void play(const std::string& hash, const float* pcm, int numSamples,
               double sampleRate, bool loop);
     void stopSample(const std::string& hash);
     void stopAll();
+
+    // Instrument API
+    void defineInstrument(const std::string& id, const std::string& kind,
+                          int polyphony);
+    void freeInstrument(const std::string& id);
+    void loadInstrumentSample(const std::string& instrumentId, int note,
+                              std::vector<float> pcm, double sampleRate,
+                              const std::string& sampleHash);
+    void instrumentNoteOn(const std::string& instrumentId,
+                          int note, float velocity);
+    void instrumentNoteOff(const std::string& instrumentId, int note);
+    void instrumentStopAll(const std::string& instrumentId);
+    void setInstrumentParam(const std::string& instrumentId,
+                            int paramId, float value);
+    void subscribeInstrumentTelemetry(const std::string& instrumentId);
+    void unsubscribeInstrumentTelemetry(const std::string& instrumentId);
 
     void onPosition(PositionCallback cb);
     void onEnded(EndedCallback cb);
@@ -51,9 +69,28 @@ private:
 
     // Control messages queued from JS thread, applied at top of each audio block
     struct ControlMsg {
-        enum class Op { Add, Remove, RemoveAll } op;
+        enum class Op {
+            Add, Remove, RemoveAll,
+            DefineInstrument, FreeInstrument,
+            InstrumentNoteOn, InstrumentNoteOff, InstrumentStopAll,
+            InstrumentLoadSample, InstrumentSetParam,
+            SubscribeTelemetry, UnsubscribeTelemetry,
+        } op;
+
+        // Legacy
         std::shared_ptr<AudioProcessor> processor; // for Add
         std::string hash;                          // for Remove
+
+        // Instrument fields
+        std::shared_ptr<Instrument> instrument;
+        std::string instrumentId;
+        int note = 0;
+        float velocity = 0.f;
+        int paramId = 0;
+        float paramValue = 0.f;
+        std::vector<float> pcm;
+        double sampleRate = 0.0;
+        std::string sampleHash;
     };
 
     // Simple lock-based queues (not audio-thread-safe for the control queue,
@@ -69,6 +106,11 @@ private:
 
     // Active processors (accessed only on audio thread after swap-in)
     std::vector<std::shared_ptr<AudioProcessor>> processors_;
+
+    // Active instruments (accessed only on audio thread after swap-in)
+    std::vector<std::shared_ptr<Instrument>> instruments_;
+    Instrument* findInstrument(const std::string& id);
+    void setupInstrumentTelemetry(Instrument* inst);
 
     // Telemetry delivery thread
     std::thread   telemetryThread_;

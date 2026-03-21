@@ -103,6 +103,21 @@ export interface GranularizeOptions {
   silenceThreshold?: number;
 }
 
+export interface InstrumentRecord {
+  id: number;
+  project_id: number;
+  name: string;
+  kind: string;
+  config_json: string | null;
+  created_at: string;
+}
+
+export interface InstrumentSampleRecord {
+  instrument_id: number;
+  sample_hash: string;
+  note_number: number;
+}
+
 export class DatabaseManager {
   public db: Database.Database;
   private currentProjectId: number | null = null;
@@ -133,6 +148,7 @@ export class DatabaseManager {
       () => this.migrate004_repairFeaturesFK(),
       () => this.migrate005_projects(),
       () => this.migrate006_replEnv(),
+      () => this.migrate007_instruments(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -483,6 +499,33 @@ export class DatabaseManager {
       );
 
       CREATE INDEX idx_repl_env_project ON repl_env(project_id);
+    `);
+  }
+
+  private migrate007_instruments(): void {
+    this.db.exec(`
+      CREATE TABLE instruments (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id  INTEGER NOT NULL,
+        name        TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        config_json TEXT,
+        created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(project_id, name),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_instruments_project ON instruments(project_id);
+
+      CREATE TABLE instrument_samples (
+        instrument_id INTEGER NOT NULL,
+        sample_hash   TEXT NOT NULL,
+        note_number   INTEGER NOT NULL,
+        PRIMARY KEY (instrument_id, sample_hash, note_number),
+        FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_instrument_samples_instrument ON instrument_samples(instrument_id);
     `);
   }
 
@@ -1225,5 +1268,64 @@ LIMIT 1
     return this.db
       .prepare("SELECT * FROM repl_env WHERE project_id = ? ORDER BY name ASC")
       .all(projectId) as ReplEnvRecord[];
+  }
+
+  // ---- Instrument CRUD ----
+
+  createInstrument(name: string, kind: string, config?: Record<string, unknown>): InstrumentRecord {
+    const projectId = this.requireCurrentProjectId();
+    const configJson = config ? JSON.stringify(config) : null;
+    const stmt = this.db.prepare(
+      "INSERT INTO instruments (project_id, name, kind, config_json) VALUES (?, ?, ?, ?)",
+    );
+    const result = stmt.run(projectId, name, kind, configJson);
+    return this.db.prepare("SELECT * FROM instruments WHERE id = ?")
+      .get(result.lastInsertRowid) as InstrumentRecord;
+  }
+
+  getInstrument(name: string): InstrumentRecord | null {
+    const projectId = this.requireCurrentProjectId();
+    return (this.db
+      .prepare("SELECT * FROM instruments WHERE project_id = ? AND name = ?")
+      .get(projectId, name) ?? null) as InstrumentRecord | null;
+  }
+
+  getInstrumentById(id: number): InstrumentRecord | null {
+    return (this.db.prepare("SELECT * FROM instruments WHERE id = ?")
+      .get(id) ?? null) as InstrumentRecord | null;
+  }
+
+  listInstruments(): InstrumentRecord[] {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare("SELECT * FROM instruments WHERE project_id = ? ORDER BY name ASC")
+      .all(projectId) as InstrumentRecord[];
+  }
+
+  deleteInstrument(name: string): boolean {
+    const projectId = this.requireCurrentProjectId();
+    const result = this.db
+      .prepare("DELETE FROM instruments WHERE project_id = ? AND name = ?")
+      .run(projectId, name);
+    return result.changes > 0;
+  }
+
+  addInstrumentSample(instrumentId: number, sampleHash: string, noteNumber: number): void {
+    this.db.prepare(
+      "INSERT OR REPLACE INTO instrument_samples (instrument_id, sample_hash, note_number) VALUES (?, ?, ?)",
+    ).run(instrumentId, sampleHash, noteNumber);
+  }
+
+  getInstrumentSamples(instrumentId: number): InstrumentSampleRecord[] {
+    return this.db
+      .prepare("SELECT * FROM instrument_samples WHERE instrument_id = ? ORDER BY note_number ASC")
+      .all(instrumentId) as InstrumentSampleRecord[];
+  }
+
+  removeInstrumentSample(instrumentId: number, sampleHash: string, noteNumber: number): boolean {
+    const result = this.db
+      .prepare("DELETE FROM instrument_samples WHERE instrument_id = ? AND sample_hash = ? AND note_number = ?")
+      .run(instrumentId, sampleHash, noteNumber);
+    return result.changes > 0;
   }
 }

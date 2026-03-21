@@ -8,6 +8,21 @@ interface StoreRecordingResult {
   filePath?: string;
 }
 
+interface InstrumentDbRecord {
+  id: number;
+  project_id: number;
+  name: string;
+  kind: string;
+  config_json: string | null;
+  created_at: string;
+}
+
+interface InstrumentSampleDbRecord {
+  instrument_id: number;
+  sample_hash: string;
+  note_number: number;
+}
+
 
 interface AudioFileData {
   channelData: Float32Array;
@@ -277,6 +292,23 @@ interface Window {
     ) => Promise<StoreRecordingResult>;
     playSample: (hash: string, loop: boolean) => void;
     stopSample: (hash?: string) => void;
+    // Instrument API
+    defineInstrument: (instrumentId: string, kind: string, polyphony: number) => void;
+    freeInstrument: (instrumentId: string) => void;
+    loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string) => void;
+    instrumentNoteOn: (instrumentId: string, note: number, velocity: number) => void;
+    instrumentNoteOff: (instrumentId: string, note: number) => void;
+    instrumentStopAll: (instrumentId: string) => void;
+    setInstrumentParam: (instrumentId: string, paramId: number, value: number) => void;
+    subscribeInstrumentTelemetry: (instrumentId: string) => void;
+    unsubscribeInstrumentTelemetry: (instrumentId: string) => void;
+    // Instrument DB persistence
+    createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) => Promise<InstrumentDbRecord>;
+    deleteDbInstrument: (name: string) => Promise<boolean>;
+    addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<void>;
+    removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<boolean>;
+    listDbInstruments: () => Promise<InstrumentDbRecord[]>;
+    getDbInstrumentSamples: (instrumentName: string) => Promise<InstrumentSampleDbRecord[]>;
     onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
     onPlaybackEnded: (callback: (hash: string) => void) => void;
     onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;

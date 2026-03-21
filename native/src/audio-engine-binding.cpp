@@ -1,6 +1,7 @@
 #include <napi.h>
 #include "audio-engine.h"
 #include <memory>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // AudioEngineWrapper — wraps AudioEngine as a Napi::ObjectWrap
@@ -12,11 +13,23 @@ public:
     ~AudioEngineWrapper();
 
 private:
+    // Legacy
     Napi::Value Play(const Napi::CallbackInfo& info);
     Napi::Value Stop(const Napi::CallbackInfo& info);
     Napi::Value StopAll(const Napi::CallbackInfo& info);
     Napi::Value OnPosition(const Napi::CallbackInfo& info);
     Napi::Value OnEnded(const Napi::CallbackInfo& info);
+
+    // Instrument API
+    Napi::Value DefineInstrument(const Napi::CallbackInfo& info);
+    Napi::Value FreeInstrument(const Napi::CallbackInfo& info);
+    Napi::Value LoadInstrumentSample(const Napi::CallbackInfo& info);
+    Napi::Value InstrumentNoteOn(const Napi::CallbackInfo& info);
+    Napi::Value InstrumentNoteOff(const Napi::CallbackInfo& info);
+    Napi::Value InstrumentStopAll(const Napi::CallbackInfo& info);
+    Napi::Value SetInstrumentParam(const Napi::CallbackInfo& info);
+    Napi::Value SubscribeInstrumentTelemetry(const Napi::CallbackInfo& info);
+    Napi::Value UnsubscribeInstrumentTelemetry(const Napi::CallbackInfo& info);
 
     std::unique_ptr<AudioEngine> engine_;
 
@@ -33,6 +46,15 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("stopAll",    &AudioEngineWrapper::StopAll),
         InstanceMethod("onPosition", &AudioEngineWrapper::OnPosition),
         InstanceMethod("onEnded",    &AudioEngineWrapper::OnEnded),
+        InstanceMethod("defineInstrument",              &AudioEngineWrapper::DefineInstrument),
+        InstanceMethod("freeInstrument",                &AudioEngineWrapper::FreeInstrument),
+        InstanceMethod("loadInstrumentSample",          &AudioEngineWrapper::LoadInstrumentSample),
+        InstanceMethod("instrumentNoteOn",              &AudioEngineWrapper::InstrumentNoteOn),
+        InstanceMethod("instrumentNoteOff",             &AudioEngineWrapper::InstrumentNoteOff),
+        InstanceMethod("instrumentStopAll",             &AudioEngineWrapper::InstrumentStopAll),
+        InstanceMethod("setInstrumentParam",            &AudioEngineWrapper::SetInstrumentParam),
+        InstanceMethod("subscribeInstrumentTelemetry",  &AudioEngineWrapper::SubscribeInstrumentTelemetry),
+        InstanceMethod("unsubscribeInstrumentTelemetry",&AudioEngineWrapper::UnsubscribeInstrumentTelemetry),
     });
 
     Napi::FunctionReference* ctor = new Napi::FunctionReference();
@@ -159,6 +181,162 @@ Napi::Value AudioEngineWrapper::OnEnded(const Napi::CallbackInfo& info) {
         });
     });
 
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// defineInstrument(id: string, kind: string, polyphony: number)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::DefineInstrument(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3) {
+        Napi::TypeError::New(env, "defineInstrument(id, kind, polyphony) requires 3 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string id   = info[0].As<Napi::String>();
+    std::string kind = info[1].As<Napi::String>();
+    int polyphony    = info[2].As<Napi::Number>().Int32Value();
+    engine_->defineInstrument(id, kind, polyphony);
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// freeInstrument(id: string)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::FreeInstrument(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env, "freeInstrument(id) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->freeInstrument(info[0].As<Napi::String>());
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::LoadInstrumentSample(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 5) {
+        Napi::TypeError::New(env,
+            "loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash) requires 5 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string instrumentId = info[0].As<Napi::String>();
+    int note                 = info[1].As<Napi::Number>().Int32Value();
+    auto typedArr            = info[2].As<Napi::Float32Array>();
+    double sampleRate        = info[3].As<Napi::Number>().DoubleValue();
+    std::string sampleHash   = info[4].As<Napi::String>();
+
+    // Copy Float32Array data into a vector that can be moved into the engine
+    const float* data = typedArr.Data();
+    int len = static_cast<int>(typedArr.ElementLength());
+    std::vector<float> pcm(data, data + len);
+
+    engine_->loadInstrumentSample(instrumentId, note, std::move(pcm),
+                                  sampleRate, sampleHash);
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// instrumentNoteOn(instrumentId, note, velocity)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::InstrumentNoteOn(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3) {
+        Napi::TypeError::New(env,
+            "instrumentNoteOn(instrumentId, note, velocity) requires 3 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string instrumentId = info[0].As<Napi::String>();
+    int note                 = info[1].As<Napi::Number>().Int32Value();
+    float velocity           = info[2].As<Napi::Number>().FloatValue();
+    engine_->instrumentNoteOn(instrumentId, note, velocity);
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// instrumentNoteOff(instrumentId, note)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::InstrumentNoteOff(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env,
+            "instrumentNoteOff(instrumentId, note) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string instrumentId = info[0].As<Napi::String>();
+    int note                 = info[1].As<Napi::Number>().Int32Value();
+    engine_->instrumentNoteOff(instrumentId, note);
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// instrumentStopAll(instrumentId)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::InstrumentStopAll(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env,
+            "instrumentStopAll(instrumentId) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->instrumentStopAll(info[0].As<Napi::String>());
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// setInstrumentParam(instrumentId, paramId, value)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::SetInstrumentParam(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 3) {
+        Napi::TypeError::New(env,
+            "setInstrumentParam(instrumentId, paramId, value) requires 3 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string instrumentId = info[0].As<Napi::String>();
+    int paramId              = info[1].As<Napi::Number>().Int32Value();
+    float value              = info[2].As<Napi::Number>().FloatValue();
+    engine_->setInstrumentParam(instrumentId, paramId, value);
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// subscribeInstrumentTelemetry(instrumentId)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::SubscribeInstrumentTelemetry(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env,
+            "subscribeInstrumentTelemetry(instrumentId) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->subscribeInstrumentTelemetry(info[0].As<Napi::String>());
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// unsubscribeInstrumentTelemetry(instrumentId)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::UnsubscribeInstrumentTelemetry(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env,
+            "unsubscribeInstrumentTelemetry(instrumentId) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->unsubscribeInstrumentTelemetry(info[0].As<Napi::String>());
     return env.Undefined();
 }
 

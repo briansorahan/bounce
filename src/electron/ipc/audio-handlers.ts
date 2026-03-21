@@ -209,4 +209,145 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       port.postMessage({ type: "stop-all" });
     }
   });
+
+  // ---- Instrument IPC handlers ----
+
+  ipcMain.on("define-instrument", (_event, payload: {
+    instrumentId: string; kind: string; polyphony: number; name?: string;
+  }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({
+      type: "define-instrument",
+      instrumentId: payload.instrumentId,
+      kind: payload.kind,
+      polyphony: payload.polyphony,
+    });
+  });
+
+  ipcMain.on("free-instrument", (_event, payload: { instrumentId: string }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({ type: "free-instrument", instrumentId: payload.instrumentId });
+  });
+
+  ipcMain.on("load-instrument-sample", (_event, payload: {
+    instrumentId: string; note: number; sampleHash: string;
+  }) => {
+    const port = getAudioEnginePort();
+    if (!deps.dbManager || !port) return;
+
+    const sample = deps.dbManager.getSampleByHash(payload.sampleHash);
+    if (!sample || !sample.audio_data) return;
+
+    const pcm = new Float32Array(
+      sample.audio_data.buffer,
+      sample.audio_data.byteOffset,
+      sample.audio_data.byteLength / Float32Array.BYTES_PER_ELEMENT,
+    );
+    const pcmCopy = new Float32Array(pcm);
+
+    port.postMessage({
+      type: "load-instrument-sample",
+      instrumentId: payload.instrumentId,
+      note: payload.note,
+      pcm: pcmCopy,
+      sampleRate: sample.sample_rate,
+      sampleHash: payload.sampleHash,
+    });
+  });
+
+  ipcMain.on("instrument-note-on", (_event, payload: {
+    instrumentId: string; note: number; velocity: number;
+  }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({
+      type: "instrument-note-on",
+      instrumentId: payload.instrumentId,
+      note: payload.note,
+      velocity: payload.velocity,
+    });
+  });
+
+  ipcMain.on("instrument-note-off", (_event, payload: {
+    instrumentId: string; note: number;
+  }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({
+      type: "instrument-note-off",
+      instrumentId: payload.instrumentId,
+      note: payload.note,
+    });
+  });
+
+  ipcMain.on("instrument-stop-all", (_event, payload: { instrumentId: string }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({ type: "instrument-stop-all", instrumentId: payload.instrumentId });
+  });
+
+  ipcMain.on("set-instrument-param", (_event, payload: {
+    instrumentId: string; paramId: number; value: number;
+  }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({
+      type: "set-instrument-param",
+      instrumentId: payload.instrumentId,
+      paramId: payload.paramId,
+      value: payload.value,
+    });
+  });
+
+  ipcMain.on("subscribe-instrument-telemetry", (_event, payload: { instrumentId: string }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({ type: "subscribe-instrument-telemetry", instrumentId: payload.instrumentId });
+  });
+
+  ipcMain.on("unsubscribe-instrument-telemetry", (_event, payload: { instrumentId: string }) => {
+    const port = getAudioEnginePort();
+    if (!port) return;
+    port.postMessage({ type: "unsubscribe-instrument-telemetry", instrumentId: payload.instrumentId });
+  });
+
+  // ---- Instrument DB persistence (invoke-based) ----
+
+  ipcMain.handle("create-db-instrument", (_event, name: string, kind: string, config?: Record<string, unknown>) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    return deps.dbManager.createInstrument(name, kind, config);
+  });
+
+  ipcMain.handle("delete-db-instrument", (_event, name: string) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    return deps.dbManager.deleteInstrument(name);
+  });
+
+  ipcMain.handle("add-db-instrument-sample", (_event, instrumentName: string, sampleHash: string, noteNumber: number) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    const instrument = deps.dbManager.getInstrument(instrumentName);
+    if (!instrument) throw new BounceError("INSTRUMENT_NOT_FOUND", `Instrument '${instrumentName}' not found`);
+    deps.dbManager.addInstrumentSample(instrument.id, sampleHash, noteNumber);
+  });
+
+  ipcMain.handle("remove-db-instrument-sample", (_event, instrumentName: string, sampleHash: string, noteNumber: number) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    const instrument = deps.dbManager.getInstrument(instrumentName);
+    if (!instrument) return false;
+    return deps.dbManager.removeInstrumentSample(instrument.id, sampleHash, noteNumber);
+  });
+
+  ipcMain.handle("list-db-instruments", () => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    return deps.dbManager.listInstruments();
+  });
+
+  ipcMain.handle("get-db-instrument-samples", (_event, instrumentName: string) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    const instrument = deps.dbManager.getInstrument(instrumentName);
+    if (!instrument) return [];
+    return deps.dbManager.getInstrumentSamples(instrument.id);
+  });
 }
