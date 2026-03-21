@@ -240,6 +240,7 @@ async function main() {
     help(): BounceResult;
     stop(): BounceResult;
     read(pathOrHash: string): SamplePromise;
+    load(hash: string): SamplePromise;
     list(): PromiseLike<unknown>;
     current(): CurrentSamplePromise;
   };
@@ -378,7 +379,7 @@ async function main() {
   assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
   assert.ok(scene.help().toString().includes("scene.show()"), "VisScene help describes show()");
 
-  const samplePromise = sn.read("abcdef1234567890");
+  const samplePromise = sn.load("abcdef1234567890");
   const scenePromise = vis.waveform(samplePromise);
   assert.ok(scenePromise instanceof VisScenePromise, "vis.waveform(SamplePromise) returns VisScenePromise");
   assert.ok(vis.waveform(samplePromise).title("test") instanceof VisScenePromise, "VisScenePromise.title chains");
@@ -480,6 +481,23 @@ async function main() {
 
   const corpusBuilt = await corpus.build(sn.read("/test.wav"));
   assert.ok(corpusBuilt instanceof BounceResult, "corpus.build accepts thenable sample sources");
+
+  // --- sn.read() rejects hashes, sn.load() accepts them ---
+  let hashRejected = false;
+  try {
+    await sn.read("abcdef1234567890");
+  } catch (err) {
+    hashRejected = true;
+    assert.ok(
+      (err as Error).message.includes("sn.load"),
+      "sn.read hash rejection suggests sn.load()",
+    );
+  }
+  assert.ok(hashRejected, "sn.read() rejects hash-like strings");
+
+  const loadedByHash = await sn.load("abcdef1234567890");
+  assert.ok(loadedByHash instanceof Sample, "sn.load() returns Sample");
+  assert.ok(loadedByHash.hash.startsWith("abcdef"), "sn.load() resolves by hash prefix");
 
   // --- Recording namespace unit tests ---
 

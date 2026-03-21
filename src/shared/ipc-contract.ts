@@ -247,7 +247,12 @@ export interface FsWalkResult {
   truncated: boolean;
 }
 
-export type FsCompletionMethod = "ls" | "la" | "cd" | "walk";
+export type FsCompletionMethod = "ls" | "la" | "cd" | "walk" | "read";
+
+export interface SampleHashCompletion {
+  hash: string;
+  filePath: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // Channel name constants
@@ -280,6 +285,9 @@ export const IpcChannel = {
   DebugLog: "debug-log",
   GetDebugLogs: "get-debug-logs",
   ClearDebugLogs: "clear-debug-logs",
+
+  // Sample completion
+  CompleteSampleHash: "complete-sample-hash",
 
   // Features & samples
   StoreFeature: "store-feature",
@@ -450,6 +458,10 @@ export interface IpcHandleContract {
   "get-sample-by-hash": {
     request: [hash: string];
     response: SampleRecord | null;
+  };
+  "complete-sample-hash": {
+    request: [prefix: string];
+    response: SampleHashCompletion[];
   };
   "get-sample-by-name": {
     request: [name: string];
@@ -635,6 +647,7 @@ export interface ElectronAPI {
   listSamples: () => Promise<SampleListRecord[]>;
   listFeatures: () => Promise<FeatureListRecord[]>;
   getSampleByHash: (hash: string) => Promise<SampleRecord | null>;
+  completeSampleHash: (prefix: string) => Promise<SampleHashCompletion[]>;
   getSampleByName: (name: string) => Promise<SampleByNameResult | null>;
   storeRecording: (name: string, audioData: number[], sampleRate: number, channels: number, duration: number, overwrite: boolean) => Promise<StoreRecordingResult>;
   granularizeSample: (sourceHash: string, options?: GranularizeOptions) => Promise<GranularizeResult>;
