@@ -124,6 +124,7 @@ Before considering work complete:
 - Manually test in Electron app: `npm run dev:electron`
 - Verify cross-platform compatibility if possible
 - If REPL surface area changed, verify that unit and/or Playwright tests cover `help()` output and returned-object terminal summaries before closing the work
+- If architecture changed, review `ARCHITECTURE.md` for accuracy (see Step 7)
 - Do not run Playwright directly from the host for verification docs or Copilot guidance; prefer `./build.sh`, which runs the Playwright suite in Docker
 
 ### Step 7: Completion
@@ -131,6 +132,7 @@ Before considering work complete:
 Before considering work done:
 - Ensure the `**Status:**` header line at the top of IMPL.md reads `**Status:** Complete` — this is the canonical marker that prune-specs and other tooling use to identify finished work
 - Fill in the `## Final Status` section at the bottom of IMPL.md: completion date, summary, and verification checklist
+- Review `ARCHITECTURE.md` at the repo root and update it if the work changed the process model, IPC protocol, data flows, database schema, native addon surface, or renderer architecture
 - Commit all spec files with implementation
 - Specs remain in repo as documentation
 

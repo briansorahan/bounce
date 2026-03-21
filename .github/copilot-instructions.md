@@ -8,20 +8,24 @@ Bounce is an experimental audio editor for exploring audio corpus analysis and r
 
 ## Architecture
 
-- **Electron app** with main/renderer process split
-- **Native C++ addons** via node-gyp for FluCoMa audio analysis
+- **Electron app** with three processes: main, renderer, and audio engine utility process
+- **Native C++ addons** via node-gyp for FluCoMa analysis and miniaudio playback
 - **Terminal UI** as primary interface (xterm.js-based)
 - **TypeScript** for all application code
-- **No server component** - pure desktop application
+- **SQLite** (better-sqlite3) for persistent sample, feature, and project storage
+- **No server component** - pure desktop application (utility process is local to Electron)
+
+For detailed architecture documentation (process responsibilities, IPC protocol, data flows, database schema), see [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Technology Stack
 
 - **Runtime:** Electron, Node.js v24+
 - **Language:** TypeScript (strict mode)
-- **Native:** C++17 with FluCoMa, built via node-gyp
-- **UI:** Terminal-based with @xterm
-- **Testing:** Custom unit tests, Playwright for e2e
-- **Audio:** FluCoMa for analysis, audio-decode/wav-decoder for I/O
+- **Native:** C++17 with FluCoMa and miniaudio, built via node-gyp
+- **UI:** Terminal-based with @xterm/xterm, Canvas overlays for visualization
+- **Testing:** Custom unit tests (run via tsx), Playwright for e2e
+- **Audio:** FluCoMa for analysis, miniaudio for playback, audio-decode/wav-decoder for I/O
+- **Storage:** SQLite via better-sqlite3 for persistent sample/feature/project caching
 
 ## Core Principles
 
@@ -62,11 +66,13 @@ Bounce is an experimental audio editor for exploring audio corpus analysis and r
 - Handle errors with try/catch and meaningful error messages
 
 ### File Organization
-- `src/electron/` - Electron main process
-- `src/renderer/` - Electron renderer process  
-- `src/` - Core library code and native bindings
-- `tests/` - Test files
-- `native/` - C++ source code
+- `src/electron/` - Electron main process (lifecycle, IPC handlers, database)
+- `src/renderer/` - Electron renderer process (REPL, visualization, namespaces)
+- `src/shared/` - Shared types, IPC contracts, and protocols between processes
+- `src/utility/` - Audio engine utility process (playback, instruments)
+- `src/` - Core library code, native bindings, and unit tests
+- `tests/` - Playwright e2e test files
+- `native/` - C++ source code for flucoma_native and audio_engine_native addons
 
 ### Naming Conventions
 - Files: kebab-case (e.g., `onset-feature.ts`)
@@ -77,7 +83,7 @@ Bounce is an experimental audio editor for exploring audio corpus analysis and r
 ## Development Workflow
 
 ### Spec-Driven Development
-For any work beyond simple fixes (more than a couple lines), use the spec workflow documented in `.github/skills/create-new-spec/SKILL.md`.
+For any work beyond simple fixes (more than a couple lines), use the spec workflow documented in `.github/skills/create-new-spec/SKILL.md`. Additional skills are available in `.github/skills/` for common tasks like adding database migrations, wrapping FluCoMa algorithms, adding terminal commands, and managing the database.
 
 For REPL-facing work, specs should explicitly document the REPL interface contract: what gets a `help()` method, what each returned object prints to the terminal, and which unit and/or Playwright tests will verify those behaviors.
 
