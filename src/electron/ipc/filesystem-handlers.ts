@@ -95,12 +95,10 @@ async function completeFsPath(
 }
 
 export function registerFilesystemHandlers(deps: HandlerDeps): void {
-  const { settingsStore } = deps;
-
   ipcMain.handle(
     "fs-ls",
     async (_event, dirPath: string | undefined, showHidden: boolean) => {
-      const resolved = dirPath ? resolvePath(settingsStore, dirPath) : (settingsStore?.getCwd() ?? os.homedir());
+      const resolved = dirPath ? resolvePath(deps.settingsStore, dirPath) : (deps.settingsStore?.getCwd() ?? os.homedir());
       const dirents = await fs.promises.readdir(resolved, { withFileTypes: true });
       const entries: FsEntry[] = [];
       for (const d of dirents) {
@@ -121,23 +119,23 @@ export function registerFilesystemHandlers(deps: HandlerDeps): void {
   );
 
   ipcMain.handle("fs-cd", async (_event, dirPath: string) => {
-    const resolved = resolvePath(settingsStore, dirPath);
+    const resolved = resolvePath(deps.settingsStore, dirPath);
     const stat = await fs.promises.stat(resolved);
     if (!stat.isDirectory()) {
       throw new Error(`Not a directory: ${resolved}`);
     }
-    settingsStore?.setCwd(resolved);
+    deps.settingsStore?.setCwd(resolved);
     return resolved;
   });
 
-  ipcMain.handle("fs-pwd", () => settingsStore?.getCwd() ?? os.homedir());
+  ipcMain.handle("fs-pwd", () => deps.settingsStore?.getCwd() ?? os.homedir());
 
   ipcMain.handle("fs-complete-path", async (_event, method: FsCompletionMethod, inputPath: string) => {
-    return completeFsPath(settingsStore, method, inputPath);
+    return completeFsPath(deps.settingsStore, method, inputPath);
   });
 
   ipcMain.handle("fs-glob", async (_event, pattern: string) => {
-    const cwd = settingsStore?.getCwd() ?? os.homedir();
+    const cwd = deps.settingsStore?.getCwd() ?? os.homedir();
     const results: string[] = [];
     // fs.promises.glob is available in Node.js 22+
     const globFn = (fs.promises as Record<string, unknown>)["glob"] as
@@ -154,7 +152,7 @@ export function registerFilesystemHandlers(deps: HandlerDeps): void {
   });
 
   ipcMain.handle("fs-walk", async (_event, dirPath: string) => {
-    const resolved = resolvePath(settingsStore, dirPath);
+    const resolved = resolvePath(deps.settingsStore, dirPath);
     const dirents = await fs.promises.readdir(resolved, {
       recursive: true,
       withFileTypes: true,

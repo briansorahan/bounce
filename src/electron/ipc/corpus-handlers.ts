@@ -3,14 +3,14 @@ import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerCorpusHandlers(deps: HandlerDeps): void {
-  const { dbManager, corpusManager } = deps;
+  const { corpusManager } = deps;
 
   ipcMain.handle(
     "corpus-build",
     async (_event, sourceHash: string, featureHash: string) => {
       try {
-        if (!dbManager) throw new BounceError("CORPUS_DB_NOT_READY", "Database not ready.");
-        return corpusManager.build(dbManager, sourceHash, featureHash);
+        if (!deps.dbManager) throw new BounceError("CORPUS_DB_NOT_READY", "Database not ready.");
+        return corpusManager.build(deps.dbManager, sourceHash, featureHash);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("CORPUS_BUILD_FAILED", `corpus-build failed: ${error instanceof Error ? error.message : String(error)}`);

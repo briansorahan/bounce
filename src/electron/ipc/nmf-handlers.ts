@@ -673,12 +673,12 @@ async function executeNx(
 }
 
 export function registerNmfHandlers(deps: HandlerDeps): void {
-  const { dbManager, getMainWindow } = deps;
+  const { getMainWindow } = deps;
 
   ipcMain.handle("analyze-nmf", async (_event, args: string[]) => {
     try {
       const mainWindow = getMainWindow()!;
-      return await executeAnalyzeNmf(args, mainWindow, dbManager);
+      return await executeAnalyzeNmf(args, mainWindow, deps.dbManager);
     } catch (error) {
       console.error("Failed to execute analyze-nmf:", error);
       throw error instanceof BounceError ? error : new BounceError("ANALYSIS_NMF_COMMAND_FAILED", `Failed to execute analyze-nmf: ${error instanceof Error ? error.message : String(error)}`);
@@ -688,7 +688,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
   ipcMain.handle("visualize-nmf", async (_event, sampleHash: string) => {
     try {
       const mainWindow = getMainWindow()!;
-      return await executeVisualizeNmf([sampleHash], mainWindow, dbManager);
+      return await executeVisualizeNmf([sampleHash], mainWindow, deps.dbManager);
     } catch (error) {
       console.error("Failed to execute visualize-nmf:", error);
       throw error instanceof BounceError ? error : new BounceError("ANALYSIS_VISUALIZE_NMF_FAILED", `Failed to execute visualize-nmf: ${error instanceof Error ? error.message : String(error)}`);
@@ -698,7 +698,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
   ipcMain.handle("sep", async (_event, args: string[]) => {
     try {
       const mainWindow = getMainWindow()!;
-      return await executeSep(args, mainWindow, dbManager);
+      return await executeSep(args, mainWindow, deps.dbManager);
     } catch (error) {
       console.error("Failed to execute sep:", error);
       throw error instanceof BounceError ? error : new BounceError("ANALYSIS_SEP_FAILED", `Failed to execute sep: ${error instanceof Error ? error.message : String(error)}`);
@@ -708,7 +708,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
   ipcMain.handle("nx", async (_event, args: string[]) => {
     try {
       const mainWindow = getMainWindow()!;
-      return await executeNx(args, mainWindow, dbManager);
+      return await executeNx(args, mainWindow, deps.dbManager);
     } catch (error) {
       console.error("Failed to execute nx:", error);
       throw error instanceof BounceError ? error : new BounceError("ANALYSIS_NX_FAILED", `Failed to execute nx: ${error instanceof Error ? error.message : String(error)}`);
@@ -732,7 +732,7 @@ export function registerNmfHandlers(deps: HandlerDeps): void {
         }
 
         const mainWindow = getMainWindow()!;
-        return await command(args, mainWindow, dbManager);
+        return await command(args, mainWindow, deps.dbManager);
       } catch (error) {
         console.error(`Failed to execute command ${commandName}:`, error);
         throw error instanceof BounceError ? error : new BounceError("ANALYSIS_COMMAND_FAILED", `Error: ${error instanceof Error ? error.message : String(error)}`);

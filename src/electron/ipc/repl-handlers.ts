@@ -14,8 +14,6 @@ function getMainTs(): typeof import("typescript") {
 }
 
 export function registerReplHandlers(deps: HandlerDeps): void {
-  const { dbManager } = deps;
-
   ipcMain.handle(
     "save-repl-env",
     async (
@@ -23,10 +21,10 @@ export function registerReplHandlers(deps: HandlerDeps): void {
       entries: Array<{ name: string; kind: "json" | "function"; value: string }>,
     ) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("REPL_DB_NOT_READY", "Database not initialized");
         }
-        dbManager.saveReplEnv(entries);
+        deps.dbManager.saveReplEnv(entries);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         console.error("Failed to save repl env to database:", error);
@@ -37,10 +35,10 @@ export function registerReplHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("get-repl-env", async (): Promise<ReplEnvRecord[]> => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("REPL_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.getReplEnv();
+      return deps.dbManager.getReplEnv();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to get repl env from database:", error);

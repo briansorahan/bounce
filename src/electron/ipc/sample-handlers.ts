@@ -4,14 +4,12 @@ import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerSampleHandlers(deps: HandlerDeps): void {
-  const { dbManager } = deps;
-
   ipcMain.handle("list-samples", async () => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.listSamples();
+      return deps.dbManager.listSamples();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to list samples:", error);
@@ -21,10 +19,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("get-sample-by-hash", async (_event, hash: string) => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.getSampleByHash(hash);
+      return deps.dbManager.getSampleByHash(hash);
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to get sample:", error);
@@ -33,8 +31,8 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
   });
 
   ipcMain.handle("get-sample-by-name", async (_event, name: string) => {
-    if (!dbManager) return null;
-    const sample = dbManager.getSampleByPath(name);
+    if (!deps.dbManager) return null;
+    const sample = deps.dbManager.getSampleByPath(name);
     if (!sample) return null;
     return {
       id: sample.id,
@@ -50,10 +48,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
     "create-slice-samples",
     async (_event, sampleHash: string, featureHash: string) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return dbManager.createSliceSamples(sampleHash, featureHash);
+        return deps.dbManager.createSliceSamples(sampleHash, featureHash);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("SAMPLE_SLICE_FAILED", `Failed to create slice samples: ${error instanceof Error ? error.message : String(error)}`);
@@ -65,10 +63,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
     "get-derived-samples",
     async (_event, sourceHash: string, featureHash: string) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return dbManager.getDerivedSamples(sourceHash, featureHash);
+        return deps.dbManager.getDerivedSamples(sourceHash, featureHash);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         console.error("Failed to get derived samples:", error);
@@ -86,10 +84,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
       index: number,
     ) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return dbManager.getDerivedSampleByIndex(sourceHash, featureHash, index) ?? null;
+        return deps.dbManager.getDerivedSampleByIndex(sourceHash, featureHash, index) ?? null;
       } catch (error) {
         if (error instanceof BounceError) throw error;
         console.error("Failed to get derived sample by index:", error);
@@ -100,10 +98,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("list-derived-samples-summary", async () => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.listDerivedSamplesSummary();
+      return deps.dbManager.listDerivedSamplesSummary();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to list derived samples summary:", error);
@@ -115,10 +113,10 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
     "granularize-sample",
     async (_event, sourceHash: string, options?: GranularizeOptions) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
-        return dbManager.granularize(sourceHash, options ?? {});
+        return deps.dbManager.granularize(sourceHash, options ?? {});
       } catch (error) {
         if (error instanceof BounceError) throw error;
         throw new BounceError("SAMPLE_GRANULARIZE_FAILED", `Failed to granularize sample: ${error instanceof Error ? error.message : String(error)}`);

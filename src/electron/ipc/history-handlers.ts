@@ -3,14 +3,12 @@ import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerHistoryHandlers(deps: HandlerDeps): void {
-  const { dbManager } = deps;
-
   ipcMain.handle("save-command", async (_event, command: string) => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
-      dbManager.addCommand(command);
+      deps.dbManager.addCommand(command);
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to save command to database:", error);
@@ -20,10 +18,10 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("get-command-history", async (_event, limit?: number) => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.getCommandHistory(limit || 1000);
+      return deps.dbManager.getCommandHistory(limit || 1000);
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to load command history:", error);
@@ -33,10 +31,10 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("clear-command-history", async () => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
-      dbManager.clearCommandHistory();
+      deps.dbManager.clearCommandHistory();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to clear command history:", error);
@@ -46,10 +44,10 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("dedupe-command-history", async () => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.dedupeCommandHistory();
+      return deps.dbManager.dedupeCommandHistory();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to dedupe command history:", error);
@@ -66,8 +64,8 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
       data?: Record<string, unknown>,
     ) => {
       try {
-        if (dbManager) {
-          dbManager.addDebugLog(level, message, data);
+        if (deps.dbManager) {
+          deps.dbManager.addDebugLog(level, message, data);
         }
       } catch (error) {
         console.warn("Failed to save debug log:", error);
@@ -77,7 +75,7 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("get-debug-logs", async (_event, limit?: number) => {
     try {
-      return dbManager ? dbManager.getDebugLogs(limit || 100) : [];
+      return deps.dbManager ? deps.dbManager.getDebugLogs(limit || 100) : [];
     } catch (error) {
       console.warn("Failed to get debug logs:", error);
       return [];
@@ -86,8 +84,8 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("clear-debug-logs", async () => {
     try {
-      if (dbManager) {
-        dbManager.clearDebugLogs();
+      if (deps.dbManager) {
+        deps.dbManager.clearDebugLogs();
       }
     } catch (error) {
       console.warn("Failed to clear debug logs:", error);

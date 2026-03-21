@@ -19,7 +19,7 @@ function resolvePath(settingsStore: SettingsStore | undefined, inputPath: string
 }
 
 export function registerAudioHandlers(deps: HandlerDeps): void {
-  const { dbManager, settingsStore, getAudioEnginePort } = deps;
+  const { getAudioEnginePort } = deps;
 
   ipcMain.handle("read-audio-file", async (_event, filePathOrHash: string) => {
     try {
@@ -29,12 +29,12 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
         !filePathOrHash.includes("/") &&
         !filePathOrHash.includes("\\");
 
-      if (isHash && dbManager) {
+      if (isHash && deps.dbManager) {
         // Look up in database by hash prefix
         debugLog("info", "[AudioLoader] Looking up sample by hash", {
           hash: filePathOrHash,
         });
-        const sample = dbManager.getSampleByHash(filePathOrHash);
+        const sample = deps.dbManager.getSampleByHash(filePathOrHash);
         debugLog("info", "[AudioLoader] Sample lookup result", {
           found: !!sample,
         });
@@ -61,7 +61,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
           (AUDIO_EXTENSIONS as readonly string[]).includes(ext) || hasPathSep;
 
         if (isAudioFile) {
-          resolvedPath = resolvePath(settingsStore, filePathOrHash);
+          resolvedPath = resolvePath(deps.settingsStore, filePathOrHash);
         } else {
           const result = await dialog.showOpenDialog({
             properties: ["openFile"],
@@ -96,8 +96,8 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
         .digest("hex");
 
       // Store in database
-      if (dbManager) {
-        dbManager.storeSample(
+      if (deps.dbManager) {
+        deps.dbManager.storeSample(
           hash,
           resolvedPath,
           audioDataBuffer,
@@ -133,9 +133,9 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       duration: number,
       overwrite: boolean,
     ) => {
-      if (!dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+      if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
 
-      const existing = dbManager.getSampleByPath(name);
+      const existing = deps.dbManager.getSampleByPath(name);
       if (existing && !overwrite) {
         return { status: "exists" as const };
       }
@@ -144,9 +144,9 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       const audioDataBuffer = Buffer.from(pcm.buffer);
       const hash = crypto.createHash("sha256").update(audioDataBuffer).digest("hex");
 
-      dbManager.storeSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
+      deps.dbManager.storeSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
 
-      const stored = dbManager.getSampleByHash(hash);
+      const stored = deps.dbManager.getSampleByHash(hash);
       return {
         status: "ok" as const,
         hash,
@@ -161,7 +161,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
 
   ipcMain.on("play-sample", (_event, payload: { hash: string; loop: boolean }) => {
     const port = getAudioEnginePort();
-    if (!dbManager || !port) {
+    if (!deps.dbManager || !port) {
       const mainWindow = deps.getMainWindow();
       if (mainWindow) {
         mainWindow.webContents.send("playback-error", {
@@ -173,7 +173,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       return;
     }
 
-    const sample = dbManager.getSampleByHash(payload.hash);
+    const sample = deps.dbManager.getSampleByHash(payload.hash);
     if (!sample || !sample.audio_data) {
       console.error(`[main] play-sample: sample not found for hash ${payload.hash}`);
       const mainWindow = deps.getMainWindow();

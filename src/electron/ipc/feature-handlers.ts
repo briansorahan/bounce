@@ -4,8 +4,6 @@ import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
 export function registerFeatureHandlers(deps: HandlerDeps): void {
-  const { dbManager } = deps;
-
   ipcMain.handle(
     "store-feature",
     async (
@@ -16,10 +14,10 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
       options?: FeatureOptions,
     ) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
         }
-        const featureId = dbManager.storeFeature(
+        const featureId = deps.dbManager.storeFeature(
           sampleHash,
           featureType,
           featureData,
@@ -37,10 +35,10 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
     "get-most-recent-feature",
     async (_event, sampleHash?: string, featureType?: string) => {
       try {
-        if (!dbManager) {
+        if (!deps.dbManager) {
           throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
         }
-        return dbManager.getMostRecentFeature(sampleHash, featureType);
+        return deps.dbManager.getMostRecentFeature(sampleHash, featureType);
       } catch (error) {
         if (error instanceof BounceError) throw error;
         console.error("Failed to get most recent feature:", error);
@@ -51,10 +49,10 @@ export function registerFeatureHandlers(deps: HandlerDeps): void {
 
   ipcMain.handle("list-features", async () => {
     try {
-      if (!dbManager) {
+      if (!deps.dbManager) {
         throw new BounceError("FEATURE_DB_NOT_READY", "Database not initialized");
       }
-      return dbManager.listFeatures();
+      return deps.dbManager.listFeatures();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to list features:", error);
