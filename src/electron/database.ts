@@ -171,15 +171,7 @@ export class DatabaseManager {
     `);
 
     const migrations: Array<() => void> = [
-      () => this.migrate001_baseTables(),
-      () => this.migrate002_sampleFilePathNullable(),
-      () => this.migrate003_samplesFeatures(),
-      () => this.migrate004_repairFeaturesFK(),
-      () => this.migrate005_projects(),
-      () => this.migrate006_replEnv(),
-      () => this.migrate007_instruments(),
-      () => this.migrate008_backgroundErrors(),
-      () => this.migrate009_samplesDataModelRefactor(),
+      () => this.migrate001_initialSchema(),
     ];
 
     for (let version = 1; version <= migrations.length; version++) {
@@ -195,22 +187,15 @@ export class DatabaseManager {
     }
   }
 
-  private migrate001_baseTables(): void {
+  private migrate001_initialSchema(): void {
     this.db.exec(`
-      DROP TABLE IF EXISTS slices;
-      DROP TABLE IF EXISTS components;
-
-      CREATE TABLE IF NOT EXISTS command_history (
+      CREATE TABLE projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        command TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
+        name TEXT NOT NULL UNIQUE,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE INDEX IF NOT EXISTS idx_command_history_timestamp
-      ON command_history(timestamp DESC);
-
-      CREATE TABLE IF NOT EXISTS debug_logs (
+      CREATE TABLE debug_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         level TEXT NOT NULL,
         message TEXT NOT NULL,
@@ -219,306 +204,97 @@ export class DatabaseManager {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE INDEX IF NOT EXISTS idx_debug_logs_timestamp
+      CREATE INDEX idx_debug_logs_timestamp
       ON debug_logs(timestamp DESC);
 
-      CREATE TABLE IF NOT EXISTS features (
+      CREATE TABLE command_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        command TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_command_history_project_timestamp
+      ON command_history(project_id, timestamp DESC);
+
+      CREATE TABLE samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
+        hash TEXT NOT NULL,
+        sample_type TEXT NOT NULL CHECK(sample_type IN ('raw', 'derived', 'recorded', 'freesound')),
+        sample_rate INTEGER NOT NULL,
+        channels INTEGER NOT NULL,
+        duration REAL NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(project_id, hash),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_samples_project_hash ON samples(project_id, hash);
+      CREATE INDEX idx_samples_project_type ON samples(project_id, sample_type);
+
+      CREATE TABLE samples_raw_metadata (
+        sample_id INTEGER NOT NULL PRIMARY KEY,
+        file_path TEXT NOT NULL,
+        FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_samples_raw_metadata_file_path
+      ON samples_raw_metadata(file_path);
+
+      CREATE TABLE samples_recorded_metadata (
+        sample_id INTEGER NOT NULL PRIMARY KEY,
+        name TEXT NOT NULL,
+        audio_data BLOB NOT NULL,
+        FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_samples_recorded_metadata_name
+      ON samples_recorded_metadata(name);
+
+      CREATE TABLE samples_freesound_metadata (
+        sample_id INTEGER NOT NULL PRIMARY KEY,
+        url TEXT NOT NULL,
+        audio_data BLOB NOT NULL,
+        FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE features (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL,
         sample_hash TEXT NOT NULL,
         feature_hash TEXT NOT NULL,
         feature_type TEXT NOT NULL,
         feature_data TEXT NOT NULL,
         options TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(sample_hash, feature_hash),
-        FOREIGN KEY (sample_hash) REFERENCES samples(hash)
+        UNIQUE(project_id, sample_hash, feature_hash),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
       );
 
-      CREATE INDEX IF NOT EXISTS idx_features_sample ON features(sample_hash);
-      CREATE INDEX IF NOT EXISTS idx_features_type ON features(feature_type);
-      CREATE INDEX IF NOT EXISTS idx_features_hash ON features(feature_hash);
-    `);
-  }
+      CREATE INDEX idx_features_project_sample ON features(project_id, sample_hash);
+      CREATE INDEX idx_features_project_type ON features(project_id, feature_type);
+      CREATE INDEX idx_features_project_hash ON features(project_id, feature_hash);
 
-  private migrate002_sampleFilePathNullable(): void {
-    // All DDL in this migration runs with FK enforcement off.
-    // SQLite's ALTER TABLE RENAME silently rewrites FK references in dependent
-    // tables (since 3.37.0), which means after any rename the features table
-    // may have a stale FK pointing to the old table name. We detect and fix
-    // that at the end of this migration using PRAGMA foreign_key_list.
-    this.db.exec("PRAGMA foreign_keys = OFF;");
-
-    try {
-      const samplesExists = !!this.db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='samples'",
-        )
-        .get();
-
-      const samplesOldExists = !!this.db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='samples_old'",
-        )
-        .get();
-
-      if (!samplesExists && !samplesOldExists) {
-        // Fresh install: create samples with nullable file_path from scratch.
-        this.db.exec(`
-          CREATE TABLE samples (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            hash TEXT NOT NULL UNIQUE,
-            file_path TEXT,
-            audio_data BLOB NOT NULL,
-            sample_rate INTEGER NOT NULL,
-            channels INTEGER NOT NULL,
-            duration REAL NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-      } else if (!samplesExists && samplesOldExists) {
-        // Crashed after rename but before CREATE TABLE samples: restore from samples_old.
-        this.db.exec(`
-          CREATE TABLE samples (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            hash TEXT NOT NULL UNIQUE,
-            file_path TEXT,
-            audio_data BLOB NOT NULL,
-            sample_rate INTEGER NOT NULL,
-            channels INTEGER NOT NULL,
-            duration REAL NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-          );
-          INSERT INTO samples
-            SELECT id, hash, file_path, audio_data, sample_rate, channels, duration, created_at
-            FROM samples_old;
-          DROP TABLE samples_old;
-        `);
-      } else if (samplesExists) {
-        const cols = this.db
-          .prepare("PRAGMA table_info(samples)")
-          .all() as Array<{ name: string; notnull: number }>;
-        const filePathCol = cols.find((c) => c.name === "file_path");
-
-        if (filePathCol && filePathCol.notnull === 1) {
-          // samples.file_path is still NOT NULL — run the rename/recreate/drop.
-          // Drop any pre-existing samples_old first so the rename can proceed.
-          if (samplesOldExists) {
-            this.db.exec("DROP TABLE samples_old;");
-          }
-          this.db.exec(`
-            ALTER TABLE samples RENAME TO samples_old;
-            CREATE TABLE samples (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              hash TEXT NOT NULL UNIQUE,
-              file_path TEXT,
-              audio_data BLOB NOT NULL,
-              sample_rate INTEGER NOT NULL,
-              channels INTEGER NOT NULL,
-              duration REAL NOT NULL,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            INSERT INTO samples
-              SELECT id, hash, file_path, audio_data, sample_rate, channels, duration, created_at
-              FROM samples_old;
-            DROP TABLE samples_old;
-          `);
-        } else if (samplesOldExists) {
-          // samples.file_path is already nullable but samples_old is still
-          // around (DROP TABLE failed in a previous run). Clean it up.
-          this.db.exec("DROP TABLE samples_old;");
-        }
-      }
-
-      // After any rename operation SQLite may have rewritten the features FK to
-      // point to a now-dropped table. Detect and repair it.
-      const featuresFKs = this.db
-        .prepare("PRAGMA foreign_key_list(features)")
-        .all() as Array<{ table: string; from: string }>;
-      const hasStaleFK = featuresFKs.some(
-        (fk) => fk.from === "sample_hash" && fk.table !== "samples",
-      );
-
-      if (hasStaleFK) {
-        this.db.exec(`
-          ALTER TABLE features RENAME TO features_old;
-          CREATE TABLE features (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sample_hash TEXT NOT NULL,
-            feature_hash TEXT NOT NULL,
-            feature_type TEXT NOT NULL,
-            feature_data TEXT NOT NULL,
-            options TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(sample_hash, feature_hash),
-            FOREIGN KEY (sample_hash) REFERENCES samples(hash)
-          );
-          INSERT INTO features
-            SELECT id, sample_hash, feature_hash, feature_type, feature_data, options, created_at
-            FROM features_old;
-          DROP TABLE features_old;
-        `);
-      }
-    } finally {
-      this.db.exec("PRAGMA foreign_keys = ON;");
-    }
-  }
-
-  private migrate003_samplesFeatures(): void {
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_samples_hash ON samples(hash);
-      CREATE INDEX IF NOT EXISTS idx_samples_file_path ON samples(file_path);
-
-      CREATE TABLE IF NOT EXISTS samples_features (
-        sample_hash TEXT NOT NULL PRIMARY KEY,
-        source_hash TEXT NOT NULL,
+      CREATE TABLE samples_features (
+        sample_id INTEGER NOT NULL PRIMARY KEY,
+        source_id INTEGER NOT NULL,
         feature_hash TEXT NOT NULL,
         index_order INTEGER NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (sample_hash) REFERENCES samples(hash),
-        FOREIGN KEY (source_hash) REFERENCES samples(hash)
+        FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_id) REFERENCES samples(id) ON DELETE CASCADE
       );
 
-      CREATE INDEX IF NOT EXISTS idx_samples_features_source
-      ON samples_features(source_hash);
+      CREATE INDEX idx_samples_features_source
+      ON samples_features(source_id);
 
-      CREATE INDEX IF NOT EXISTS idx_samples_features_feature
-      ON samples_features(source_hash, feature_hash);
-    `);
-  }
+      CREATE INDEX idx_samples_features_source_feature
+      ON samples_features(source_id, feature_hash);
 
-  private migrate004_repairFeaturesFK(): void {
-    // Repair features FK if it still points to samples_old (from a failed
-    // or pre-SQLite-3.26 migrate002 run).
-    this.db.exec("PRAGMA foreign_keys = OFF;");
-    try {
-      const featuresFKs = this.db
-        .prepare("PRAGMA foreign_key_list(features)")
-        .all() as Array<{ table: string; from: string }>;
-      const hasStaleFK = featuresFKs.some(
-        (fk) => fk.from === "sample_hash" && fk.table !== "samples",
-      );
-      if (hasStaleFK) {
-        this.db.exec(`
-          ALTER TABLE features RENAME TO features_old;
-          CREATE TABLE features (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sample_hash TEXT NOT NULL,
-            feature_hash TEXT NOT NULL,
-            feature_type TEXT NOT NULL,
-            feature_data TEXT NOT NULL,
-            options TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(sample_hash, feature_hash),
-            FOREIGN KEY (sample_hash) REFERENCES samples(hash)
-          );
-          INSERT INTO features
-            SELECT id, sample_hash, feature_hash, feature_type, feature_data, options, created_at
-            FROM features_old;
-          DROP TABLE features_old;
-        `);
-      }
-    } finally {
-      this.db.exec("PRAGMA foreign_keys = ON;");
-    }
-  }
-
-  private migrate005_projects(): void {
-    this.db.exec("PRAGMA foreign_keys = OFF;");
-    try {
-      this.db.exec(`
-        DROP TABLE IF EXISTS samples_features;
-        DROP TABLE IF EXISTS features;
-        DROP TABLE IF EXISTS command_history;
-        DROP TABLE IF EXISTS samples;
-
-        CREATE TABLE IF NOT EXISTS projects (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE samples (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          hash TEXT NOT NULL,
-          file_path TEXT,
-          audio_data BLOB NOT NULL,
-          sample_rate INTEGER NOT NULL,
-          channels INTEGER NOT NULL,
-          duration REAL NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(project_id, hash),
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_project_hash
-        ON samples(project_id, hash);
-
-        CREATE INDEX idx_samples_project_file_path
-        ON samples(project_id, file_path);
-
-        CREATE TABLE features (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          sample_hash TEXT NOT NULL,
-          feature_hash TEXT NOT NULL,
-          feature_type TEXT NOT NULL,
-          feature_data TEXT NOT NULL,
-          options TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(project_id, sample_hash, feature_hash),
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_features_project_sample
-        ON features(project_id, sample_hash);
-
-        CREATE INDEX idx_features_project_type
-        ON features(project_id, feature_type);
-
-        CREATE INDEX idx_features_project_hash
-        ON features(project_id, feature_hash);
-
-        CREATE TABLE command_history (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          command TEXT NOT NULL,
-          timestamp INTEGER NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_command_history_project_timestamp
-        ON command_history(project_id, timestamp DESC);
-
-        CREATE TABLE samples_features (
-          project_id INTEGER NOT NULL,
-          sample_hash TEXT NOT NULL,
-          source_hash TEXT NOT NULL,
-          feature_hash TEXT NOT NULL,
-          index_order INTEGER NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (project_id, sample_hash),
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
-          FOREIGN KEY (project_id, source_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE,
-          FOREIGN KEY (project_id, source_hash, feature_hash) REFERENCES features(project_id, sample_hash, feature_hash) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_features_project_source
-        ON samples_features(project_id, source_hash);
-
-        CREATE INDEX idx_samples_features_project_feature
-        ON samples_features(project_id, source_hash, feature_hash);
-      `);
-    } finally {
-      this.db.exec("PRAGMA foreign_keys = ON;");
-    }
-  }
-
-  private migrate006_replEnv(): void {
-    this.db.exec(`
       CREATE TABLE repl_env (
         project_id INTEGER NOT NULL,
         name       TEXT NOT NULL,
@@ -530,11 +306,7 @@ export class DatabaseManager {
       );
 
       CREATE INDEX idx_repl_env_project ON repl_env(project_id);
-    `);
-  }
 
-  private migrate007_instruments(): void {
-    this.db.exec(`
       CREATE TABLE instruments (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         project_id  INTEGER NOT NULL,
@@ -550,21 +322,18 @@ export class DatabaseManager {
 
       CREATE TABLE instrument_samples (
         instrument_id INTEGER NOT NULL,
-        sample_hash   TEXT NOT NULL,
+        sample_id     INTEGER NOT NULL,
         note_number   INTEGER NOT NULL,
         loop          INTEGER NOT NULL DEFAULT 0,
         loop_start    REAL NOT NULL DEFAULT 0.0,
         loop_end      REAL NOT NULL DEFAULT -1.0,
-        PRIMARY KEY (instrument_id, sample_hash, note_number),
-        FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE CASCADE
+        PRIMARY KEY (instrument_id, sample_id, note_number),
+        FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE CASCADE,
+        FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
       );
 
       CREATE INDEX idx_instrument_samples_instrument ON instrument_samples(instrument_id);
-    `);
-  }
 
-  private migrate008_backgroundErrors(): void {
-    this.db.exec(`
       CREATE TABLE background_errors (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         source     TEXT NOT NULL,
@@ -577,111 +346,6 @@ export class DatabaseManager {
       CREATE INDEX idx_background_errors_dismissed
       ON background_errors(dismissed);
     `);
-  }
-
-  private migrate009_samplesDataModelRefactor(): void {
-    this.db.exec("PRAGMA foreign_keys = OFF;");
-    try {
-      this.db.exec(`
-        DROP TABLE IF EXISTS samples_features;
-        DROP TABLE IF EXISTS features;
-        DROP TABLE IF EXISTS samples;
-
-        CREATE TABLE samples (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          hash TEXT NOT NULL,
-          sample_type TEXT NOT NULL CHECK(sample_type IN ('raw', 'derived', 'recorded', 'freesound')),
-          sample_rate INTEGER NOT NULL,
-          channels INTEGER NOT NULL,
-          duration REAL NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(project_id, hash),
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_project_hash ON samples(project_id, hash);
-        CREATE INDEX idx_samples_project_type ON samples(project_id, sample_type);
-
-        CREATE TABLE samples_raw_metadata (
-          sample_id INTEGER NOT NULL PRIMARY KEY,
-          file_path TEXT NOT NULL,
-          FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_raw_metadata_file_path
-        ON samples_raw_metadata(file_path);
-
-        CREATE TABLE samples_recorded_metadata (
-          sample_id INTEGER NOT NULL PRIMARY KEY,
-          name TEXT NOT NULL,
-          audio_data BLOB NOT NULL,
-          FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_recorded_metadata_name
-        ON samples_recorded_metadata(name);
-
-        CREATE TABLE samples_freesound_metadata (
-          sample_id INTEGER NOT NULL PRIMARY KEY,
-          url TEXT NOT NULL,
-          audio_data BLOB NOT NULL,
-          FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE features (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          sample_hash TEXT NOT NULL,
-          feature_hash TEXT NOT NULL,
-          feature_type TEXT NOT NULL,
-          feature_data TEXT NOT NULL,
-          options TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(project_id, sample_hash, feature_hash),
-          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-          FOREIGN KEY (project_id, sample_hash) REFERENCES samples(project_id, hash) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_features_project_sample ON features(project_id, sample_hash);
-        CREATE INDEX idx_features_project_type ON features(project_id, feature_type);
-        CREATE INDEX idx_features_project_hash ON features(project_id, feature_hash);
-
-        CREATE TABLE samples_features (
-          sample_id INTEGER NOT NULL PRIMARY KEY,
-          source_id INTEGER NOT NULL,
-          feature_hash TEXT NOT NULL,
-          index_order INTEGER NOT NULL,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE,
-          FOREIGN KEY (source_id) REFERENCES samples(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_samples_features_source
-        ON samples_features(source_id);
-
-        CREATE INDEX idx_samples_features_source_feature
-        ON samples_features(source_id, feature_hash);
-
-        DROP TABLE IF EXISTS instrument_samples;
-
-        CREATE TABLE instrument_samples (
-          instrument_id INTEGER NOT NULL,
-          sample_id     INTEGER NOT NULL,
-          note_number   INTEGER NOT NULL,
-          loop          INTEGER NOT NULL DEFAULT 0,
-          loop_start    REAL NOT NULL DEFAULT 0.0,
-          loop_end      REAL NOT NULL DEFAULT -1.0,
-          PRIMARY KEY (instrument_id, sample_id, note_number),
-          FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE CASCADE,
-          FOREIGN KEY (sample_id) REFERENCES samples(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_instrument_samples_instrument ON instrument_samples(instrument_id);
-      `);
-    } finally {
-      this.db.exec("PRAGMA foreign_keys = ON;");
-    }
   }
 
   private normalizeProjectName(name: string): string {

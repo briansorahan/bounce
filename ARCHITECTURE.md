@@ -228,7 +228,7 @@ All data tables are project-scoped (foreign key to `projects.id` with CASCADE de
 
 ### Migrations
 
-Seven versioned migrations in `src/electron/database.ts`, tracked by the `schema_versions` table. Migration 005 is the major restructuring that made all tables project-scoped. See `src/electron/database.ts` for full DDL.
+One versioned migration in `src/electron/database.ts` creates all tables, tracked by the `schema_versions` table. See `src/electron/database.ts` for full DDL.
 
 Adding new migrations should follow the guide in `.github/skills/add-database-migration/SKILL.md`.
 
