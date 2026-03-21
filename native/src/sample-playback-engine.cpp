@@ -14,7 +14,7 @@ void SamplePlaybackEngine::prepare(const float* pcm, int numSamples,
                                    double /*sampleRate*/, int /*maxBlockSize*/) {
     pcm_.assign(pcm, pcm + numSamples);
     numSamples_ = numSamples;
-    readPos_    = 0;
+    readPos_    = loop_ ? std::max(0, loopStartSample_) : 0;
     finished_   = false;
     effectiveLoopEnd_ = (loopEndSample_ >= 0 && loopEndSample_ <= numSamples)
                         ? loopEndSample_ : numSamples;
