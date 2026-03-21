@@ -9,6 +9,7 @@ export const BOUNCE_GLOBALS = new Set([
   "corpus",
   "fs",
   "proj",
+  "inst",
 ]);
 
 /**

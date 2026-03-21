@@ -47,6 +47,7 @@ import { buildProjectNamespace } from "./namespaces/project-namespace.js";
 import { buildGlobals } from "./namespaces/globals.js";
 import { buildVisNamespace } from "./namespaces/vis-namespace.js";
 import { buildSampleNamespace } from "./namespaces/sample-namespace.js";
+import { buildInstNamespace } from "./namespaces/instrument-namespace.js";
 
 export {
   BounceResult,
@@ -132,6 +133,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const proj = buildProjectNamespace(namespaceDeps);
   const corpus = buildCorpusNamespace(namespaceDeps, sampleBinder);
   const fs = buildFsNamespace(namespaceDeps);
+  const inst = buildInstNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps);
 
   const api = {
@@ -141,6 +143,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     proj,
     corpus,
     fs,
+    inst,
     ...globals,
   };
 

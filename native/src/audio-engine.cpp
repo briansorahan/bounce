@@ -3,6 +3,7 @@
 
 #include "audio-engine.h"
 #include "sample-playback-engine.h"
+#include "sampler-instrument.h"
 
 #include <algorithm>
 #include <chrono>
@@ -81,7 +82,12 @@ void AudioEngine::stop() {
 // Control API (called from JS / utility-process thread)
 // ---------------------------------------------------------------------------
 void AudioEngine::play(const std::string& hash, const float* pcm,
-                       int numSamples, double sampleRate, bool loop) {
+                       int numSamples, double sampleRate, bool loop,
+                       double loopStartSec, double loopEndSec) {
+    int loopStartSample = static_cast<int>(loopStartSec * sampleRate);
+    int loopEndSample   = loopEndSec < 0.0
+                          ? -1
+                          : static_cast<int>(loopEndSec * sampleRate);
     auto proc = std::make_shared<SamplePlaybackEngine>(
         hash, loop,
         [this](const std::string& h) {
@@ -93,7 +99,8 @@ void AudioEngine::play(const std::string& hash, const float* pcm,
             int w = ringWritePos_.load(std::memory_order_relaxed);
             ring_[w % kRingSize] = std::move(ev);
             ringWritePos_.store(w + 1, std::memory_order_release);
-        });
+        },
+        loopStartSample, loopEndSample);
 
     proc->prepare(pcm, numSamples, sampleRate, 512);
 
@@ -111,6 +118,139 @@ void AudioEngine::stopSample(const std::string& hash) {
 void AudioEngine::stopAll() {
     std::lock_guard<std::mutex> lk(controlMutex_);
     controlQueue_.push_back({ControlMsg::Op::RemoveAll, nullptr, ""});
+}
+
+// ---------------------------------------------------------------------------
+// Instrument API (called from JS / utility-process thread)
+// ---------------------------------------------------------------------------
+void AudioEngine::defineInstrument(const std::string& id,
+                                   const std::string& kind, int polyphony) {
+    std::shared_ptr<Instrument> inst;
+    if (kind == "sampler") {
+        inst = std::make_shared<SamplerInstrument>(id, polyphony);
+    }
+    if (!inst) return;
+
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::DefineInstrument;
+    msg.instrument = std::move(inst);
+    msg.instrumentId = id;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::freeInstrument(const std::string& id) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::FreeInstrument;
+    msg.instrumentId = id;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::loadInstrumentSample(const std::string& instrumentId,
+                                       int note, std::vector<float> pcm,
+                                       double sampleRate,
+                                       const std::string& sampleHash,
+                                       bool loop,
+                                       double loopStartSec, double loopEndSec) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::InstrumentLoadSample;
+    msg.instrumentId = instrumentId;
+    msg.note = note;
+    msg.pcm = std::move(pcm);
+    msg.sampleRate = sampleRate;
+    msg.sampleHash = sampleHash;
+    msg.loop = loop;
+    msg.loopStartSec = loopStartSec;
+    msg.loopEndSec = loopEndSec;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::instrumentNoteOn(const std::string& instrumentId,
+                                   int note, float velocity) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::InstrumentNoteOn;
+    msg.instrumentId = instrumentId;
+    msg.note = note;
+    msg.velocity = velocity;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::instrumentNoteOff(const std::string& instrumentId,
+                                    int note) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::InstrumentNoteOff;
+    msg.instrumentId = instrumentId;
+    msg.note = note;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::instrumentStopAll(const std::string& instrumentId) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::InstrumentStopAll;
+    msg.instrumentId = instrumentId;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::setInstrumentParam(const std::string& instrumentId,
+                                     int paramId, float value) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::InstrumentSetParam;
+    msg.instrumentId = instrumentId;
+    msg.paramId = paramId;
+    msg.paramValue = value;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::subscribeInstrumentTelemetry(const std::string& instrumentId) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::SubscribeTelemetry;
+    msg.instrumentId = instrumentId;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::unsubscribeInstrumentTelemetry(const std::string& instrumentId) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::UnsubscribeTelemetry;
+    msg.instrumentId = instrumentId;
+    controlQueue_.push_back(std::move(msg));
+}
+
+Instrument* AudioEngine::findInstrument(const std::string& id) {
+    for (auto& inst : instruments_) {
+        if (inst->id() == id) return inst.get();
+    }
+    return nullptr;
+}
+
+void AudioEngine::setupInstrumentTelemetry(Instrument* inst) {
+    inst->setTelemetryWriters(
+        [this](const std::string& hash, int pos) {
+            TelemetryEvent ev;
+            ev.kind = TelemetryEvent::Kind::Position;
+            ev.hash = hash;
+            ev.positionInSamples = pos;
+            int w = ringWritePos_.load(std::memory_order_relaxed);
+            ring_[w % kRingSize] = std::move(ev);
+            ringWritePos_.store(w + 1, std::memory_order_release);
+        },
+        [this](const std::string& hash) {
+            TelemetryEvent ev;
+            ev.kind = TelemetryEvent::Kind::Ended;
+            ev.hash = hash;
+            ev.positionInSamples = 0;
+            int w = ringWritePos_.load(std::memory_order_relaxed);
+            ring_[w % kRingSize] = std::move(ev);
+            ringWritePos_.store(w + 1, std::memory_order_release);
+        }
+    );
 }
 
 void AudioEngine::onPosition(PositionCallback cb) {
@@ -151,6 +291,48 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
             case ControlMsg::Op::RemoveAll:
                 processors_.clear();
                 break;
+            case ControlMsg::Op::DefineInstrument:
+                if (msg.instrument) {
+                    setupInstrumentTelemetry(msg.instrument.get());
+                    instruments_.push_back(std::move(msg.instrument));
+                }
+                break;
+            case ControlMsg::Op::FreeInstrument:
+                instruments_.erase(
+                    std::remove_if(instruments_.begin(), instruments_.end(),
+                                   [&](const auto& i) { return i->id() == msg.instrumentId; }),
+                    instruments_.end());
+                break;
+            case ControlMsg::Op::InstrumentNoteOn:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->noteOn(msg.note, msg.velocity);
+                break;
+            case ControlMsg::Op::InstrumentNoteOff:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->noteOff(msg.note);
+                break;
+            case ControlMsg::Op::InstrumentStopAll:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->stopAll();
+                break;
+            case ControlMsg::Op::InstrumentLoadSample:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->loadSample(msg.note, std::move(msg.pcm),
+                                     msg.sampleRate, msg.sampleHash,
+                                     msg.loop, msg.loopStartSec, msg.loopEndSec);
+                break;
+            case ControlMsg::Op::InstrumentSetParam:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->setParam(msg.paramId, msg.paramValue);
+                break;
+            case ControlMsg::Op::SubscribeTelemetry:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->setTelemetryEnabled(true);
+                break;
+            case ControlMsg::Op::UnsubscribeTelemetry:
+                if (auto* inst = findInstrument(msg.instrumentId))
+                    inst->setTelemetryEnabled(false);
+                break;
             }
         }
         controlQueue_.clear();
@@ -167,7 +349,7 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
     ch1.assign(frameCount, 0.f);
     float* chPtrs[2] = { ch0.data(), ch1.data() };
 
-    // Process each active processor
+    // Process each active processor (legacy path)
     for (auto it = processors_.begin(); it != processors_.end(); ) {
         (*it)->process(chPtrs, numChannels, static_cast<int>(frameCount));
 
@@ -187,6 +369,11 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
         } else {
             ++it;
         }
+    }
+
+    // Process each active instrument
+    for (auto& inst : instruments_) {
+        inst->process(chPtrs, numChannels, static_cast<int>(frameCount));
     }
 
     // Mix de-interleaved back to interleaved output

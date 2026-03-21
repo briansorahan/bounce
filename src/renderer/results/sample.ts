@@ -12,10 +12,15 @@ import {
 } from "./features.js";
 import type { InputsResult, AudioDevice } from "./recording.js";
 
+export interface LoopOptions {
+  loopStart?: number;
+  loopEnd?: number;
+}
+
 export interface SampleMethodBindings {
   help: HelpFactory;
   play: () => Promise<Sample>;
-  loop: () => Promise<Sample>;
+  loop: ((opts?: LoopOptions) => Promise<Sample>) & { help: () => BounceResult };
   stop: () => BounceResult;
   display: () => Promise<Sample>;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
@@ -28,14 +33,16 @@ export interface SampleMethodBindings {
 }
 
 function unavailableSampleBindings(name: string): SampleMethodBindings {
+  const loopUnavailable = Object.assign(
+    async () => { throw new Error(`${name} cannot be looped in this context.`); },
+    { help: () => new BounceResult(`\x1b[33m${name} loop is not available in this context\x1b[0m`) },
+  );
   return {
     help: () => defaultHelp(name),
     play: async () => {
       throw new Error(`${name} cannot be played in this context.`);
     },
-    loop: async () => {
-      throw new Error(`${name} cannot be looped in this context.`);
-    },
+    loop: loopUnavailable,
     stop: () => new BounceResult("\x1b[33mPlayback is not available for this object\x1b[0m"),
     display: async () => {
       throw new Error(`${name} cannot be displayed in this context.`);
@@ -68,6 +75,8 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
  * User-facing sample object in the REPL.
  */
 export class Sample extends HelpableResult {
+  readonly loop: ((opts?: LoopOptions) => SamplePromise) & { help: () => BounceResult };
+
   constructor(
     display: string,
     public readonly hash: string,
@@ -79,14 +88,14 @@ export class Sample extends HelpableResult {
     private readonly bindings: SampleMethodBindings,
   ) {
     super(display, bindings.help);
+    this.loop = Object.assign(
+      (opts?: LoopOptions): SamplePromise => new SamplePromise(bindings.loop(opts)),
+      { help: () => bindings.loop.help() },
+    );
   }
 
   play(): SamplePromise {
     return new SamplePromise(this.bindings.play());
-  }
-
-  loop(): SamplePromise {
-    return new SamplePromise(this.bindings.loop());
   }
 
   stop(): BounceResult {
@@ -248,8 +257,8 @@ export class SamplePromise implements PromiseLike<Sample> {
     return new SamplePromise(this.promise.then((sample) => sample.play()));
   }
 
-  loop(): SamplePromise {
-    return new SamplePromise(this.promise.then((sample) => sample.loop()));
+  loop(opts?: LoopOptions): SamplePromise {
+    return new SamplePromise(this.promise.then((sample) => sample.loop(opts)));
   }
 
   stop(): Promise<BounceResult> {
@@ -322,8 +331,8 @@ export class CurrentSamplePromise implements PromiseLike<Sample | null> {
     return new SamplePromise(this.requireSample().then((sample) => sample.play()));
   }
 
-  loop(): SamplePromise {
-    return new SamplePromise(this.requireSample().then((sample) => sample.loop()));
+  loop(opts?: LoopOptions): SamplePromise {
+    return new SamplePromise(this.requireSample().then((sample) => sample.loop(opts)));
   }
 
   stop(): Promise<BounceResult> {

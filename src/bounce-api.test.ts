@@ -37,15 +37,15 @@ function makeTerminal(): { lines: string[]; cleared: boolean } & object {
 function makeAudioManager() {
   let currentAudio: Record<string, unknown> | null = null;
   let currentSlices: number[] | null = null;
-  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean; hash?: string }> = [];
+  const playCalls: Array<{ audioData: Float32Array; sampleRate: number; loop: boolean; hash?: string; loopStart?: number; loopEnd?: number }> = [];
   return {
     getCurrentAudio: () => currentAudio,
     setCurrentAudio: (audio: Record<string, unknown>) => { currentAudio = audio; },
     getCurrentSlices: () => currentSlices,
     setCurrentSlices: (slices: number[]) => { currentSlices = slices; },
     clearSlices: () => { currentSlices = null; },
-    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false, hash?: string) => {
-      playCalls.push({ audioData, sampleRate, loop, hash });
+    playAudio: async (audioData: Float32Array, sampleRate: number, loop = false, hash?: string, loopStart?: number, loopEnd?: number) => {
+      playCalls.push({ audioData, sampleRate, loop, hash, loopStart, loopEnd });
     },
     stopAudio: () => {},
     getPlayCalls: () => playCalls,
@@ -310,7 +310,8 @@ async function main() {
   const sample = await sn.read("/test.wav");
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
   assert.ok(sample.help().toString().includes("sample.onsets()"));
-  assert.ok(sample.help().toString().includes("sample.loop()"));
+  assert.ok(sample.help().toString().includes("sample.loop("), "sample.help() mentions loop method");
+  assert.ok(sample.help().toString().includes("sample.loop.help()"), "sample.help() hints at loop.help()");
   assert.ok(sample.toString().includes("Loaded"));
   runtimeScope.set("samp", sample);
   const inspectSample = env.inspect("samp");
@@ -327,6 +328,24 @@ async function main() {
   assert.ok(looped.toString().includes("Looping"), "sample.loop indicates looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loop, true, "sample.loop uses looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.hash, sample.hash, "sample.loop preserves sample hash for playback tracking");
+
+  const loopHelp = sample.loop.help();
+  assert.ok(loopHelp.toString().includes("loopStart"), "sample.loop.help() shows loopStart option");
+  assert.ok(loopHelp.toString().includes("loopEnd"), "sample.loop.help() shows loopEnd option");
+  assert.ok(loopHelp.toString().includes("seconds"), "sample.loop.help() mentions seconds");
+
+  const loopedWithStart = await sample.loop({ loopStart: 0.5 });
+  assert.ok(loopedWithStart instanceof Sample, "sample.loop({ loopStart }) returns Sample");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loopStart, 0.5, "sample.loop passes loopStart");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loopEnd, undefined, "sample.loop omits loopEnd when not set");
+  assert.ok(loopedWithStart.toString().includes("0.5s"), "sample.loop result shows loop start");
+
+  const loopedWithRange = await sample.loop({ loopStart: 0.5, loopEnd: 2.0 });
+  assert.ok(loopedWithRange instanceof Sample, "sample.loop({ loopStart, loopEnd }) returns Sample");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loopStart, 0.5, "sample.loop passes loopStart");
+  assert.equal(audioManager.getPlayCalls().at(-1)?.loopEnd, 2.0, "sample.loop passes loopEnd");
+  assert.ok(loopedWithRange.toString().includes("0.5s"), "sample.loop result shows loop range start");
+  assert.ok(loopedWithRange.toString().includes("2s"), "sample.loop result shows loop range end");
 
   const stopped = sample.stop();
   assert.ok(stopped.toString().includes("stopped"));

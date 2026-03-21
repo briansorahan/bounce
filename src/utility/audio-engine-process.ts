@@ -32,11 +32,21 @@ const { AudioEngine } = require(addonPath) as {
 };
 
 interface AudioEngineNative {
-  play(hash: string, pcm: Float32Array, sampleRate: number, loop: boolean): void;
+  play(hash: string, pcm: Float32Array, sampleRate: number, loop: boolean, loopStart?: number, loopEnd?: number): void;
   stop(hash: string): void;
   stopAll(): void;
   onPosition(cb: (hash: string, positionInSamples: number) => void): void;
   onEnded(cb: (hash: string) => void): void;
+  // Instrument API
+  defineInstrument(id: string, kind: string, polyphony: number): void;
+  freeInstrument(id: string): void;
+  loadInstrumentSample(instrumentId: string, note: number, pcm: Float32Array, sampleRate: number, sampleHash: string, loop: boolean, loopStart: number, loopEnd: number): void;
+  instrumentNoteOn(instrumentId: string, note: number, velocity: number): void;
+  instrumentNoteOff(instrumentId: string, note: number): void;
+  instrumentStopAll(instrumentId: string): void;
+  setInstrumentParam(instrumentId: string, paramId: number, value: number): void;
+  subscribeInstrumentTelemetry(instrumentId: string): void;
+  unsubscribeInstrumentTelemetry(instrumentId: string): void;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -78,13 +88,22 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     pcm?: Float32Array;
     sampleRate?: number;
     loop?: boolean;
+    loopStart?: number;
+    loopEnd?: number;
+    instrumentId?: string;
+    kind?: string;
+    polyphony?: number;
+    note?: number;
+    velocity?: number;
+    paramId?: number;
+    value?: number;
   }}) => {
     const data = msg.data;
 
     switch (data.type) {
       case "play":
         if (engine && data.sampleHash && data.pcm && data.sampleRate !== undefined && data.loop !== undefined) {
-          engine.play(data.sampleHash, data.pcm, data.sampleRate, data.loop);
+          engine.play(data.sampleHash, data.pcm, data.sampleRate, data.loop, data.loopStart, data.loopEnd);
         }
         break;
       case "stop":
@@ -94,6 +113,51 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
         break;
       case "stop-all":
         engine?.stopAll();
+        break;
+      case "define-instrument":
+        if (engine && data.instrumentId && data.kind && data.polyphony !== undefined) {
+          engine.defineInstrument(data.instrumentId, data.kind, data.polyphony);
+        }
+        break;
+      case "free-instrument":
+        if (engine && data.instrumentId) {
+          engine.freeInstrument(data.instrumentId);
+        }
+        break;
+      case "load-instrument-sample":
+        if (engine && data.instrumentId && data.note !== undefined && data.pcm && data.sampleRate !== undefined && data.sampleHash) {
+          engine.loadInstrumentSample(data.instrumentId, data.note, data.pcm, data.sampleRate, data.sampleHash, !!data.loop, data.loopStart ?? 0, data.loopEnd ?? -1);
+        }
+        break;
+      case "instrument-note-on":
+        if (engine && data.instrumentId && data.note !== undefined && data.velocity !== undefined) {
+          engine.instrumentNoteOn(data.instrumentId, data.note, data.velocity);
+        }
+        break;
+      case "instrument-note-off":
+        if (engine && data.instrumentId && data.note !== undefined) {
+          engine.instrumentNoteOff(data.instrumentId, data.note);
+        }
+        break;
+      case "instrument-stop-all":
+        if (engine && data.instrumentId) {
+          engine.instrumentStopAll(data.instrumentId);
+        }
+        break;
+      case "set-instrument-param":
+        if (engine && data.instrumentId && data.paramId !== undefined && data.value !== undefined) {
+          engine.setInstrumentParam(data.instrumentId, data.paramId, data.value);
+        }
+        break;
+      case "subscribe-instrument-telemetry":
+        if (engine && data.instrumentId) {
+          engine.subscribeInstrumentTelemetry(data.instrumentId);
+        }
+        break;
+      case "unsubscribe-instrument-telemetry":
+        if (engine && data.instrumentId) {
+          engine.unsubscribeInstrumentTelemetry(data.instrumentId);
+        }
         break;
       default:
         console.warn(`[audio-engine-process] Unknown message type: ${data.type}`);

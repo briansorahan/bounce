@@ -106,7 +106,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       "",
       "  Methods:",
       "    sample.play()",
-      "    sample.loop()",
+      "    sample.loop({ loopStart?, loopEnd? })",
       "    sample.stop()",
       "    sample.display()",
       "    sample.onsets()",
@@ -115,6 +115,25 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       "    sample.slice(options?)",
       "    sample.sep(options?)",
       "    sample.granularize(options?)",
+      "",
+      "  Type sample.loop.help() for loop usage details.",
+    ].join("\n"));
+  }
+
+  function loopHelpText(): BounceResult {
+    return new BounceResult([
+      "\x1b[1;36msample.loop(opts?)\x1b[0m",
+      "",
+      "  Loop the sample, optionally within a time range.",
+      "",
+      "  Options:",
+      "    loopStart  number  Start of loop region in seconds (default: 0)",
+      "    loopEnd    number  End of loop region in seconds (default: sample end)",
+      "",
+      "  Examples:",
+      "    samp.loop()",
+      "    samp.loop({ loopStart: 0.5 })",
+      "    samp.loop({ loopStart: 0.5, loopEnd: 2.0 })",
     ].join("\n"));
   }
 
@@ -194,7 +213,10 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       {
         help: (): BounceResult => sampleHelpText(bound),
         play: () => play(bound),
-        loop: () => loop(bound),
+        loop: Object.assign(
+          (opts?: { loopStart?: number; loopEnd?: number }) => loop(bound, opts),
+          { help: loopHelpText },
+        ),
         stop: () => stop(bound),
         display: () => display(bound.hash),
         slice: (options) => slice(bound, options),
@@ -362,6 +384,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
   async function startPlayback(
     source: string | Sample | PromiseLike<Sample> | undefined,
     loopPlayback: boolean,
+    loopOpts?: { loopStart?: number; loopEnd?: number },
   ): Promise<Sample> {
     let loadedSample: Sample | undefined;
 
@@ -396,7 +419,14 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       audio.sampleRate,
       loopPlayback,
       activeSample.hash,
+      loopOpts?.loopStart,
+      loopOpts?.loopEnd,
     );
+
+    const loopRangeLabel =
+      loopPlayback && (loopOpts?.loopStart !== undefined || loopOpts?.loopEnd !== undefined)
+        ? ` [${loopOpts?.loopStart ?? 0}s – ${loopOpts?.loopEnd !== undefined ? `${loopOpts.loopEnd}s` : "end"}]`
+        : "";
 
     return bindSample(
       {
@@ -409,7 +439,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       },
       [
         loadedSample ? loadedSample.toString() : makeSampleDisplayText(activeSample),
-        `\x1b[32m${loopPlayback ? "Looping" : "Playing"}: ${sampleLabel(activeSample.filePath, activeSample.hash)}\x1b[0m`,
+        `\x1b[32m${loopPlayback ? "Looping" : "Playing"}${loopRangeLabel}: ${sampleLabel(activeSample.filePath, activeSample.hash)}\x1b[0m`,
       ].join("\n"),
     );
   }
@@ -418,8 +448,11 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     return startPlayback(source, false);
   }
 
-  async function loop(source?: string | Sample | PromiseLike<Sample>): Promise<Sample> {
-    return startPlayback(source, true);
+  async function loop(
+    source?: string | Sample | PromiseLike<Sample>,
+    opts?: { loopStart?: number; loopEnd?: number },
+  ): Promise<Sample> {
+    return startPlayback(source, true, opts);
   }
 
   async function analyze(

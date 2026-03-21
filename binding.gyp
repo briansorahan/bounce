@@ -60,7 +60,8 @@
       "sources": [
         "native/src/audio-engine-binding.cpp",
         "native/src/audio-engine.cpp",
-        "native/src/sample-playback-engine.cpp"
+        "native/src/sample-playback-engine.cpp",
+        "native/src/sampler-instrument.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",

@@ -122,10 +122,44 @@ const api: ElectronAPI = {
       duration,
       overwrite,
     ),
-  playSample: (hash: string, loop: boolean) =>
-    ipcRenderer.send("play-sample", { hash, loop }),
+  playSample: (hash: string, loop: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.send("play-sample", { hash, loop, loopStart, loopEnd }),
   stopSample: (hash?: string) =>
     ipcRenderer.send("stop-sample", hash ? { hash } : undefined),
+
+  // Instrument API (one-way renderer → main)
+  defineInstrument: (instrumentId: string, kind: string, polyphony: number) =>
+    ipcRenderer.send("define-instrument", { instrumentId, kind, polyphony }),
+  freeInstrument: (instrumentId: string) =>
+    ipcRenderer.send("free-instrument", { instrumentId }),
+  loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string, loop?: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.send("load-instrument-sample", { instrumentId, note, sampleHash, loop: !!loop, loopStart: loopStart ?? 0, loopEnd: loopEnd ?? -1 }),
+  instrumentNoteOn: (instrumentId: string, note: number, velocity: number) =>
+    ipcRenderer.send("instrument-note-on", { instrumentId, note, velocity }),
+  instrumentNoteOff: (instrumentId: string, note: number) =>
+    ipcRenderer.send("instrument-note-off", { instrumentId, note }),
+  instrumentStopAll: (instrumentId: string) =>
+    ipcRenderer.send("instrument-stop-all", { instrumentId }),
+  setInstrumentParam: (instrumentId: string, paramId: number, value: number) =>
+    ipcRenderer.send("set-instrument-param", { instrumentId, paramId, value }),
+  subscribeInstrumentTelemetry: (instrumentId: string) =>
+    ipcRenderer.send("subscribe-instrument-telemetry", { instrumentId }),
+  unsubscribeInstrumentTelemetry: (instrumentId: string) =>
+    ipcRenderer.send("unsubscribe-instrument-telemetry", { instrumentId }),
+
+  // Instrument DB persistence (invoke-based)
+  createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) =>
+    ipcRenderer.invoke("create-db-instrument", name, kind, config),
+  deleteDbInstrument: (name: string) =>
+    ipcRenderer.invoke("delete-db-instrument", name),
+  addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.invoke("add-db-instrument-sample", instrumentName, sampleHash, noteNumber, !!loop, loopStart ?? 0, loopEnd ?? -1),
+  removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) =>
+    ipcRenderer.invoke("remove-db-instrument-sample", instrumentName, sampleHash, noteNumber),
+  listDbInstruments: () =>
+    ipcRenderer.invoke("list-db-instruments"),
+  getDbInstrumentSamples: (instrumentName: string) =>
+    ipcRenderer.invoke("get-db-instrument-samples", instrumentName),
   onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => {
     ipcRenderer.on("playback-position", (_event, data: { hash: string; positionInSamples: number }) =>
       callback(data.hash, data.positionInSamples),

@@ -3,15 +3,21 @@
 #include <cstring>
 
 SamplePlaybackEngine::SamplePlaybackEngine(std::string hash, bool loop,
-                                           EndedCallback onEnded)
-    : hash_(std::move(hash)), loop_(loop), onEnded_(std::move(onEnded)) {}
+                                           EndedCallback onEnded,
+                                           int loopStartSample,
+                                           int loopEndSample)
+    : hash_(std::move(hash)), loop_(loop),
+      loopStartSample_(loopStartSample), loopEndSample_(loopEndSample),
+      onEnded_(std::move(onEnded)) {}
 
 void SamplePlaybackEngine::prepare(const float* pcm, int numSamples,
                                    double /*sampleRate*/, int /*maxBlockSize*/) {
     pcm_.assign(pcm, pcm + numSamples);
     numSamples_ = numSamples;
-    readPos_    = 0;
+    readPos_    = loop_ ? std::max(0, loopStartSample_) : 0;
     finished_   = false;
+    effectiveLoopEnd_ = (loopEndSample_ >= 0 && loopEndSample_ <= numSamples)
+                        ? loopEndSample_ : numSamples;
 }
 
 void SamplePlaybackEngine::process(float** outputs, int numChannels,
@@ -24,9 +30,9 @@ void SamplePlaybackEngine::process(float** outputs, int numChannels,
             outputs[ch][frame] += sample;
         }
         ++readPos_;
-        if (readPos_ >= numSamples_) {
+        if (readPos_ >= effectiveLoopEnd_) {
             if (loop_) {
-                readPos_ = 0;
+                readPos_ = std::max(0, std::min(loopStartSample_, effectiveLoopEnd_ - 1));
             } else {
                 finished_ = true;
                 if (onEnded_) onEnded_(hash_);

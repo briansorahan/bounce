@@ -6,3 +6,4 @@ export * from "./environment.js";
 export * from "./visualization.js";
 export * from "./features.js";
 export * from "./sample.js";
+export * from "./instrument.js";
