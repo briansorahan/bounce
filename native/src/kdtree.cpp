@@ -1,8 +1,8 @@
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/KDTree.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidDataSet.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/KDTree.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidDataSet.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 #include <memory>
 #include <string>
 #include <utility>

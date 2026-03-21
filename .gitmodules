@@ -1,5 +1,5 @@
 [submodule "flucoma-core"]
-	path = flucoma-core
+	path = third_party/flucoma-core
 	url = https://github.com/flucoma/flucoma-core.git
 [submodule "third_party/eigen"]
 	path = third_party/eigen

@@ -1,7 +1,7 @@
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/OnsetDetectionFunctions.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/OnsetDetectionFunctions.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 #include <vector>
 #include <memory>
 

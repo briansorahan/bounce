@@ -1,8 +1,8 @@
 #include <napi.h>
-#include "../../flucoma-core/include/flucoma/algorithms/public/STFT.hpp"
-#include "../../flucoma-core/include/flucoma/algorithms/public/SpectralShape.hpp"
-#include "../../flucoma-core/include/flucoma/data/FluidMemory.hpp"
-#include "../../flucoma-core/include/flucoma/data/TensorTypes.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/STFT.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/algorithms/public/SpectralShape.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/FluidMemory.hpp"
+#include "../../third_party/flucoma-core/include/flucoma/data/TensorTypes.hpp"
 #include <algorithm>
 #include <memory>
 #include <vector>
