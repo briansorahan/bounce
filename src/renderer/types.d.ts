@@ -22,6 +22,8 @@ interface InstrumentSampleDbRecord {
   sample_hash: string;
   note_number: number;
   loop: number;
+  loop_start: number;
+  loop_end: number;
 }
 
 
@@ -296,7 +298,7 @@ interface Window {
     // Instrument API
     defineInstrument: (instrumentId: string, kind: string, polyphony: number) => void;
     freeInstrument: (instrumentId: string) => void;
-    loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string, loop?: boolean) => void;
+    loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string, loop?: boolean, loopStart?: number, loopEnd?: number) => void;
     instrumentNoteOn: (instrumentId: string, note: number, velocity: number) => void;
     instrumentNoteOff: (instrumentId: string, note: number) => void;
     instrumentStopAll: (instrumentId: string) => void;
@@ -306,7 +308,7 @@ interface Window {
     // Instrument DB persistence
     createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) => Promise<InstrumentDbRecord>;
     deleteDbInstrument: (name: string) => Promise<boolean>;
-    addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean) => Promise<void>;
+    addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean, loopStart?: number, loopEnd?: number) => Promise<void>;
     removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) => Promise<boolean>;
     listDbInstruments: () => Promise<InstrumentDbRecord[]>;
     getDbInstrumentSamples: (instrumentName: string) => Promise<InstrumentSampleDbRecord[]>;

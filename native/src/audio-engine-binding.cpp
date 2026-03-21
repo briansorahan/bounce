@@ -216,13 +216,13 @@ Napi::Value AudioEngineWrapper::FreeInstrument(const Napi::CallbackInfo& info) {
 }
 
 // ---------------------------------------------------------------------------
-// loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash, loop)
+// loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash, loop, loopStartSec, loopEndSec)
 // ---------------------------------------------------------------------------
 Napi::Value AudioEngineWrapper::LoadInstrumentSample(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 5) {
         Napi::TypeError::New(env,
-            "loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash, loop?) requires 5+ arguments")
+            "loadInstrumentSample(instrumentId, note, pcm, sampleRate, sampleHash, loop?, loopStart?, loopEnd?) requires 5+ arguments")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -232,6 +232,8 @@ Napi::Value AudioEngineWrapper::LoadInstrumentSample(const Napi::CallbackInfo& i
     double sampleRate        = info[3].As<Napi::Number>().DoubleValue();
     std::string sampleHash   = info[4].As<Napi::String>();
     bool loop                = info.Length() > 5 && info[5].As<Napi::Boolean>().Value();
+    double loopStartSec      = info.Length() > 6 ? info[6].As<Napi::Number>().DoubleValue() : 0.0;
+    double loopEndSec        = info.Length() > 7 ? info[7].As<Napi::Number>().DoubleValue() : -1.0;
 
     // Copy Float32Array data into a vector that can be moved into the engine
     const float* data = typedArr.Data();
@@ -239,7 +241,8 @@ Napi::Value AudioEngineWrapper::LoadInstrumentSample(const Napi::CallbackInfo& i
     std::vector<float> pcm(data, data + len);
 
     engine_->loadInstrumentSample(instrumentId, note, std::move(pcm),
-                                  sampleRate, sampleHash, loop);
+                                  sampleRate, sampleHash, loop,
+                                  loopStartSec, loopEndSec);
     return env.Undefined();
 }
 

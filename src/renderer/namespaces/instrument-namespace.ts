@@ -9,7 +9,7 @@ interface InstrumentState {
   kind: string;
   polyphony: number;
   sampleCount: number;
-  loadedNotes: Map<number, { sampleHash: string; loop: boolean }>;
+  loadedNotes: Map<number, { sampleHash: string; loop: boolean; loopStart: number; loopEnd: number }>;
 }
 
 const instruments = new Map<string, InstrumentState>();
@@ -59,7 +59,7 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
 
   // Attach methods to the result object
   const obj = result as InstrumentResult & {
-    loadSample: ((note: number, sample: { hash: string }, opts?: { loop?: boolean }) => BounceResult) & { help: () => BounceResult };
+    loadSample: ((note: number, sample: { hash: string }, opts?: { loop?: boolean; loopStart?: number; loopEnd?: number }) => BounceResult) & { help: () => BounceResult };
     noteOn: ((note: number, opts?: { velocity?: number }) => BounceResult) & { help: () => BounceResult };
     noteOff: ((note: number) => BounceResult) & { help: () => BounceResult };
     stop: (() => BounceResult) & { help: () => BounceResult };
@@ -67,7 +67,7 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
   };
 
   obj.loadSample = Object.assign(
-    function loadSample(note: number, sample: { hash: string }, opts?: { loop?: boolean }): BounceResult {
+    function loadSample(note: number, sample: { hash: string }, opts?: { loop?: boolean; loopStart?: number; loopEnd?: number }): BounceResult {
       if (typeof note !== "number" || note < 0 || note > 127) {
         return new BounceResult("\x1b[31mError: note must be 0–127\x1b[0m");
       }
@@ -75,20 +75,34 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
         return new BounceResult("\x1b[31mError: sample must have a hash property\x1b[0m");
       }
       const loop = !!opts?.loop;
-      window.electron.loadInstrumentSample(state.instrumentId, note, sample.hash, loop);
-      state.loadedNotes.set(note, { sampleHash: sample.hash, loop });
+      const loopStart = opts?.loopStart ?? 0;
+      const loopEnd = opts?.loopEnd ?? -1;
+      if (loop && loopStart < 0) {
+        return new BounceResult("\x1b[31mError: loopStart must be >= 0\x1b[0m");
+      }
+      if (loop && loopEnd >= 0 && loopEnd <= loopStart) {
+        return new BounceResult("\x1b[31mError: loopEnd must be greater than loopStart\x1b[0m");
+      }
+      window.electron.loadInstrumentSample(state.instrumentId, note, sample.hash, loop, loopStart, loopEnd);
+      state.loadedNotes.set(note, { sampleHash: sample.hash, loop, loopStart, loopEnd });
       state.sampleCount = state.loadedNotes.size;
 
       // Persist to DB
-      window.electron.addDbInstrumentSample?.(state.name, sample.hash, note, loop)
+      window.electron.addDbInstrumentSample?.(state.name, sample.hash, note, loop, loopStart, loopEnd)
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[inst] Failed to persist sample mapping: ${msg}`);
           window.electron.debugLog?.("error", "[inst] Failed to persist sample mapping", { instrument: state.name, note, error: msg });
         });
 
-      const loopTag = loop ? " (loop)" : "";
-      return new BounceResult(`Loaded sample at note ${note}${loopTag}`);
+      const tags: string[] = [];
+      if (loop) tags.push("loop");
+      if (loop && (loopStart > 0 || loopEnd >= 0)) {
+        const endLabel = loopEnd < 0 ? "end" : `${loopEnd}s`;
+        tags.push(`${loopStart}s–${endLabel}`);
+      }
+      const tagStr = tags.length > 0 ? ` (${tags.join(" ")})` : "";
+      return new BounceResult(`Loaded sample at note ${note}${tagStr}`);
     },
     {
       help: (): BounceResult =>
@@ -99,11 +113,14 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
             "  Load a sample into the instrument at a MIDI note number (0–127).",
             "",
             "\x1b[1mOptions:\x1b[0m",
-            "  loop  boolean  (default false) Loop the sample on noteOn",
+            "  loop       boolean  (default false) Loop the sample on noteOn",
+            "  loopStart  number   (default 0) Loop start in seconds",
+            "  loopEnd    number   (default end) Loop end in seconds",
             "",
             "\x1b[1mExample:\x1b[0m",
             `  ${state.name}.loadSample(60, sample)`,
             `  ${state.name}.loadSample(60, sample, { loop: true })`,
+            `  ${state.name}.loadSample(60, sample, { loop: true, loopStart: 0.1, loopEnd: 0.5 })`,
           ].join("\n"),
         ),
     },
@@ -227,8 +244,10 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
         const samples = await window.electron.getDbInstrumentSamples(record.name);
         for (const sample of samples) {
           const loop = !!sample.loop;
-          window.electron.loadInstrumentSample(instrumentId, sample.note_number, sample.sample_hash, loop);
-          state.loadedNotes.set(sample.note_number, { sampleHash: sample.sample_hash, loop });
+          const loopStart = sample.loop_start ?? 0;
+          const loopEnd = sample.loop_end ?? -1;
+          window.electron.loadInstrumentSample(instrumentId, sample.note_number, sample.sample_hash, loop, loopStart, loopEnd);
+          state.loadedNotes.set(sample.note_number, { sampleHash: sample.sample_hash, loop, loopStart, loopEnd });
         }
         state.sampleCount = state.loadedNotes.size;
 

@@ -48,7 +48,8 @@ public:
     void freeInstrument(const std::string& id);
     void loadInstrumentSample(const std::string& instrumentId, int note,
                               std::vector<float> pcm, double sampleRate,
-                              const std::string& sampleHash, bool loop);
+                              const std::string& sampleHash, bool loop,
+                              double loopStartSec = 0.0, double loopEndSec = -1.0);
     void instrumentNoteOn(const std::string& instrumentId,
                           int note, float velocity);
     void instrumentNoteOff(const std::string& instrumentId, int note);
@@ -92,6 +93,8 @@ private:
         double sampleRate = 0.0;
         std::string sampleHash;
         bool loop = false;
+        double loopStartSec = 0.0;
+        double loopEndSec = -1.0;
     };
 
     // Simple lock-based queues (not audio-thread-safe for the control queue,

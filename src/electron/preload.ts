@@ -132,8 +132,8 @@ const api: ElectronAPI = {
     ipcRenderer.send("define-instrument", { instrumentId, kind, polyphony }),
   freeInstrument: (instrumentId: string) =>
     ipcRenderer.send("free-instrument", { instrumentId }),
-  loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string, loop?: boolean) =>
-    ipcRenderer.send("load-instrument-sample", { instrumentId, note, sampleHash, loop: !!loop }),
+  loadInstrumentSample: (instrumentId: string, note: number, sampleHash: string, loop?: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.send("load-instrument-sample", { instrumentId, note, sampleHash, loop: !!loop, loopStart: loopStart ?? 0, loopEnd: loopEnd ?? -1 }),
   instrumentNoteOn: (instrumentId: string, note: number, velocity: number) =>
     ipcRenderer.send("instrument-note-on", { instrumentId, note, velocity }),
   instrumentNoteOff: (instrumentId: string, note: number) =>
@@ -152,8 +152,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke("create-db-instrument", name, kind, config),
   deleteDbInstrument: (name: string) =>
     ipcRenderer.invoke("delete-db-instrument", name),
-  addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean) =>
-    ipcRenderer.invoke("add-db-instrument-sample", instrumentName, sampleHash, noteNumber, !!loop),
+  addDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean, loopStart?: number, loopEnd?: number) =>
+    ipcRenderer.invoke("add-db-instrument-sample", instrumentName, sampleHash, noteNumber, !!loop, loopStart ?? 0, loopEnd ?? -1),
   removeDbInstrumentSample: (instrumentName: string, sampleHash: string, noteNumber: number) =>
     ipcRenderer.invoke("remove-db-instrument-sample", instrumentName, sampleHash, noteNumber),
   listDbInstruments: () =>

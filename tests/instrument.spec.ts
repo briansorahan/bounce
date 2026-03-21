@@ -122,6 +122,20 @@ test.describe("Sampler Instrument", () => {
     await electronApp.close();
   });
 
+  test("load a sample with loop start/end", async () => {
+    const electronApp = await launchApp();
+    const window = await electronApp.firstWindow();
+    await waitForReady(window);
+
+    await sendCommand(window, "const keys = inst.sampler({ name: 'keys' })");
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "keys.loadSample(60, samp, { loop: true, loopStart: 0.1, loopEnd: 0.4 })");
+    const rows = window.locator(".xterm-rows");
+    await expect(rows).toContainText("Loaded sample at note 60 (loop 0.1s", { timeout: 5000 });
+
+    await electronApp.close();
+  });
+
   test("stop all voices", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();

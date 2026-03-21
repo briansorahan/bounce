@@ -51,8 +51,13 @@ void SamplerInstrument::noteOn(int note, float velocity) {
     if (!voice) return;
 
     const auto& sample = it->second;
+    int loopStartSample = static_cast<int>(sample.loopStartSec * sample.sampleRate);
+    int loopEndSample = sample.loopEndSec < 0.0
+        ? -1
+        : static_cast<int>(sample.loopEndSec * sample.sampleRate);
+
     voice->processor = std::make_unique<SamplePlaybackEngine>(
-        sample.hash, sample.loop, nullptr);
+        sample.hash, sample.loop, nullptr, loopStartSample, loopEndSample);
     voice->processor->prepare(sample.pcm.data(),
                               static_cast<int>(sample.pcm.size()),
                               sample.sampleRate, 512);
@@ -78,12 +83,15 @@ void SamplerInstrument::stopAll() {
 void SamplerInstrument::loadSample(int note, std::vector<float> pcm,
                                    double sampleRate,
                                    const std::string& sampleHash,
-                                   bool loop) {
+                                   bool loop,
+                                   double loopStartSec, double loopEndSec) {
     SampleData data;
     data.pcm = std::move(pcm);
     data.sampleRate = sampleRate;
     data.hash = sampleHash;
     data.loop = loop;
+    data.loopStartSec = loopStartSec;
+    data.loopEndSec = loopEndSec;
     samples_[note] = std::move(data);
 }
 

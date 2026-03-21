@@ -18,7 +18,8 @@ public:
     void stopAll() override;
     void loadSample(int note, std::vector<float> pcm,
                     double sampleRate, const std::string& sampleHash,
-                    bool loop = false) override;
+                    bool loop = false,
+                    double loopStartSec = 0.0, double loopEndSec = -1.0) override;
     void setParam(int paramId, float value) override;
     int activeVoiceCount() const override;
 
@@ -32,6 +33,8 @@ private:
         double sampleRate;
         std::string hash;
         bool loop = false;
+        double loopStartSec = 0.0;
+        double loopEndSec = -1.0;  // -1 means end of sample
     };
     std::unordered_map<int, SampleData> samples_;
 

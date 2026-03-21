@@ -22,7 +22,8 @@ public:
     // Takes pcm by value so callers can move data in (avoids copy on audio thread)
     virtual void loadSample(int note, std::vector<float> pcm,
                             double sampleRate, const std::string& sampleHash,
-                            bool loop = false) = 0;
+                            bool loop = false,
+                            double loopStartSec = 0.0, double loopEndSec = -1.0) = 0;
 
     virtual void setParam(int paramId, float value) = 0;
     virtual int activeVoiceCount() const = 0;
