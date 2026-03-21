@@ -40,7 +40,7 @@ interface AudioEngineNative {
   // Instrument API
   defineInstrument(id: string, kind: string, polyphony: number): void;
   freeInstrument(id: string): void;
-  loadInstrumentSample(instrumentId: string, note: number, pcm: Float32Array, sampleRate: number, sampleHash: string): void;
+  loadInstrumentSample(instrumentId: string, note: number, pcm: Float32Array, sampleRate: number, sampleHash: string, loop: boolean): void;
   instrumentNoteOn(instrumentId: string, note: number, velocity: number): void;
   instrumentNoteOff(instrumentId: string, note: number): void;
   instrumentStopAll(instrumentId: string): void;
@@ -124,7 +124,7 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
         break;
       case "load-instrument-sample":
         if (engine && data.instrumentId && data.note !== undefined && data.pcm && data.sampleRate !== undefined && data.sampleHash) {
-          engine.loadInstrumentSample(data.instrumentId, data.note, data.pcm, data.sampleRate, data.sampleHash);
+          engine.loadInstrumentSample(data.instrumentId, data.note, data.pcm, data.sampleRate, data.sampleHash, !!data.loop);
         }
         break;
       case "instrument-note-on":

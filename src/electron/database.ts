@@ -116,6 +116,7 @@ export interface InstrumentSampleRecord {
   instrument_id: number;
   sample_hash: string;
   note_number: number;
+  loop: number;
 }
 
 export class DatabaseManager {
@@ -521,6 +522,7 @@ export class DatabaseManager {
         instrument_id INTEGER NOT NULL,
         sample_hash   TEXT NOT NULL,
         note_number   INTEGER NOT NULL,
+        loop          INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (instrument_id, sample_hash, note_number),
         FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE CASCADE
       );
@@ -1310,10 +1312,10 @@ LIMIT 1
     return result.changes > 0;
   }
 
-  addInstrumentSample(instrumentId: number, sampleHash: string, noteNumber: number): void {
+  addInstrumentSample(instrumentId: number, sampleHash: string, noteNumber: number, loop: boolean = false): void {
     this.db.prepare(
-      "INSERT OR REPLACE INTO instrument_samples (instrument_id, sample_hash, note_number) VALUES (?, ?, ?)",
-    ).run(instrumentId, sampleHash, noteNumber);
+      "INSERT OR REPLACE INTO instrument_samples (instrument_id, sample_hash, note_number, loop) VALUES (?, ?, ?, ?)",
+    ).run(instrumentId, sampleHash, noteNumber, loop ? 1 : 0);
   }
 
   getInstrumentSamples(instrumentId: number): InstrumentSampleRecord[] {

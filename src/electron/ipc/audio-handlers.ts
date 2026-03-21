@@ -232,7 +232,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
   });
 
   ipcMain.on("load-instrument-sample", (_event, payload: {
-    instrumentId: string; note: number; sampleHash: string;
+    instrumentId: string; note: number; sampleHash: string; loop?: boolean;
   }) => {
     const port = getAudioEnginePort();
     if (!deps.dbManager || !port) return;
@@ -254,6 +254,7 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       pcm: pcmCopy,
       sampleRate: sample.sample_rate,
       sampleHash: payload.sampleHash,
+      loop: !!payload.loop,
     });
   });
 
@@ -325,11 +326,11 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     return deps.dbManager.deleteInstrument(name);
   });
 
-  ipcMain.handle("add-db-instrument-sample", (_event, instrumentName: string, sampleHash: string, noteNumber: number) => {
+  ipcMain.handle("add-db-instrument-sample", (_event, instrumentName: string, sampleHash: string, noteNumber: number, loop?: boolean) => {
     if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
     const instrument = deps.dbManager.getInstrument(instrumentName);
     if (!instrument) throw new BounceError("INSTRUMENT_NOT_FOUND", `Instrument '${instrumentName}' not found`);
-    deps.dbManager.addInstrumentSample(instrument.id, sampleHash, noteNumber);
+    deps.dbManager.addInstrumentSample(instrument.id, sampleHash, noteNumber, !!loop);
   });
 
   ipcMain.handle("remove-db-instrument-sample", (_event, instrumentName: string, sampleHash: string, noteNumber: number) => {

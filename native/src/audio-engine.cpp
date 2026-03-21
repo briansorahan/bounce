@@ -144,7 +144,8 @@ void AudioEngine::freeInstrument(const std::string& id) {
 void AudioEngine::loadInstrumentSample(const std::string& instrumentId,
                                        int note, std::vector<float> pcm,
                                        double sampleRate,
-                                       const std::string& sampleHash) {
+                                       const std::string& sampleHash,
+                                       bool loop) {
     std::lock_guard<std::mutex> lk(controlMutex_);
     ControlMsg msg;
     msg.op = ControlMsg::Op::InstrumentLoadSample;
@@ -153,6 +154,7 @@ void AudioEngine::loadInstrumentSample(const std::string& instrumentId,
     msg.pcm = std::move(pcm);
     msg.sampleRate = sampleRate;
     msg.sampleHash = sampleHash;
+    msg.loop = loop;
     controlQueue_.push_back(std::move(msg));
 }
 
@@ -307,7 +309,8 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
             case ControlMsg::Op::InstrumentLoadSample:
                 if (auto* inst = findInstrument(msg.instrumentId))
                     inst->loadSample(msg.note, std::move(msg.pcm),
-                                     msg.sampleRate, msg.sampleHash);
+                                     msg.sampleRate, msg.sampleHash,
+                                     msg.loop);
                 break;
             case ControlMsg::Op::InstrumentSetParam:
                 if (auto* inst = findInstrument(msg.instrumentId))

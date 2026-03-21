@@ -108,6 +108,20 @@ test.describe("Sampler Instrument", () => {
     await electronApp.close();
   });
 
+  test("load a sample with loop option", async () => {
+    const electronApp = await launchApp();
+    const window = await electronApp.firstWindow();
+    await waitForReady(window);
+
+    await sendCommand(window, "const keys = inst.sampler({ name: 'keys' })");
+    await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await sendCommand(window, "keys.loadSample(60, samp, { loop: true })");
+    const rows = window.locator(".xterm-rows");
+    await expect(rows).toContainText("Loaded sample at note 60 (loop)", { timeout: 5000 });
+
+    await electronApp.close();
+  });
+
   test("stop all voices", async () => {
     const electronApp = await launchApp();
     const window = await electronApp.firstWindow();
@@ -234,7 +248,7 @@ test.describe("Sampler Instrument", () => {
 
     await sendCommand(window, "keys.loadSample.help()");
     const rows = window.locator(".xterm-rows");
-    await expect(rows).toContainText("loadSample(note, sample)", { timeout: 5000 });
+    await expect(rows).toContainText("loadSample(note, sample, options?)", { timeout: 5000 });
 
     await sendCommand(window, "keys.noteOn.help()");
     await expect(rows).toContainText("noteOn(note, options?)", { timeout: 5000 });

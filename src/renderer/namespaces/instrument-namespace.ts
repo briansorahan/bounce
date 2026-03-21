@@ -9,7 +9,7 @@ interface InstrumentState {
   kind: string;
   polyphony: number;
   sampleCount: number;
-  loadedNotes: Map<number, string>; // note → sampleHash
+  loadedNotes: Map<number, { sampleHash: string; loop: boolean }>;
 }
 
 const instruments = new Map<string, InstrumentState>();
@@ -26,16 +26,18 @@ function instrumentHelp(state: InstrumentState): BounceResult {
     `  samples:   ${state.sampleCount}`,
     "",
     "\x1b[1mMethods:\x1b[0m",
-    "  .loadSample(note, sample)   Load a sample at a MIDI note number",
-    "  .noteOn(note)               Trigger note (velocity 1.0)",
-    "  .noteOn(note, { velocity }) Trigger note with velocity",
-    "  .noteOff(note)              Release note",
-    "  .stop()                     Stop all voices",
-    "  .free()                     Destroy instrument",
-    "  .help()                     Show this help",
+    "  .loadSample(note, sample)              Load a sample (one-shot)",
+    "  .loadSample(note, sample, { loop })    Load a sample with options",
+    "  .noteOn(note)                          Trigger note (velocity 1.0)",
+    "  .noteOn(note, { velocity })            Trigger note with velocity",
+    "  .noteOff(note)                         Release note",
+    "  .stop()                                Stop all voices",
+    "  .free()                                Destroy instrument",
+    "  .help()                                Show this help",
     "",
     "\x1b[1mExample:\x1b[0m",
     `  ${state.name}.loadSample(60, sample)`,
+    `  ${state.name}.loadSample(60, sample, { loop: true })`,
     `  ${state.name}.noteOn(60)`,
     `  ${state.name}.noteOff(60)`,
   ];
@@ -57,7 +59,7 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
 
   // Attach methods to the result object
   const obj = result as InstrumentResult & {
-    loadSample: ((note: number, sample: { hash: string }) => BounceResult) & { help: () => BounceResult };
+    loadSample: ((note: number, sample: { hash: string }, opts?: { loop?: boolean }) => BounceResult) & { help: () => BounceResult };
     noteOn: ((note: number, opts?: { velocity?: number }) => BounceResult) & { help: () => BounceResult };
     noteOff: ((note: number) => BounceResult) & { help: () => BounceResult };
     stop: (() => BounceResult) & { help: () => BounceResult };
@@ -65,37 +67,43 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
   };
 
   obj.loadSample = Object.assign(
-    function loadSample(note: number, sample: { hash: string }): BounceResult {
+    function loadSample(note: number, sample: { hash: string }, opts?: { loop?: boolean }): BounceResult {
       if (typeof note !== "number" || note < 0 || note > 127) {
         return new BounceResult("\x1b[31mError: note must be 0–127\x1b[0m");
       }
       if (!sample?.hash) {
         return new BounceResult("\x1b[31mError: sample must have a hash property\x1b[0m");
       }
-      window.electron.loadInstrumentSample(state.instrumentId, note, sample.hash);
-      state.loadedNotes.set(note, sample.hash);
+      const loop = !!opts?.loop;
+      window.electron.loadInstrumentSample(state.instrumentId, note, sample.hash, loop);
+      state.loadedNotes.set(note, { sampleHash: sample.hash, loop });
       state.sampleCount = state.loadedNotes.size;
 
       // Persist to DB
-      window.electron.addDbInstrumentSample?.(state.name, sample.hash, note)
+      window.electron.addDbInstrumentSample?.(state.name, sample.hash, note, loop)
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[inst] Failed to persist sample mapping: ${msg}`);
           window.electron.debugLog?.("error", "[inst] Failed to persist sample mapping", { instrument: state.name, note, error: msg });
         });
 
-      return new BounceResult(`Loaded sample at note ${note}`);
+      const loopTag = loop ? " (loop)" : "";
+      return new BounceResult(`Loaded sample at note ${note}${loopTag}`);
     },
     {
       help: (): BounceResult =>
         new BounceResult(
           [
-            "\x1b[1;36mloadSample(note, sample)\x1b[0m",
+            "\x1b[1;36mloadSample(note, sample, options?)\x1b[0m",
             "",
             "  Load a sample into the instrument at a MIDI note number (0–127).",
             "",
+            "\x1b[1mOptions:\x1b[0m",
+            "  loop  boolean  (default false) Loop the sample on noteOn",
+            "",
             "\x1b[1mExample:\x1b[0m",
             `  ${state.name}.loadSample(60, sample)`,
+            `  ${state.name}.loadSample(60, sample, { loop: true })`,
           ].join("\n"),
         ),
     },
@@ -218,8 +226,9 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
         // Restore sample mappings
         const samples = await window.electron.getDbInstrumentSamples(record.name);
         for (const sample of samples) {
-          window.electron.loadInstrumentSample(instrumentId, sample.note_number, sample.sample_hash);
-          state.loadedNotes.set(sample.note_number, sample.sample_hash);
+          const loop = !!sample.loop;
+          window.electron.loadInstrumentSample(instrumentId, sample.note_number, sample.sample_hash, loop);
+          state.loadedNotes.set(sample.note_number, { sampleHash: sample.sample_hash, loop });
         }
         state.sampleCount = state.loadedNotes.size;
 

@@ -52,7 +52,7 @@ void SamplerInstrument::noteOn(int note, float velocity) {
 
     const auto& sample = it->second;
     voice->processor = std::make_unique<SamplePlaybackEngine>(
-        sample.hash, false, nullptr);
+        sample.hash, sample.loop, nullptr);
     voice->processor->prepare(sample.pcm.data(),
                               static_cast<int>(sample.pcm.size()),
                               sample.sampleRate, 512);
@@ -77,11 +77,13 @@ void SamplerInstrument::stopAll() {
 
 void SamplerInstrument::loadSample(int note, std::vector<float> pcm,
                                    double sampleRate,
-                                   const std::string& sampleHash) {
+                                   const std::string& sampleHash,
+                                   bool loop) {
     SampleData data;
     data.pcm = std::move(pcm);
     data.sampleRate = sampleRate;
     data.hash = sampleHash;
+    data.loop = loop;
     samples_[note] = std::move(data);
 }
 
