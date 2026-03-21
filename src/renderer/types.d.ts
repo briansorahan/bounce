@@ -234,6 +234,7 @@ interface Window {
     listSamples: () => Promise<SampleListData[]>;
     listFeatures: () => Promise<FeatureListData[]>;
     getSampleByHash: (hash: string) => Promise<SampleData | null>;
+    completeSampleHash: (prefix: string) => Promise<Array<{ hash: string; filePath: string | null }>>;
     analyzeNMF: (
       args: string[],
     ) => Promise<{ success: boolean; message: string }>;
@@ -267,7 +268,7 @@ interface Window {
     fsCd: (dirPath: string) => Promise<string>;
     fsPwd: () => Promise<string>;
     fsCompletePath: (
-      method: "ls" | "la" | "cd" | "walk",
+      method: "ls" | "la" | "cd" | "walk" | "read",
       inputPath: string,
     ) => Promise<string[]>;
     fsGlob: (pattern: string) => Promise<string[]>;

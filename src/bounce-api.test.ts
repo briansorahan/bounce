@@ -240,6 +240,7 @@ async function main() {
     help(): BounceResult;
     stop(): BounceResult;
     read(pathOrHash: string): SamplePromise;
+    load(hash: string): SamplePromise;
     list(): PromiseLike<unknown>;
     current(): CurrentSamplePromise;
   };
