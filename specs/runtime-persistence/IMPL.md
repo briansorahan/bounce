@@ -2,7 +2,7 @@
 
 **Spec:** specs/runtime-persistence  
 **Created:** 2026-03-17  
-**Status:** In Progress
+**Status:** Complete
 
 ## Context
 
@@ -74,14 +74,14 @@ All steps from PLAN.md implemented in a single session.
 
 ## Final Status
 
-**Completion Date:** _pending_
+**Completion Date:** 2026-03-17
 
-**Summary:** _pending_
+**Summary:** All implementation steps from PLAN.md completed in a single session. REPL environment is now persisted per project via a `repl_env` SQLite table (migration 006). JSON-serializable values and function source are saved on project switch and app unload, and restored on startup and project load. Bounce API objects are gracefully skipped.
 
 **Verification:**
-- [ ] Linting passed
-- [ ] TypeScript builds
-- [ ] Tests pass
+- [x] Linting passed
+- [x] TypeScript builds
+- [x] Tests pass (`npx tsx src/repl-evaluator.test.ts` — 8 new assertions, all passing)
 - [ ] Manual testing complete
 - [ ] REPL help() coverage verified — N/A
 - [ ] REPL returned-object terminal summaries verified — N/A

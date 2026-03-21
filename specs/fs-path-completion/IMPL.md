@@ -2,7 +2,7 @@
 
 **Spec:** `specs/fs-path-completion`  
 **Created:** 2026-03-15  
-**Status:** In Progress
+**Status:** Complete
 
 ## Context
 

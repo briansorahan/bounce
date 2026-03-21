@@ -2,7 +2,7 @@
 
 **Spec:** specs/runtime-introspection  
 **Created:** 2026-03-16  
-**Status:** In Progress
+**Status:** Complete
 
 ## Context
 

@@ -2,7 +2,7 @@
 
 **Spec:** specs/tab-completion  
 **Created:** 2026-03-08  
-**Status:** In Progress
+**Status:** Complete
 
 ## Context
 
@@ -88,20 +88,20 @@ All steps from the plan executed in order:
 
 ## Final Status
 
-<!-- When work is complete, summarize outcome -->
+**Completion Date:** 2026-03-08
 
-**Completion Date:**
-
-**Summary:**
+**Summary:** Implemented full tab-completion in the REPL terminal. The `TabCompletion` state machine provides ghost-text preview, single/multi-match cycling, and ANSI rendering. All integration points in `BounceApp` (`app.ts`) updated: command line redraw, cursor movement, history navigation, Tab key handler, Enter paste-on-multi-match, and Ctrl+R reset. 24 unit tests cover all states, actions, and ANSI output.
 
 **Verification:**
-- [ ] Linting passed
-- [ ] TypeScript builds
-- [ ] Tests pass
+- [x] Linting passed
+- [x] TypeScript builds
+- [x] Tests pass (24 unit tests in `src/tab-completion.test.ts`)
 - [ ] Manual testing complete
 - [ ] Cross-platform tested (if applicable)
 
 **Known Limitations:**
+- E2E Playwright tests were out of scope for the initial implementation.
+- Scope-variable completion (variables declared in the REPL session) is follow-on work.
 
 **Future Improvements:**
 - Complete scope-variable completion (variables declared in the REPL session)
