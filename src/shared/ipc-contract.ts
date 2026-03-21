@@ -110,7 +110,6 @@ export interface FeatureListRecord {
 }
 
 export interface SampleFeatureLink {
-  project_id: number;
   sample_hash: string;
   source_hash: string;
   feature_hash: string;
@@ -118,7 +117,6 @@ export interface SampleFeatureLink {
 }
 
 export interface DerivedSampleSummary {
-  project_id: number;
   source_hash: string;
   source_display_name: string | null;
   feature_hash: string;
