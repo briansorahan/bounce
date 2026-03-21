@@ -1,14 +1,16 @@
 import * as assert from "assert";
 import { TabCompletion } from "./renderer/tab-completion.js";
+import type { SampleHashCompletion } from "./shared/ipc-contract.js";
 
 type TestWindow = Window & {
   electron: Window["electron"] & {
-    fsCompletePath: (method: "ls" | "la" | "cd" | "walk", inputPath: string) => Promise<string[]>;
+    fsCompletePath: (method: "ls" | "la" | "cd" | "walk" | "read", inputPath: string) => Promise<string[]>;
+    completeSampleHash: (prefix: string) => Promise<SampleHashCompletion[]>;
   };
 };
 
 function mockFsCompletePath(
-  fn: (method: "ls" | "la" | "cd" | "walk", inputPath: string) => Promise<string[]>,
+  fn: (method: "ls" | "la" | "cd" | "walk" | "read", inputPath: string) => Promise<string[]>,
 ): void {
   const currentWindow = (globalThis as { window?: { electron?: Partial<TestWindow["electron"]> } }).window;
   Object.defineProperty(globalThis, "window", {
@@ -19,6 +21,23 @@ function mockFsCompletePath(
       electron: {
         ...(currentWindow?.electron ?? {}),
         fsCompletePath: fn,
+      },
+    },
+  });
+}
+
+function mockCompleteSampleHash(
+  fn: (prefix: string) => Promise<SampleHashCompletion[]>,
+): void {
+  const currentWindow = (globalThis as { window?: { electron?: Partial<TestWindow["electron"]> } }).window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: {
+      ...(currentWindow ?? {}),
+      electron: {
+        ...(currentWindow?.electron ?? {}),
+        completeSampleHash: fn,
       },
     },
   });
@@ -98,6 +117,7 @@ async function testDotCompletionUsesPrototypeMethods() {
   class SampleNamespaceStub {
     help() {}
     read(_path: string) {}
+    load(_hash: string) {}
     list() {}
     current() {}
     stop() {}
@@ -106,9 +126,10 @@ async function testDotCompletionUsesPrototypeMethods() {
   const c = new TabCompletion();
   c.setApi({ sn: new SampleNamespaceStub() });
   await c.update("sn.", 3);
-  assert.strictEqual(c.matchCount, 5);
+  assert.strictEqual(c.matchCount, 6);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("read()"));
+  assert.ok(ghost.includes("load()"));
   assert.ok(ghost.includes("help()"));
   assert.ok(ghost.includes("stop()"));
 }
@@ -117,6 +138,7 @@ async function testDotCompletionPartialPrototypeMethod() {
   class SampleNamespaceStub {
     help() {}
     read(_path: string) {}
+    load(_hash: string) {}
     list() {}
     current() {}
     stop() {}
@@ -280,6 +302,82 @@ async function testToStringHiddenFromMethodCompletion() {
   assert.strictEqual(c.matchCount, 2);
 }
 
+async function testSnReadPathCompletion() {
+  mockFsCompletePath(async (method, inputPath) => {
+    assert.strictEqual(method, "read");
+    assert.strictEqual(inputPath, "kick");
+    return ["kick.wav"];
+  });
+
+  const c = new TabCompletion();
+  await c.update('sn.read("kick', 13);
+  assert.strictEqual(c.matchCount, 1);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, 'sn.read("kick.wav');
+  }
+}
+
+async function testSnReadNestedPathCompletion() {
+  mockFsCompletePath(async (method, inputPath) => {
+    assert.strictEqual(method, "read");
+    assert.strictEqual(inputPath, "loop");
+    return ["loop.wav", "loop.flac"];
+  });
+
+  const c = new TabCompletion();
+  await c.update('vis.waveform(sn.read("loop', 26);
+  assert.strictEqual(c.matchCount, 2);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("loop.wav"));
+  assert.ok(ghost.includes("loop.flac"));
+}
+
+async function testSnLoadHashCompletion() {
+  mockCompleteSampleHash(async (prefix) => {
+    assert.strictEqual(prefix, "a1b2");
+    return [
+      { hash: "a1b2c3d4", filePath: "/path/to/kick.wav" },
+      { hash: "a1b2e5f6", filePath: "/path/to/snare.wav" },
+    ];
+  });
+
+  const c = new TabCompletion();
+  await c.update('sn.load("a1b2', 13);
+  assert.strictEqual(c.matchCount, 2);
+  const ghost = c.ghostText();
+  assert.ok(ghost.includes("a1b2c3d4 kick.wav"));
+  assert.ok(ghost.includes("a1b2e5f6 snare.wav"));
+}
+
+async function testSnLoadHashAcceptInsertsOnlyHash() {
+  mockCompleteSampleHash(async () => {
+    return [{ hash: "a1b2c3d4", filePath: "/path/to/kick.wav" }];
+  });
+
+  const c = new TabCompletion();
+  await c.update('sn.load("a1b2', 13);
+  assert.strictEqual(c.matchCount, 1);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, 'sn.load("a1b2c3d4');
+  }
+}
+
+async function testSnLoadHashNoFilePath() {
+  mockCompleteSampleHash(async () => {
+    return [{ hash: "deadbeef", filePath: null }];
+  });
+
+  const c = new TabCompletion();
+  await c.update('sn.load("dead', 13);
+  assert.strictEqual(c.matchCount, 1);
+  const ghost = c.ghostText();
+  assert.ok(!ghost.includes(" "), "ghost text should not have trailing label for null filePath");
+}
+
 const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
   ["single match namespace", testSingleMatchNamespace],
@@ -297,6 +395,11 @@ const tests: Array<[string, () => Promise<void>]> = [
   ["project dot completion", testProjectDotCompletion],
   ["env dot completion", testEnvDotCompletion],
   ["path completion scopes to fs string", testPathCompletionScopesToFsString],
+  ["sn.read triggers path completion", testSnReadPathCompletion],
+  ["sn.read nested in vis.waveform triggers path completion", testSnReadNestedPathCompletion],
+  ["sn.load triggers hash completion", testSnLoadHashCompletion],
+  ["sn.load accept inserts only hash", testSnLoadHashAcceptInsertsOnlyHash],
+  ["sn.load hash completion with null filePath", testSnLoadHashNoFilePath],
   ["clearDebug hidden from global completion", testClearDebugHiddenFromGlobalCompletion],
   ["helpFactory hidden from method completion", testHelpFactoryHiddenFromMethodCompletion],
   ["toString hidden from method completion", testToStringHiddenFromMethodCompletion],

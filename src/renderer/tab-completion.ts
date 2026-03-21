@@ -1,16 +1,18 @@
 import { BOUNCE_GLOBALS, COMPLETION_HIDDEN_GLOBALS } from "./repl-evaluator.js";
 import { getCallablePropertyNames } from "./runtime-introspection.js";
+import type { SampleHashCompletion } from "../shared/ipc-contract.js";
 
 export type CompletionAction =
   | { kind: "accept"; newBuffer: string; newCursorPosition: number }
   | { kind: "redraw" };
 
-type FsPathMethod = "ls" | "la" | "cd" | "walk";
+type FsPathMethod = "ls" | "la" | "cd" | "walk" | "read";
 
 type CompletionContext =
   | { kind: "global" }
   | { kind: "method" }
-  | { kind: "path"; prefix: string };
+  | { kind: "path"; prefix: string }
+  | { kind: "hash"; prefix: string; labels: Map<string, string> };
 
 export class TabCompletion {
   private readonly candidates: string[];
@@ -52,6 +54,20 @@ export class TabCompletion {
     }
 
     const text = buffer.slice(0, cursorPosition);
+
+    const hashContext = this.extractHashContext(text);
+    if (hashContext !== null) {
+      const completions = await this.getSampleHashMatches(hashContext.prefix);
+      const labels = new Map<string, string>();
+      const hashes: string[] = [];
+      for (const c of completions) {
+        const label = c.filePath?.split("/").pop() ?? "";
+        labels.set(c.hash, label);
+        hashes.push(c.hash);
+      }
+      this.applyMatches(requestId, hashes, { kind: "hash", prefix: hashContext.prefix, labels });
+      return;
+    }
 
     const pathContext = this.extractFsPathContext(text);
     if (pathContext !== null) {
@@ -127,9 +143,10 @@ export class TabCompletion {
     }
 
     const prefix = this.getActivePrefix();
+    const isStringArg = this.context.kind === "path" || this.context.kind === "hash";
 
     if (this.matches.length === 1) {
-      const suffix = this.matches[0].slice(prefix.length) + (this.context.kind === "path" ? "" : "()");
+      const suffix = this.matches[0].slice(prefix.length) + (isStringArg ? "" : "()");
       this.ghostLines = 0;
       return `\x1b7\x1b[90m${suffix}\x1b[0m\x1b8`;
     }
@@ -137,7 +154,13 @@ export class TabCompletion {
     this.ghostLines = this.matches.length;
     let result = "\x1b7";
     for (let i = 0; i < this.matches.length; i++) {
-      const label = this.matches[i] + (this.context.kind === "path" ? "" : "()");
+      let label: string;
+      if (this.context.kind === "hash") {
+        const meta = this.context.labels.get(this.matches[i]) ?? "";
+        label = meta ? `${this.matches[i]} ${meta}` : this.matches[i];
+      } else {
+        label = this.matches[i] + (isStringArg ? "" : "()");
+      }
       if (i === this.selectedIndex) {
         result += `\r\n\x1b[1;36m> ${label}\x1b[0m`;
       } else {
@@ -173,6 +196,9 @@ export class TabCompletion {
     if (this.context.kind === "path") {
       return this.context.prefix;
     }
+    if (this.context.kind === "hash") {
+      return this.context.prefix;
+    }
     if (this.context.kind === "method") {
       const m = text.match(/\.([A-Za-z_$][A-Za-z0-9_$]*)$/);
       return m ? m[1] : "";
@@ -196,10 +222,11 @@ export class TabCompletion {
       this.lastCursorPosition - prefix.length,
     );
     const after = this.lastBuffer.slice(this.lastCursorPosition);
-    const suffix = this.context.kind === "path" ? "" : "()";
+    const isStringArg = this.context.kind === "path" || this.context.kind === "hash";
+    const suffix = isStringArg ? "" : "()";
     const newBuffer = base + fullName + suffix + after;
     const newCursorPosition =
-      base.length + fullName.length + (this.context.kind === "path" ? 0 : 1);
+      base.length + fullName.length + (isStringArg ? 0 : 1);
     return { kind: "accept", newBuffer, newCursorPosition };
   }
 
@@ -225,6 +252,9 @@ export class TabCompletion {
       this.context.kind !== context.kind ||
       (this.context.kind === "path" &&
         context.kind === "path" &&
+        this.context.prefix !== context.prefix) ||
+      (this.context.kind === "hash" &&
+        context.kind === "hash" &&
         this.context.prefix !== context.prefix);
 
     if (matchesChanged || contextChanged) {
@@ -240,15 +270,24 @@ export class TabCompletion {
   }
 
   private extractFsPathContext(text: string): { method: FsPathMethod; prefix: string } | null {
-    const match = text.match(/\bfs\.(ls|la|cd|walk)\(\s*(["'])([^"']*)$/);
+    const match = text.match(/\b(?:fs\.(ls|la|cd|walk)|sn\.read)\(\s*(["'])([^"']*)$/);
     if (!match) {
       return null;
     }
 
     return {
-      method: match[1] as FsPathMethod,
+      method: (match[1] ?? "read") as FsPathMethod,
       prefix: match[3],
     };
+  }
+
+  private extractHashContext(text: string): { prefix: string } | null {
+    const match = text.match(/\bsn\.load\(\s*(["'])([^"']*)$/);
+    if (!match) {
+      return null;
+    }
+
+    return { prefix: match[2] };
   }
 
   private async getFsPathMatches(method: FsPathMethod, prefix: string): Promise<string[]> {
@@ -257,5 +296,13 @@ export class TabCompletion {
     }
 
     return window.electron.fsCompletePath(method, prefix);
+  }
+
+  private async getSampleHashMatches(prefix: string): Promise<SampleHashCompletion[]> {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return window.electron.completeSampleHash(prefix);
   }
 }

@@ -192,7 +192,8 @@ export class SampleListResult extends HelpableResult {
 
 export interface SampleNamespaceBindings {
   help: HelpFactory;
-  read: (pathOrHash: string) => Promise<Sample>;
+  read: (path: string) => Promise<Sample>;
+  load: (hash: string) => Promise<Sample>;
   list: () => Promise<SampleListResult>;
   current: () => Promise<Sample | null>;
   stop: () => BounceResult;
@@ -208,8 +209,12 @@ export class SampleNamespace extends HelpableResult {
     super(display, bindings.help);
   }
 
-  read(pathOrHash: string): SamplePromise {
-    return new SamplePromise(this.bindings.read(pathOrHash));
+  read(path: string): SamplePromise {
+    return new SamplePromise(this.bindings.read(path));
+  }
+
+  load(hash: string): SamplePromise {
+    return new SamplePromise(this.bindings.load(hash));
   }
 
   list(): Promise<SampleListResult> {

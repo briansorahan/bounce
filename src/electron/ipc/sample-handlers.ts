@@ -30,6 +30,23 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
     }
   });
 
+  ipcMain.handle("complete-sample-hash", async (_event, prefix: string) => {
+    try {
+      if (!deps.dbManager) {
+        return [];
+      }
+      const samples = deps.dbManager.listSamples();
+      return samples
+        .filter((s) => s.hash.startsWith(prefix))
+        .map((s) => ({
+          hash: s.hash.substring(0, 8),
+          filePath: s.file_path,
+        }));
+    } catch {
+      return [];
+    }
+  });
+
   ipcMain.handle("get-sample-by-name", async (_event, name: string) => {
     if (!deps.dbManager) return null;
     const sample = deps.dbManager.getSampleByPath(name);

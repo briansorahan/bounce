@@ -48,15 +48,19 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     return filePath?.split("/").pop() ?? hash.substring(0, 8);
   }
 
-  function ensureSupportedInput(fileOrHash: string): void {
+  function ensureSupportedInput(filePath: string): void {
     const isHash =
-      /^[0-9a-f]{8,}$/i.test(fileOrHash) &&
-      !fileOrHash.includes("/") &&
-      !fileOrHash.includes("\\");
+      /^[0-9a-f]{8,}$/i.test(filePath) &&
+      !filePath.includes("/") &&
+      !filePath.includes("\\");
 
-    if (isHash) return;
+    if (isHash) {
+      throw new Error(
+        `sn.read() accepts file paths only. Use sn.load("${filePath}") to load a sample by hash.`,
+      );
+    }
 
-    const ext = fileOrHash.toLowerCase().substring(fileOrHash.lastIndexOf("."));
+    const ext = filePath.toLowerCase().substring(filePath.lastIndexOf("."));
     if (!supportedExtensions.includes(ext)) {
       throw new Error("Unsupported file format. Supported: WAV, MP3, OGG, FLAC, M4A, AAC, OPUS");
     }
@@ -218,7 +222,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
           { help: loopHelpText },
         ),
         stop: () => stop(bound),
-        display: () => display(bound.hash),
+        display: () => loadByHash(bound.hash),
         slice: (options) => slice(bound, options),
         sep: (options) => sep(bound, options),
         granularize: (options) => granularize(bound, options),
@@ -332,15 +336,15 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     return bound;
   }
 
-  async function display(fileOrHash: string): Promise<Sample> {
-    ensureSupportedInput(fileOrHash);
+  async function display(filePath: string): Promise<Sample> {
+    ensureSupportedInput(filePath);
 
-    const audioFileData = await window.electron.readAudioFile(fileOrHash);
+    const audioFileData = await window.electron.readAudioFile(filePath);
     const audio = {
       audioData: audioFileData.channelData,
       sampleRate: audioFileData.sampleRate,
       duration: audioFileData.duration,
-      filePath: audioFileData.filePath ?? fileOrHash,
+      filePath: audioFileData.filePath ?? filePath,
       hash: audioFileData.hash,
       visualize: () => "Visualization updated",
       analyzeOnsetSlice: async (options?: OnsetSliceOptions) => {
@@ -356,13 +360,47 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       {
         id: existing?.id,
         hash: audioFileData.hash,
-        filePath: audioFileData.filePath ?? fileOrHash,
+        filePath: audioFileData.filePath ?? filePath,
         sampleRate: audioFileData.sampleRate,
         channels: existing?.channels ?? 1,
         duration: audioFileData.duration,
       },
       [
-        `\x1b[32mLoaded: ${sampleLabel(audioFileData.filePath ?? fileOrHash, audioFileData.hash)}\x1b[0m`,
+        `\x1b[32mLoaded: ${sampleLabel(audioFileData.filePath ?? filePath, audioFileData.hash)}\x1b[0m`,
+        `\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`,
+      ].join("\n"),
+    );
+  }
+
+  async function loadByHash(hash: string): Promise<Sample> {
+    const audioFileData = await window.electron.readAudioFile(hash);
+    const audio = {
+      audioData: audioFileData.channelData,
+      sampleRate: audioFileData.sampleRate,
+      duration: audioFileData.duration,
+      filePath: audioFileData.filePath ?? undefined,
+      hash: audioFileData.hash,
+      visualize: () => "Visualization updated",
+      analyzeOnsetSlice: async (options?: OnsetSliceOptions) => {
+        const slices = await window.electron.analyzeOnsetSlice(audioFileData.channelData, options);
+        return { slices, visualize: () => "Slice markers updated" };
+      },
+    };
+
+    audioManager.setCurrentAudio(audio);
+
+    const existing = await window.electron.getSampleByHash(audioFileData.hash);
+    return bindSample(
+      {
+        id: existing?.id,
+        hash: audioFileData.hash,
+        filePath: audioFileData.filePath ?? undefined,
+        sampleRate: audioFileData.sampleRate,
+        channels: existing?.channels ?? 1,
+        duration: audioFileData.duration,
+      },
+      [
+        `\x1b[32mLoaded: ${sampleLabel(audioFileData.filePath ?? undefined, audioFileData.hash)}\x1b[0m`,
         `\x1b[32mHash: ${audioFileData.hash.substring(0, 8)}\x1b[0m`,
       ].join("\n"),
     );
@@ -389,11 +427,15 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     let loadedSample: Sample | undefined;
 
     if (typeof source === "string") {
-      loadedSample = await display(source);
+      const isHash =
+        /^[0-9a-f]{8,}$/i.test(source) &&
+        !source.includes("/") &&
+        !source.includes("\\");
+      loadedSample = isHash ? await loadByHash(source) : await display(source);
     } else if (source !== undefined) {
       const resolved = await resolveSample(source);
       if (audioManager.getCurrentAudio()?.hash !== resolved.hash) {
-        loadedSample = await display(resolved.hash);
+        loadedSample = await loadByHash(resolved.hash);
       } else {
         loadedSample = resolved;
       }
@@ -460,11 +502,11 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     options?: AnalyzeOptions,
   ): Promise<OnsetFeature> {
     const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-    const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
+    const sample = resolvedSource instanceof Sample ? resolvedSource : await loadByHash(getCurrentHash());
     const opts = resolvedSource instanceof Sample ? options : (resolvedSource as AnalyzeOptions | undefined);
 
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
-      await display(sample.hash);
+      await loadByHash(sample.hash);
     }
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
@@ -488,11 +530,11 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     options?: NmfOptions,
   ): Promise<NmfFeature> {
     const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-    const sample = resolvedSource instanceof Sample ? resolvedSource : await display(getCurrentHash());
+    const sample = resolvedSource instanceof Sample ? resolvedSource : await loadByHash(getCurrentHash());
     const opts = resolvedSource instanceof Sample ? options : (resolvedSource as NmfOptions | undefined);
 
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
-      await display(sample.hash);
+      await loadByHash(sample.hash);
     }
     const audio = audioManager.getCurrentAudio();
     if (!audio?.hash) {
@@ -983,7 +1025,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
 
       let hash: string;
       if (typeof resolvedSource === "string") {
-        const loaded = await display(resolvedSource);
+        const loaded = await loadByHash(resolvedSource);
         hash = loaded.hash;
       } else if (resolvedSource instanceof Sample) {
         hash = resolvedSource.hash;
@@ -1138,24 +1180,27 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     [
       "\x1b[1;36msn\x1b[0m — sample namespace",
       "",
-      "  sn.read(pathOrHash)   Load a sample and return a Sample object",
+      "  sn.read(path)         Load a sample from disk and return a Sample object",
+      "  sn.load(hash)         Load a stored sample by hash and return a Sample object",
       "  sn.list()             List stored samples and features",
       "  sn.current()          Return the currently loaded sample, if any",
       "  sn.stop()             Stop all active sample playback",
       "  sn.inputs()           List available audio input devices",
       "  sn.dev(index)         Open an audio input device for recording",
       "",
-      "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), const samp = sn.read('x'); samp.help()",
+      "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), sn.load.help()",
     ].join("\n"),
     {
       help: () => new BounceResult([
         "\x1b[1;36msn\x1b[0m — sample namespace",
         "",
-        "  Use sn.read() to create Sample objects. Samples then expose methods for",
-        "  playback, analysis, resynthesis, and help.",
+        "  Use sn.read() to load audio files from disk. Use sn.load() to reload",
+        "  a stored sample by hash. Samples expose methods for playback, analysis,",
+        "  resynthesis, and help.",
         "  Use sn.inputs() and sn.dev() to record from a microphone or audio interface.",
         "",
         "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
+        "           const stored = sn.load(\"a1b2c3d4\")",
         "           samp.loop()",
         "           sn.stop()",
         "           const feature = samp.nmf()",
@@ -1165,7 +1210,8 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         "           const h = mic.record(\"take1\")",
         "           h.stop()",
       ].join("\n")),
-      read: (pathOrHash) => display(pathOrHash),
+      read: (path) => display(path),
+      load: (hash) => loadByHash(hash),
       list: () => list(),
       current: async () => {
         const hash = audioManager.getCurrentAudio()?.hash;
@@ -1200,13 +1246,23 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
 
   (sn.read as typeof sn.read & { help?: () => BounceResult }).help = () =>
     new BounceResult([
-      "\x1b[1;36msn.read(pathOrHash)\x1b[0m",
+      "\x1b[1;36msn.read(path)\x1b[0m",
       "",
-      "  Load an audio file or stored sample hash into the shared sample context",
-      "  and return a Sample object. Visualization is explicit via vis.",
+      "  Load an audio file from disk and return a Sample object.",
+      "  The sample is stored in the project database for future access via sn.load().",
       "",
       "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"kick.wav\")",
-      "           const samp = sn.read(\"a1b2c3d4\")",
+      "           const samp = sn.read(\"samples/loop.flac\")",
+    ].join("\n"));
+
+  (sn.load as typeof sn.load & { help?: () => BounceResult }).help = () =>
+    new BounceResult([
+      "\x1b[1;36msn.load(hash)\x1b[0m",
+      "",
+      "  Load a stored sample by its hash (or hash prefix) and return a Sample object.",
+      "  Use sn.list() to see available sample hashes.",
+      "",
+      "  \x1b[90mExample:\x1b[0m  const samp = sn.load(\"a1b2c3d4\")",
     ].join("\n"));
 
   (sn.list as typeof sn.list & { help?: () => BounceResult }).help = () => list.help();

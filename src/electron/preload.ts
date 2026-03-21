@@ -72,6 +72,8 @@ const api: ElectronAPI = {
   listFeatures: () => ipcRenderer.invoke("list-features"),
   getSampleByHash: (hash: string) =>
     ipcRenderer.invoke("get-sample-by-hash", hash),
+  completeSampleHash: (prefix: string) =>
+    ipcRenderer.invoke("complete-sample-hash", prefix),
   sendCommand: (command: string, args: string[]) =>
     ipcRenderer.invoke("send-command", command, args),
   analyzeNMF: (args: string[]) => ipcRenderer.invoke("analyze-nmf", args),
@@ -98,7 +100,7 @@ const api: ElectronAPI = {
   fsLa: (dirPath?: string) => ipcRenderer.invoke("fs-ls", dirPath, true),
   fsCd: (dirPath: string) => ipcRenderer.invoke("fs-cd", dirPath),
   fsPwd: (): Promise<string> => ipcRenderer.invoke("fs-pwd"),
-  fsCompletePath: (method: "ls" | "la" | "cd" | "walk", inputPath: string): Promise<string[]> =>
+  fsCompletePath: (method: "ls" | "la" | "cd" | "walk" | "read", inputPath: string): Promise<string[]> =>
     ipcRenderer.invoke("fs-complete-path", method, inputPath),
   fsGlob: (pattern: string): Promise<string[]> =>
     ipcRenderer.invoke("fs-glob", pattern),

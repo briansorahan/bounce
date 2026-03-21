@@ -28,7 +28,7 @@ export interface WalkEntry {
   type: FileType;
 }
 
-type FsCompletionMethod = "ls" | "la" | "cd" | "walk";
+type FsCompletionMethod = "ls" | "la" | "cd" | "walk" | "read";
 
 function direntToFileType(d: fs.Dirent): FileType {
   if (d.isFile()) return "file";
@@ -86,12 +86,23 @@ async function completeFsPath(
     namePrefix.startsWith(".");
   const dirents = await fs.promises.readdir(resolvedParent, { withFileTypes: true });
 
-  return dirents
-    .filter((d) => d.isDirectory())
-    .filter((d) => includeHidden || !d.name.startsWith("."))
-    .filter((d) => d.name.startsWith(namePrefix))
-    .map((d) => `${parentPath}${d.name}/`)
-    .sort((a, b) => a.localeCompare(b));
+  const results: string[] = [];
+
+  for (const d of dirents) {
+    if (!includeHidden && d.name.startsWith(".")) continue;
+    if (!d.name.startsWith(namePrefix)) continue;
+
+    if (d.isDirectory()) {
+      results.push(`${parentPath}${d.name}/`);
+    } else if (method === "read" && d.isFile()) {
+      const ext = path.extname(d.name).toLowerCase();
+      if ((AUDIO_EXTENSIONS as readonly string[]).includes(ext)) {
+        results.push(`${parentPath}${d.name}`);
+      }
+    }
+  }
+
+  return results.sort((a, b) => a.localeCompare(b));
 }
 
 export function registerFilesystemHandlers(deps: HandlerDeps): void {
