@@ -14,14 +14,14 @@ Bounce is an Electron desktop application with three OS-level processes that com
 │         ▲ ipcMain.handle / .on          ▲ MessagePort            │
 │         │                               │                        │
 │         ▼                               ▼                        │
-│  ┌─────────────────────┐   ┌──────────────────────────────┐     │
+│  ┌─────────────────────┐   ┌───────────────────────────────┐     │
 │  │   Renderer Process  │   │  Audio Engine Utility Process │     │
-│  │                     │   │                              │     │
-│  │  xterm.js REPL      │   │  Native playback             │     │
-│  │  Canvas overlays    │   │  (audio_engine_native)       │     │
-│  │  Bounce API / NS    │   │  Instrument voice mgmt       │     │
-│  │  Web Audio (record) │   │  Playback telemetry          │     │
-│  └─────────────────────┘   └──────────────────────────────┘     │
+│  │                     │   │                               │     │
+│  │  xterm.js REPL      │   │  Native playback              │     │
+│  │  Canvas overlays    │   │  (audio_engine_native)        │     │
+│  │  Bounce API / NS    │   │  Instrument voice mgmt        │     │
+│  │  Web Audio (record) │   │  Playback telemetry           │     │
+│  └─────────────────────┘   └───────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
