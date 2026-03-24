@@ -31,6 +31,16 @@ private:
     Napi::Value SubscribeInstrumentTelemetry(const Napi::CallbackInfo& info);
     Napi::Value UnsubscribeInstrumentTelemetry(const Napi::CallbackInfo& info);
 
+    // Mixer API
+    Napi::Value MixerSetChannelGain(const Napi::CallbackInfo& info);
+    Napi::Value MixerSetChannelPan(const Napi::CallbackInfo& info);
+    Napi::Value MixerSetChannelMute(const Napi::CallbackInfo& info);
+    Napi::Value MixerSetChannelSolo(const Napi::CallbackInfo& info);
+    Napi::Value MixerAttachInstrument(const Napi::CallbackInfo& info);
+    Napi::Value MixerDetachChannel(const Napi::CallbackInfo& info);
+    Napi::Value MixerSetMasterGain(const Napi::CallbackInfo& info);
+    Napi::Value MixerSetMasterMute(const Napi::CallbackInfo& info);
+
     std::unique_ptr<AudioEngine> engine_;
 
     // Threadsafe functions for telemetry callbacks
@@ -55,6 +65,15 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("setInstrumentParam",            &AudioEngineWrapper::SetInstrumentParam),
         InstanceMethod("subscribeInstrumentTelemetry",  &AudioEngineWrapper::SubscribeInstrumentTelemetry),
         InstanceMethod("unsubscribeInstrumentTelemetry",&AudioEngineWrapper::UnsubscribeInstrumentTelemetry),
+        // Mixer API
+        InstanceMethod("mixerSetChannelGain",     &AudioEngineWrapper::MixerSetChannelGain),
+        InstanceMethod("mixerSetChannelPan",      &AudioEngineWrapper::MixerSetChannelPan),
+        InstanceMethod("mixerSetChannelMute",     &AudioEngineWrapper::MixerSetChannelMute),
+        InstanceMethod("mixerSetChannelSolo",     &AudioEngineWrapper::MixerSetChannelSolo),
+        InstanceMethod("mixerAttachInstrument",   &AudioEngineWrapper::MixerAttachInstrument),
+        InstanceMethod("mixerDetachChannel",      &AudioEngineWrapper::MixerDetachChannel),
+        InstanceMethod("mixerSetMasterGain",      &AudioEngineWrapper::MixerSetMasterGain),
+        InstanceMethod("mixerSetMasterMute",      &AudioEngineWrapper::MixerSetMasterMute),
     });
 
     Napi::FunctionReference* ctor = new Napi::FunctionReference();
@@ -343,6 +362,102 @@ Napi::Value AudioEngineWrapper::UnsubscribeInstrumentTelemetry(const Napi::Callb
         return env.Undefined();
     }
     engine_->unsubscribeInstrumentTelemetry(info[0].As<Napi::String>());
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// Mixer API
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::MixerSetChannelGain(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "mixerSetChannelGain(channelIndex, gainDb) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetChannelGain(info[0].As<Napi::Number>().Int32Value(),
+                                  info[1].As<Napi::Number>().FloatValue());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerSetChannelPan(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "mixerSetChannelPan(channelIndex, pan) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetChannelPan(info[0].As<Napi::Number>().Int32Value(),
+                                 info[1].As<Napi::Number>().FloatValue());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerSetChannelMute(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "mixerSetChannelMute(channelIndex, mute) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetChannelMute(info[0].As<Napi::Number>().Int32Value(),
+                                  info[1].As<Napi::Boolean>().Value());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerSetChannelSolo(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "mixerSetChannelSolo(channelIndex, solo) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetChannelSolo(info[0].As<Napi::Number>().Int32Value(),
+                                  info[1].As<Napi::Boolean>().Value());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerAttachInstrument(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2) {
+        Napi::TypeError::New(env, "mixerAttachInstrument(channelIndex, instrumentId) requires 2 arguments")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerAttachInstrument(info[0].As<Napi::Number>().Int32Value(),
+                                    info[1].As<Napi::String>());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerDetachChannel(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env, "mixerDetachChannel(channelIndex) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerDetachChannel(info[0].As<Napi::Number>().Int32Value());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerSetMasterGain(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env, "mixerSetMasterGain(gainDb) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetMasterGain(info[0].As<Napi::Number>().FloatValue());
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::MixerSetMasterMute(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1) {
+        Napi::TypeError::New(env, "mixerSetMasterMute(mute) requires 1 argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    engine_->mixerSetMasterMute(info[0].As<Napi::Boolean>().Value());
     return env.Undefined();
 }
 

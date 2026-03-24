@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <thread>
 
@@ -106,18 +107,26 @@ void AudioEngine::play(const std::string& hash, const float* pcm,
 
     {
         std::lock_guard<std::mutex> lk(controlMutex_);
-        controlQueue_.push_back({ControlMsg::Op::Add, proc, ""});
+        ControlMsg msg;
+        msg.op = ControlMsg::Op::Add;
+        msg.processor = proc;
+        controlQueue_.push_back(std::move(msg));
     }
 }
 
 void AudioEngine::stopSample(const std::string& hash) {
     std::lock_guard<std::mutex> lk(controlMutex_);
-    controlQueue_.push_back({ControlMsg::Op::Remove, nullptr, hash});
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::Remove;
+    msg.hash = hash;
+    controlQueue_.push_back(std::move(msg));
 }
 
 void AudioEngine::stopAll() {
     std::lock_guard<std::mutex> lk(controlMutex_);
-    controlQueue_.push_back({ControlMsg::Op::RemoveAll, nullptr, ""});
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::RemoveAll;
+    controlQueue_.push_back(std::move(msg));
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +232,79 @@ void AudioEngine::unsubscribeInstrumentTelemetry(const std::string& instrumentId
     controlQueue_.push_back(std::move(msg));
 }
 
+// ---------------------------------------------------------------------------
+// Mixer API (called from JS / utility-process thread)
+// ---------------------------------------------------------------------------
+void AudioEngine::mixerSetChannelGain(int channelIndex, float gainDb) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetChannelGain;
+    msg.channelIndex = channelIndex;
+    msg.paramValue = gainDb;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerSetChannelPan(int channelIndex, float pan) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetChannelPan;
+    msg.channelIndex = channelIndex;
+    msg.paramValue = pan;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerSetChannelMute(int channelIndex, bool mute) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetChannelMute;
+    msg.channelIndex = channelIndex;
+    msg.paramValue = mute ? 1.f : 0.f;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerSetChannelSolo(int channelIndex, bool solo) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetChannelSolo;
+    msg.channelIndex = channelIndex;
+    msg.paramValue = solo ? 1.f : 0.f;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerAttachInstrument(int channelIndex,
+                                         const std::string& instrumentId) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerAttachInstrument;
+    msg.channelIndex = channelIndex;
+    msg.instrumentId = instrumentId;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerDetachChannel(int channelIndex) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerDetachChannel;
+    msg.channelIndex = channelIndex;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerSetMasterGain(float gainDb) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetMasterGain;
+    msg.paramValue = gainDb;
+    controlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::mixerSetMasterMute(bool mute) {
+    std::lock_guard<std::mutex> lk(controlMutex_);
+    ControlMsg msg;
+    msg.op = ControlMsg::Op::MixerSetMasterMute;
+    msg.paramValue = mute ? 1.f : 0.f;
+    controlQueue_.push_back(std::move(msg));
+}
+
 Instrument* AudioEngine::findInstrument(const std::string& id) {
     for (auto& inst : instruments_) {
         if (inst->id() == id) return inst.get();
@@ -298,6 +380,11 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
                 }
                 break;
             case ControlMsg::Op::FreeInstrument:
+                // Also clear any channel attachment pointing at this instrument
+                for (auto& ch : channels_) {
+                    if (ch.attachedInstrumentId == msg.instrumentId)
+                        ch.attachedInstrumentId.clear();
+                }
                 instruments_.erase(
                     std::remove_if(instruments_.begin(), instruments_.end(),
                                    [&](const auto& i) { return i->id() == msg.instrumentId; }),
@@ -333,54 +420,141 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
                 if (auto* inst = findInstrument(msg.instrumentId))
                     inst->setTelemetryEnabled(false);
                 break;
+            // Mixer ops
+            case ControlMsg::Op::MixerSetChannelGain:
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumChannels)
+                    channels_[msg.channelIndex].gainDb = msg.paramValue;
+                break;
+            case ControlMsg::Op::MixerSetChannelPan:
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumUserChannels)
+                    channels_[msg.channelIndex].pan = msg.paramValue;
+                break;
+            case ControlMsg::Op::MixerSetChannelMute:
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumChannels)
+                    channels_[msg.channelIndex].mute = (msg.paramValue != 0.f);
+                break;
+            case ControlMsg::Op::MixerSetChannelSolo:
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumUserChannels)
+                    channels_[msg.channelIndex].solo = (msg.paramValue != 0.f);
+                break;
+            case ControlMsg::Op::MixerAttachInstrument:
+                // Clear any prior channel attachment for this instrument
+                for (auto& ch : channels_)
+                    if (ch.attachedInstrumentId == msg.instrumentId)
+                        ch.attachedInstrumentId.clear();
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumUserChannels)
+                    channels_[msg.channelIndex].attachedInstrumentId = msg.instrumentId;
+                break;
+            case ControlMsg::Op::MixerDetachChannel:
+                if (msg.channelIndex >= 0 && msg.channelIndex < kNumUserChannels)
+                    channels_[msg.channelIndex].attachedInstrumentId.clear();
+                break;
+            case ControlMsg::Op::MixerSetMasterGain:
+                master_.gainDb = msg.paramValue;
+                break;
+            case ControlMsg::Op::MixerSetMasterMute:
+                master_.mute = (msg.paramValue != 0.f);
+                break;
             }
         }
         controlQueue_.clear();
     }
 
-    // Zero output buffer
-    const int numChannels = 2;
-    std::memset(output, 0, frameCount * numChannels * sizeof(float));
+    // Zero the output buffer
+    std::memset(output, 0, frameCount * 2 * sizeof(float));
 
-    // Build per-channel pointers into the interleaved output buffer
-    // We use a temporary de-interleaved buffer then mix back
-    static thread_local std::vector<float> ch0, ch1;
-    ch0.assign(frameCount, 0.f);
-    ch1.assign(frameCount, 0.f);
-    float* chPtrs[2] = { ch0.data(), ch1.data() };
+    // Size (or resize) per-channel scratch buffers
+    for (int ch = 0; ch < kNumChannels; ++ch) {
+        chanBufL_[ch].assign(frameCount, 0.f);
+        chanBufR_[ch].assign(frameCount, 0.f);
+    }
+    masterBufL_.assign(frameCount, 0.f);
+    masterBufR_.assign(frameCount, 0.f);
 
-    // Process each active processor (legacy path)
-    for (auto it = processors_.begin(); it != processors_.end(); ) {
-        (*it)->process(chPtrs, numChannels, static_cast<int>(frameCount));
+    // Render legacy processors into the preview channel
+    {
+        float* previewPtrs[2] = { chanBufL_[kPreviewChannelIdx].data(),
+                                   chanBufR_[kPreviewChannelIdx].data() };
+        for (auto it = processors_.begin(); it != processors_.end(); ) {
+            (*it)->process(previewPtrs, 2, static_cast<int>(frameCount));
 
-        // Emit position telemetry once per block
-        {
-            TelemetryEvent ev;
-            ev.kind              = TelemetryEvent::Kind::Position;
-            ev.hash              = (*it)->hash();
-            ev.positionInSamples = (*it)->positionInSamples();
-            int w = ringWritePos_.load(std::memory_order_relaxed);
-            ring_[w % kRingSize] = std::move(ev);
-            ringWritePos_.store(w + 1, std::memory_order_release);
-        }
+            // Emit position telemetry once per block
+            {
+                TelemetryEvent ev;
+                ev.kind              = TelemetryEvent::Kind::Position;
+                ev.hash              = (*it)->hash();
+                ev.positionInSamples = (*it)->positionInSamples();
+                int w = ringWritePos_.load(std::memory_order_relaxed);
+                ring_[w % kRingSize] = std::move(ev);
+                ringWritePos_.store(w + 1, std::memory_order_release);
+            }
 
-        if ((*it)->isFinished()) {
-            it = processors_.erase(it);
-        } else {
-            ++it;
+            if ((*it)->isFinished()) {
+                it = processors_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 
-    // Process each active instrument
+    // Render instruments: attached instruments go to their channel buffer;
+    // unattached instruments fall back to the preview channel
     for (auto& inst : instruments_) {
-        inst->process(chPtrs, numChannels, static_cast<int>(frameCount));
+        int targetCh = kPreviewChannelIdx;
+        for (int ch = 0; ch < kNumUserChannels; ++ch) {
+            if (channels_[ch].attachedInstrumentId == inst->id()) {
+                targetCh = ch;
+                break;
+            }
+        }
+        float* chPtrs[2] = { chanBufL_[targetCh].data(),
+                              chanBufR_[targetCh].data() };
+        inst->process(chPtrs, 2, static_cast<int>(frameCount));
     }
 
-    // Mix de-interleaved back to interleaved output
-    float* out = output;
-    for (unsigned int f = 0; f < frameCount; ++f) {
-        *out++ = ch0[f];
-        *out++ = ch1[f];
+    // Solo-in-place: check if any user channel has solo enabled
+    bool anySolo = false;
+    for (int ch = 0; ch < kNumUserChannels; ++ch) {
+        if (channels_[ch].solo) { anySolo = true; break; }
+    }
+
+    // Mix each channel into the master bus with gain and pan applied
+    for (int ch = 0; ch < kNumChannels; ++ch) {
+        const ChannelStrip& strip = channels_[ch];
+
+        // Determine effective mute: explicit mute, or solo-in-place exclusion
+        bool effectiveMute = strip.mute;
+        if (anySolo && ch < kNumUserChannels && !strip.solo)
+            effectiveMute = true;
+        if (effectiveMute) continue;
+
+        const float linGain = std::pow(10.f, strip.gainDb / 20.f);
+
+        float leftGain, rightGain;
+        if (ch < kNumUserChannels) {
+            // Constant-power pan law: theta in [0, pi/2]
+            const float theta = (strip.pan + 1.f) * 0.7853982f; // (pan+1)*pi/4
+            leftGain  = linGain * std::cos(theta);
+            rightGain = linGain * std::sin(theta);
+        } else {
+            // Preview channel: no pan control
+            leftGain = rightGain = linGain;
+        }
+
+        for (unsigned int f = 0; f < frameCount; ++f) {
+            masterBufL_[f] += chanBufL_[ch][f] * leftGain;
+            masterBufR_[f] += chanBufR_[ch][f] * rightGain;
+        }
+    }
+
+    // Apply master bus gain and write to output
+    if (!master_.mute) {
+        const float masterGain = std::pow(10.f, master_.gainDb / 20.f);
+        float* out = output;
+        for (unsigned int f = 0; f < frameCount; ++f) {
+            *out++ = masterBufL_[f] * masterGain;
+            *out++ = masterBufR_[f] * masterGain;
+        }
     }
 }
 
