@@ -8,3 +8,4 @@ export { buildGlobals } from "./globals.js";
 export { buildVisNamespace } from "./vis-namespace.js";
 export { buildSampleNamespace } from "./sample-namespace.js";
 export { buildInstNamespace } from "./instrument-namespace.js";
+export { buildMixerNamespace } from "./mixer-namespace.js";

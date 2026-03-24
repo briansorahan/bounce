@@ -1,5 +1,6 @@
 #pragma once
 #include "audio-processor.h"
+#include <array>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -23,8 +24,15 @@ class AudioEngine {
 public:
     using PositionCallback = std::function<void(const std::string&, int)>;
     using EndedCallback    = std::function<void(const std::string&)>;
+    // channelPeaksL[9], channelPeaksR[9], masterPeakL, masterPeakR (20 floats)
+    using MeterLevelsCallback = std::function<void(const std::array<float, 9>&,
+                                                    const std::array<float, 9>&,
+                                                    float, float)>;
 
-    static constexpr int kMaxProcessors = 32;
+    static constexpr int kMaxProcessors    = 32;
+    static constexpr int kNumUserChannels  = 8;
+    static constexpr int kPreviewChannelIdx = 8; // index of the preview channel
+    static constexpr int kNumChannels      = 9; // 8 user + 1 preview
 
     AudioEngine();
     ~AudioEngine();
@@ -36,7 +44,7 @@ public:
     bool start();
     void stop();
 
-    // Legacy playback API (backward compat)
+    // Legacy playback API (backward compat — routes through preview channel)
     void play(const std::string& hash, const float* pcm, int numSamples,
               double sampleRate, bool loop,
               double loopStartSec = 0.0, double loopEndSec = -1.0);
@@ -60,14 +68,40 @@ public:
     void subscribeInstrumentTelemetry(const std::string& instrumentId);
     void unsubscribeInstrumentTelemetry(const std::string& instrumentId);
 
+    // Mixer API
+    // channelIndex: 0-7 for user channels, 8 for preview channel
+    void mixerSetChannelGain(int channelIndex, float gainDb);
+    void mixerSetChannelPan(int channelIndex, float pan);   // -1.0 .. +1.0
+    void mixerSetChannelMute(int channelIndex, bool mute);
+    void mixerSetChannelSolo(int channelIndex, bool solo);
+    void mixerAttachInstrument(int channelIndex, const std::string& instrumentId);
+    void mixerDetachChannel(int channelIndex);
+    void mixerSetMasterGain(float gainDb);
+    void mixerSetMasterMute(bool mute);
+
     void onPosition(PositionCallback cb);
     void onEnded(EndedCallback cb);
+    void onMixerLevels(MeterLevelsCallback cb);
 
 private:
     // Called on the miniaudio audio callback thread
     static void audioCallback(ma_device* device, void* output,
                               const void* input, unsigned int frameCount);
     void processBlock(float* output, unsigned int frameCount);
+
+    // Per-channel mixer state (audio-thread-only after control queue drain)
+    struct ChannelStrip {
+        float       gainDb = -6.f;
+        float       pan    = 0.f;   // -1.0 (L) .. +1.0 (R)
+        bool        mute   = false;
+        bool        solo   = false;
+        std::string attachedInstrumentId; // empty = unattached
+    };
+
+    struct MasterBus {
+        float gainDb = 0.f;
+        bool  mute   = false;
+    };
 
     // Control messages queued from JS thread, applied at top of each audio block
     struct ControlMsg {
@@ -77,6 +111,15 @@ private:
             InstrumentNoteOn, InstrumentNoteOff, InstrumentStopAll,
             InstrumentLoadSample, InstrumentSetParam,
             SubscribeTelemetry, UnsubscribeTelemetry,
+            // Mixer ops
+            MixerSetChannelGain,
+            MixerSetChannelPan,
+            MixerSetChannelMute,
+            MixerSetChannelSolo,
+            MixerAttachInstrument,
+            MixerDetachChannel,
+            MixerSetMasterGain,
+            MixerSetMasterMute,
         } op;
 
         // Legacy
@@ -96,6 +139,9 @@ private:
         bool loop = false;
         double loopStartSec = 0.0;
         double loopEndSec = -1.0;
+
+        // Mixer fields
+        int channelIndex = 0;
     };
 
     // Simple lock-based queues (not audio-thread-safe for the control queue,
@@ -117,6 +163,16 @@ private:
     Instrument* findInstrument(const std::string& id);
     void setupInstrumentTelemetry(Instrument* inst);
 
+    // Mixer state (audio-thread-only)
+    std::array<ChannelStrip, kNumChannels> channels_;
+    MasterBus                              master_;
+
+    // Per-channel scratch buffers for de-interleaved processing (audio-thread-only)
+    std::array<std::vector<float>, kNumChannels> chanBufL_;
+    std::array<std::vector<float>, kNumChannels> chanBufR_;
+    std::vector<float> masterBufL_;
+    std::vector<float> masterBufR_;
+
     // Telemetry delivery thread
     std::thread   telemetryThread_;
     std::atomic<bool> telemetryRunning_{false};
@@ -124,7 +180,15 @@ private:
 
     PositionCallback positionCb_;
     EndedCallback    endedCb_;
+    MeterLevelsCallback meterLevelsCb_;
     std::mutex       cbMutex_;
+
+    // Per-channel peak levels (written by audio thread, read by telemetry thread)
+    // Index 0-7: user channels, index 8: preview channel
+    std::array<std::atomic<float>, kNumChannels> peakL_{};
+    std::array<std::atomic<float>, kNumChannels> peakR_{};
+    std::atomic<float> masterPeakL_{0.f};
+    std::atomic<float> masterPeakR_{0.f};
 
     // miniaudio device (heap-allocated to avoid including miniaudio.h here)
     struct DeviceDeleter { void operator()(ma_device*) const; };

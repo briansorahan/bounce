@@ -149,6 +149,26 @@ const api: ElectronAPI = {
   unsubscribeInstrumentTelemetry: (instrumentId: string) =>
     ipcRenderer.send("unsubscribe-instrument-telemetry", { instrumentId }),
 
+  // Mixer API (one-way renderer → main)
+  mixerSetChannelGain: (channelIndex: number, gainDb: number) =>
+    ipcRenderer.send("mixer-set-channel-gain", { channelIndex, gainDb }),
+  mixerSetChannelPan: (channelIndex: number, pan: number) =>
+    ipcRenderer.send("mixer-set-channel-pan", { channelIndex, pan }),
+  mixerSetChannelMute: (channelIndex: number, mute: boolean) =>
+    ipcRenderer.send("mixer-set-channel-mute", { channelIndex, mute }),
+  mixerSetChannelSolo: (channelIndex: number, solo: boolean) =>
+    ipcRenderer.send("mixer-set-channel-solo", { channelIndex, solo }),
+  mixerAttachInstrument: (channelIndex: number, instrumentId: string) =>
+    ipcRenderer.send("mixer-attach-instrument", { channelIndex, instrumentId }),
+  mixerDetachChannel: (channelIndex: number) =>
+    ipcRenderer.send("mixer-detach-channel", { channelIndex }),
+  mixerSetMasterGain: (gainDb: number) =>
+    ipcRenderer.send("mixer-set-master-gain", { gainDb }),
+  mixerSetMasterMute: (mute: boolean) =>
+    ipcRenderer.send("mixer-set-master-mute", { mute }),
+  mixerGetState: () =>
+    ipcRenderer.invoke("mixer-get-state"),
+
   // Instrument DB persistence (invoke-based)
   createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) =>
     ipcRenderer.invoke("create-db-instrument", name, kind, config),
@@ -180,6 +200,9 @@ const api: ElectronAPI = {
   },
   onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => {
     ipcRenderer.on("playback-error", (_event, data) => callback(data));
+  },
+  onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => {
+    ipcRenderer.on("mixer-levels", (_event, data) => callback(data));
   },
 };
 

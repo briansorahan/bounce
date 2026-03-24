@@ -316,6 +316,16 @@ interface Window {
     setInstrumentParam: (instrumentId: string, paramId: number, value: number) => void;
     subscribeInstrumentTelemetry: (instrumentId: string) => void;
     unsubscribeInstrumentTelemetry: (instrumentId: string) => void;
+    // Mixer
+    mixerSetChannelGain: (channelIndex: number, gainDb: number) => void;
+    mixerSetChannelPan: (channelIndex: number, pan: number) => void;
+    mixerSetChannelMute: (channelIndex: number, mute: boolean) => void;
+    mixerSetChannelSolo: (channelIndex: number, solo: boolean) => void;
+    mixerAttachInstrument: (channelIndex: number, instrumentId: string) => void;
+    mixerDetachChannel: (channelIndex: number) => void;
+    mixerSetMasterGain: (gainDb: number) => void;
+    mixerSetMasterMute: (mute: boolean) => void;
+    mixerGetState: () => Promise<{ channels: Array<{ channel_idx: number; gain_db: number; pan: number; mute: number; solo: number; instrument_name: string | null }>; master: { gain_db: number; mute: number } | null } | null>;
     // Instrument DB persistence
     createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) => Promise<InstrumentDbRecord>;
     deleteDbInstrument: (name: string) => Promise<boolean>;
@@ -326,6 +336,7 @@ interface Window {
     onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
     onPlaybackEnded: (callback: (hash: string) => void) => void;
     onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;
+    onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => void;
     // Background errors
     getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
     dismissBackgroundError: (id: number) => Promise<boolean>;

@@ -163,6 +163,25 @@ export interface BackgroundErrorRecord {
   created_at: string;
 }
 
+export interface MixerChannelState {
+  channel_idx: number;
+  gain_db: number;
+  pan: number;
+  mute: number;
+  solo: number;
+  instrument_name: string | null;
+}
+
+export interface MixerMasterState {
+  gain_db: number;
+  mute: number;
+}
+
+export interface MixerStateResponse {
+  channels: MixerChannelState[];
+  master: MixerMasterState | null;
+}
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -347,6 +366,17 @@ export const IpcChannel = {
   SetInstrumentParam: "set-instrument-param",
   SubscribeInstrumentTelemetry: "subscribe-instrument-telemetry",
   UnsubscribeInstrumentTelemetry: "unsubscribe-instrument-telemetry",
+
+  // Mixer
+  MixerSetChannelGain: "mixer-set-channel-gain",
+  MixerSetChannelPan: "mixer-set-channel-pan",
+  MixerSetChannelMute: "mixer-set-channel-mute",
+  MixerSetChannelSolo: "mixer-set-channel-solo",
+  MixerAttachInstrument: "mixer-attach-instrument",
+  MixerDetachChannel: "mixer-detach-channel",
+  MixerSetMasterGain: "mixer-set-master-gain",
+  MixerSetMasterMute: "mixer-set-master-mute",
+  MixerGetState: "mixer-get-state",
 
   // Background errors
   GetBackgroundErrors: "get-background-errors",
@@ -561,6 +591,10 @@ export interface IpcHandleContract {
     request: [];
     response: number;
   };
+  "mixer-get-state": {
+    request: [];
+    response: MixerStateResponse | null;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -601,6 +635,31 @@ export interface IpcSendContract {
   "unsubscribe-instrument-telemetry": {
     data: { instrumentId: string };
   };
+  // Mixer
+  "mixer-set-channel-gain": {
+    data: { channelIndex: number; gainDb: number };
+  };
+  "mixer-set-channel-pan": {
+    data: { channelIndex: number; pan: number };
+  };
+  "mixer-set-channel-mute": {
+    data: { channelIndex: number; mute: boolean };
+  };
+  "mixer-set-channel-solo": {
+    data: { channelIndex: number; solo: boolean };
+  };
+  "mixer-attach-instrument": {
+    data: { channelIndex: number; instrumentId: string };
+  };
+  "mixer-detach-channel": {
+    data: { channelIndex: number };
+  };
+  "mixer-set-master-gain": {
+    data: { gainDb: number };
+  };
+  "mixer-set-master-mute": {
+    data: { mute: boolean };
+  };
 }
 
 export interface IpcPushContract {
@@ -615,6 +674,14 @@ export interface IpcPushContract {
   };
   "overlay-nmf-visualization": {
     data: NMFVisualizationData;
+  };
+  "mixer-levels": {
+    data: {
+      channelPeaksL: number[];
+      channelPeaksR: number[];
+      masterPeakL: number;
+      masterPeakR: number;
+    };
   };
 }
 
@@ -717,6 +784,17 @@ export interface ElectronAPI {
   subscribeInstrumentTelemetry: (instrumentId: string) => void;
   unsubscribeInstrumentTelemetry: (instrumentId: string) => void;
 
+  // Mixer (one-way renderer → main)
+  mixerSetChannelGain: (channelIndex: number, gainDb: number) => void;
+  mixerSetChannelPan: (channelIndex: number, pan: number) => void;
+  mixerSetChannelMute: (channelIndex: number, mute: boolean) => void;
+  mixerSetChannelSolo: (channelIndex: number, solo: boolean) => void;
+  mixerAttachInstrument: (channelIndex: number, instrumentId: string) => void;
+  mixerDetachChannel: (channelIndex: number) => void;
+  mixerSetMasterGain: (gainDb: number) => void;
+  mixerSetMasterMute: (mute: boolean) => void;
+  mixerGetState: () => Promise<MixerStateResponse | null>;
+
   // Instrument DB persistence
   createDbInstrument: (name: string, kind: string, config?: Record<string, unknown>) => Promise<InstrumentRecord>;
   deleteDbInstrument: (name: string) => Promise<boolean>;
@@ -735,4 +813,5 @@ export interface ElectronAPI {
   onPlaybackEnded: (callback: (hash: string) => void) => void;
   onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;
   onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
+  onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => void;
 }

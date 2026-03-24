@@ -199,7 +199,7 @@
 
       #status-line {
         flex: none;
-        height: 24px;
+        height: 34px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -232,6 +232,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
+      #mixer-meters {
+        flex: none;
+        display: block;
+      }
     </style>
   </head>
   <body>
@@ -246,6 +251,7 @@
     <div id="status-line">
       <span class="status-indicator ok">●</span>
       <span class="status-text">Ready</span>
+      <canvas id="mixer-meters" width="234" height="24"></canvas>
     </div>
 
     <script type="module" src="main.js"></script>

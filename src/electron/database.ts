@@ -147,6 +147,24 @@ export interface BackgroundErrorRecord {
   created_at: string;
 }
 
+export interface MixerChannelRow {
+  id: number;
+  project_id: number;
+  channel_idx: number;
+  gain_db: number;
+  pan: number;
+  mute: number;
+  solo: number;
+  instrument_name: string | null;
+}
+
+export interface MixerMasterRow {
+  id: number;
+  project_id: number;
+  gain_db: number;
+  mute: number;
+}
+
 export class DatabaseManager {
   public db: Database.Database;
   private currentProjectId: number | null = null;
@@ -345,6 +363,27 @@ export class DatabaseManager {
 
       CREATE INDEX idx_background_errors_dismissed
       ON background_errors(dismissed);
+
+      CREATE TABLE mixer_channels (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id   INTEGER NOT NULL,
+        channel_idx  INTEGER NOT NULL,  -- 0-7 user channels, 8 = preview
+        gain_db      REAL    NOT NULL DEFAULT -6.0,
+        pan          REAL    NOT NULL DEFAULT 0.0,
+        mute         INTEGER NOT NULL DEFAULT 0,
+        solo         INTEGER NOT NULL DEFAULT 0,
+        instrument_name TEXT,           -- NULL = no instrument attached
+        UNIQUE(project_id, channel_idx),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE mixer_master (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL UNIQUE,
+        gain_db    REAL    NOT NULL DEFAULT 0.0,
+        mute       INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
     `);
   }
 
@@ -1300,6 +1339,45 @@ LIMIT 1
       .prepare("DELETE FROM instrument_samples WHERE instrument_id = ? AND sample_id = ? AND note_number = ?")
       .run(instrumentId, sample.id, noteNumber);
     return result.changes > 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mixer state persistence
+  // ---------------------------------------------------------------------------
+
+  getMixerState(projectId: number): { channels: MixerChannelRow[]; master: MixerMasterRow | null } {
+    const channels = this.db
+      .prepare("SELECT * FROM mixer_channels WHERE project_id = ? ORDER BY channel_idx")
+      .all(projectId) as MixerChannelRow[];
+    const master = this.db
+      .prepare("SELECT * FROM mixer_master WHERE project_id = ?")
+      .get(projectId) as MixerMasterRow | null;
+    return { channels, master };
+  }
+
+  saveMixerChannel(projectId: number, channelIdx: number, state: {
+    gainDb: number; pan: number; mute: boolean; solo: boolean; instrumentName: string | null;
+  }): void {
+    this.db.prepare(`
+      INSERT INTO mixer_channels (project_id, channel_idx, gain_db, pan, mute, solo, instrument_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, channel_idx) DO UPDATE SET
+        gain_db = excluded.gain_db,
+        pan = excluded.pan,
+        mute = excluded.mute,
+        solo = excluded.solo,
+        instrument_name = excluded.instrument_name
+    `).run(projectId, channelIdx, state.gainDb, state.pan, state.mute ? 1 : 0, state.solo ? 1 : 0, state.instrumentName);
+  }
+
+  saveMixerMaster(projectId: number, state: { gainDb: number; mute: boolean }): void {
+    this.db.prepare(`
+      INSERT INTO mixer_master (project_id, gain_db, mute)
+      VALUES (?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        gain_db = excluded.gain_db,
+        mute = excluded.mute
+    `).run(projectId, state.gainDb, state.mute ? 1 : 0);
   }
 
   // ---------------------------------------------------------------------------

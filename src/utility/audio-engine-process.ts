@@ -47,6 +47,16 @@ interface AudioEngineNative {
   setInstrumentParam(instrumentId: string, paramId: number, value: number): void;
   subscribeInstrumentTelemetry(instrumentId: string): void;
   unsubscribeInstrumentTelemetry(instrumentId: string): void;
+  // Mixer API
+  mixerSetChannelGain(channelIndex: number, gainDb: number): void;
+  mixerSetChannelPan(channelIndex: number, pan: number): void;
+  mixerSetChannelMute(channelIndex: number, mute: boolean): void;
+  mixerSetChannelSolo(channelIndex: number, solo: boolean): void;
+  mixerAttachInstrument(channelIndex: number, instrumentId: string): void;
+  mixerDetachChannel(channelIndex: number): void;
+  mixerSetMasterGain(gainDb: number): void;
+  mixerSetMasterMute(mute: boolean): void;
+  onMixerLevels(cb: (channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => void): void;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -76,6 +86,10 @@ if (engine) {
   engine.onEnded((hash: string) => {
     port?.postMessage({ type: "ended", sampleHash: hash });
   });
+
+  engine.onMixerLevels((channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => {
+    port?.postMessage({ type: "mixer-levels", channelPeaksL, channelPeaksR, masterPeakL, masterPeakR });
+  });
 }
 
 // The main process sends the MessagePort as the first message.
@@ -97,6 +111,12 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     velocity?: number;
     paramId?: number;
     value?: number;
+    // Mixer fields
+    channelIndex?: number;
+    gainDb?: number;
+    pan?: number;
+    mute?: boolean;
+    solo?: boolean;
   }}) => {
     const data = msg.data;
 
@@ -157,6 +177,46 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
       case "unsubscribe-instrument-telemetry":
         if (engine && data.instrumentId) {
           engine.unsubscribeInstrumentTelemetry(data.instrumentId);
+        }
+        break;
+      case "mixer-set-channel-gain":
+        if (engine && data.channelIndex !== undefined && data.gainDb !== undefined) {
+          engine.mixerSetChannelGain(data.channelIndex, data.gainDb);
+        }
+        break;
+      case "mixer-set-channel-pan":
+        if (engine && data.channelIndex !== undefined && data.pan !== undefined) {
+          engine.mixerSetChannelPan(data.channelIndex, data.pan);
+        }
+        break;
+      case "mixer-set-channel-mute":
+        if (engine && data.channelIndex !== undefined && data.mute !== undefined) {
+          engine.mixerSetChannelMute(data.channelIndex, data.mute);
+        }
+        break;
+      case "mixer-set-channel-solo":
+        if (engine && data.channelIndex !== undefined && data.solo !== undefined) {
+          engine.mixerSetChannelSolo(data.channelIndex, data.solo);
+        }
+        break;
+      case "mixer-attach-instrument":
+        if (engine && data.channelIndex !== undefined && data.instrumentId) {
+          engine.mixerAttachInstrument(data.channelIndex, data.instrumentId);
+        }
+        break;
+      case "mixer-detach-channel":
+        if (engine && data.channelIndex !== undefined) {
+          engine.mixerDetachChannel(data.channelIndex);
+        }
+        break;
+      case "mixer-set-master-gain":
+        if (engine && data.gainDb !== undefined) {
+          engine.mixerSetMasterGain(data.gainDb);
+        }
+        break;
+      case "mixer-set-master-mute":
+        if (engine && data.mute !== undefined) {
+          engine.mixerSetMasterMute(data.mute);
         }
         break;
       default:

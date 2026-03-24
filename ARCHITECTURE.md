@@ -96,14 +96,17 @@ All handler modules receive a shared `HandlerDeps` interface providing access to
 
 ### Send / On (fire-and-forget, renderer → main)
 
-Used for commands where the renderer does not need a response, primarily playback and instrument control:
+Used for commands where the renderer does not need a response, primarily playback, instrument, and mixer control:
 
 - `play-sample`, `stop-sample`
 - `define-instrument`, `free-instrument`, `load-instrument-sample`
 - `instrument-note-on`, `instrument-note-off`, `instrument-stop-all`
 - `set-instrument-param`, `subscribe-instrument-telemetry`
+- `mixer-set-channel-gain`, `mixer-set-channel-pan`, `mixer-set-channel-mute`, `mixer-set-channel-solo`
+- `mixer-attach-instrument`, `mixer-detach-channel`
+- `mixer-set-master-gain`, `mixer-set-master-mute`
 
-The main process receives these and forwards the relevant commands to the audio engine utility process via `MessagePort.postMessage()`.
+The main process receives these and forwards the relevant commands to the audio engine utility process via `MessagePort.postMessage()`. Mixer commands are also persisted to the DB via `mixer_channels` / `mixer_master` tables.
 
 ### Push Events (main → renderer)
 
@@ -113,14 +116,15 @@ The main process pushes telemetry events to the renderer via `webContents.send()
 - `playback-ended` — playback completed
 - `playback-error` — audio engine error
 - `overlay-nmf-visualization` — NMF analysis results for visualization
+- `mixer-levels` — per-channel and master peak levels (~60 Hz), used for status bar meters
 
 ### MessagePort (main ↔ utility process)
 
 Defined in `src/shared/audio-engine-protocol.ts`. The main process creates a `MessageChannelMain` and passes one port to the utility process. Messages are typed unions:
 
-**Commands (main → utility):** `play`, `stop`, `stop-all`, `define-instrument`, `free-instrument`, `load-instrument-sample`, `instrument-note-on`, `instrument-note-off`, `instrument-stop-all`, `set-instrument-param`, `subscribe-instrument-telemetry`, `unsubscribe-instrument-telemetry`
+**Commands (main → utility):** `play`, `stop`, `stop-all`, `define-instrument`, `free-instrument`, `load-instrument-sample`, `instrument-note-on`, `instrument-note-off`, `instrument-stop-all`, `set-instrument-param`, `subscribe-instrument-telemetry`, `unsubscribe-instrument-telemetry`, `mixer-set-channel-gain`, `mixer-set-channel-pan`, `mixer-set-channel-mute`, `mixer-set-channel-solo`, `mixer-attach-instrument`, `mixer-detach-channel`, `mixer-set-master-gain`, `mixer-set-master-mute`
 
-**Telemetry (utility → main):** `position`, `ended`, `error`
+**Telemetry (utility → main):** `position`, `ended`, `error`, `mixer-levels`
 
 The main process relays telemetry from the utility process to the renderer via `webContents.send()`.
 
@@ -225,6 +229,8 @@ All data tables are project-scoped (foreign key to `projects.id` with CASCADE de
 | `repl_env` | Persisted REPL variables and functions (JSON or function source) |
 | `instruments` | Named instrument definitions with config |
 | `instrument_samples` | MIDI note → sample mapping per instrument |
+| `mixer_channels` | Per-project mixer channel state (gain, pan, mute, solo, attached instrument) |
+| `mixer_master` | Per-project master bus state (gain, mute) |
 
 ### Migrations
 
@@ -267,6 +273,17 @@ Real-time audio playback engine. Loaded by the utility process only.
 | `instrumentNoteOff` | Release note |
 | `instrumentStopAll` | Silence all voices on instrument |
 | `setInstrumentParam` | Set instrument parameter |
+| `mixerSetChannelGain` | Set channel gain (dB) |
+| `mixerSetChannelPan` | Set channel pan (-1.0 L to +1.0 R, constant-power) |
+| `mixerSetChannelMute` | Mute/unmute channel |
+| `mixerSetChannelSolo` | Solo/unsolo channel (solo-in-place) |
+| `mixerAttachInstrument` | Route instrument to a mixer channel |
+| `mixerDetachChannel` | Remove instrument assignment from channel |
+| `mixerSetMasterGain` | Set master bus gain (dB) |
+| `mixerSetMasterMute` | Mute/unmute master bus |
+| `onMixerLevels` | Register peak meter callback (~60 Hz, with peak-hold) |
+
+**Mixer architecture:** 9 channels total (indices 0–7 = user channels, index 8 = preview). Unattached instruments and legacy processors render into the preview channel. User channels mix to the master bus with constant-power pan law. Solo-in-place silences non-soloed user channels; preview channel is always exempt.
 
 Dependencies: miniaudio, AudioToolbox/CoreAudio (macOS).
 
@@ -283,7 +300,7 @@ Dependencies: miniaudio, AudioToolbox/CoreAudio (macOS).
 
 ### Namespaces
 
-The Bounce API is built in `src/renderer/bounce-api.ts` and provides 7 namespaces plus globals, each defined in `src/renderer/namespaces/`:
+The Bounce API is built in `src/renderer/bounce-api.ts` and provides 8 namespaces plus globals, each defined in `src/renderer/namespaces/`:
 
 | REPL name | Module | Purpose |
 |---|---|---|
@@ -294,6 +311,7 @@ The Bounce API is built in `src/renderer/bounce-api.ts` and provides 7 namespace
 | `corpus` | `corpus-namespace.ts` | Concatenative synthesis |
 | `fs` | `fs-namespace.ts` | Filesystem navigation |
 | `inst` | `instrument-namespace.ts` | Instrument creation, sample mapping, note events |
+| `mx` | `mixer-namespace.ts` | 8-channel mixer: gain, pan, mute, solo, instrument routing |
 | *(globals)* | `globals.ts` | `help()`, `clear()`, and other top-level utilities |
 
 ### Visualization
