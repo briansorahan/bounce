@@ -52,95 +52,71 @@ function channelSummary(index: number, ch: ChannelState): string {
 }
 
 // ---------------------------------------------------------------------------
-// Control object interfaces (needed to type self-referential chaining)
+// Control classes — extend BounceResult so the REPL displays them correctly
 // ---------------------------------------------------------------------------
 
-interface IChannelControl {
-  gain(db?: number): IChannelControl | BounceResult;
-  pan(value?: number): IChannelControl | BounceResult;
-  mute(): IChannelControl;
-  solo(): IChannelControl;
-  attach(instrument: { id: string } | string): IChannelControl | BounceResult;
-  detach(): IChannelControl;
-  toString(): string;
-  help(): BounceResult;
-}
+class ChannelControl extends BounceResult {
+  constructor(private readonly index: number, private readonly state: ChannelState) {
+    super(channelSummary(index, state));
+  }
 
-interface IPreviewControl {
-  gain(db?: number): IPreviewControl | BounceResult;
-  mute(): IPreviewControl;
-  toString(): string;
-  help(): BounceResult;
-}
+  // Override to always reflect current state
+  override toString(): string {
+    return channelSummary(this.index, this.state);
+  }
 
-interface IMasterControl {
-  gain(db?: number): IMasterControl | BounceResult;
-  mute(): IMasterControl;
-  toString(): string;
-  help(): BounceResult;
-}
+  gain(db?: number): this | BounceResult {
+    if (db === undefined) {
+      return new BounceResult(`Channel ${this.index + 1} gain: ${formatDb(this.state.gainDb)}`);
+    }
+    this.state.gainDb = db;
+    window.electron?.mixerSetChannelGain(this.index, db);
+    return this;
+  }
 
-// ---------------------------------------------------------------------------
-// Channel control object
-// ---------------------------------------------------------------------------
+  pan(value?: number): this | BounceResult {
+    if (value === undefined) {
+      return new BounceResult(`Channel ${this.index + 1} pan: ${formatPan(this.state.pan)}`);
+    }
+    if (value < -1 || value > 1) {
+      return new BounceResult("\x1b[31mPan must be between -1.0 (L) and +1.0 (R)\x1b[0m");
+    }
+    this.state.pan = value;
+    window.electron?.mixerSetChannelPan(this.index, value);
+    return this;
+  }
 
-function makeChannelControl(index: number, state: ChannelState): IChannelControl {
-  const ctrl: IChannelControl = {
-    gain(db?: number): IChannelControl | BounceResult {
-      if (db === undefined) {
-        return new BounceResult(`Channel ${index + 1} gain: ${formatDb(state.gainDb)}`);
-      }
-      state.gainDb = db;
-      window.electron?.mixerSetChannelGain(index, db);
-      return ctrl;
-    },
+  mute(): this {
+    this.state.mute = !this.state.mute;
+    window.electron?.mixerSetChannelMute(this.index, this.state.mute);
+    return this;
+  }
 
-    pan(value?: number): IChannelControl | BounceResult {
-      if (value === undefined) {
-        return new BounceResult(`Channel ${index + 1} pan: ${formatPan(state.pan)}`);
-      }
-      if (value < -1 || value > 1) {
-        return new BounceResult("\x1b[31mPan must be between -1.0 (L) and +1.0 (R)\x1b[0m");
-      }
-      state.pan = value;
-      window.electron?.mixerSetChannelPan(index, value);
-      return ctrl;
-    },
+  solo(): this {
+    this.state.solo = !this.state.solo;
+    window.electron?.mixerSetChannelSolo(this.index, this.state.solo);
+    return this;
+  }
 
-    mute(): IChannelControl {
-      state.mute = !state.mute;
-      window.electron?.mixerSetChannelMute(index, state.mute);
-      return ctrl;
-    },
+  attach(instrument: { id: string } | string): this | BounceResult {
+    const id = typeof instrument === "string" ? instrument : instrument?.id;
+    if (!id) {
+      return new BounceResult("\x1b[31mattach() requires an instrument or instrument ID string\x1b[0m");
+    }
+    this.state.attachedInstrumentId = id;
+    window.electron?.mixerAttachInstrument(this.index, id);
+    return this;
+  }
 
-    solo(): IChannelControl {
-      state.solo = !state.solo;
-      window.electron?.mixerSetChannelSolo(index, state.solo);
-      return ctrl;
-    },
+  detach(): this {
+    this.state.attachedInstrumentId = null;
+    window.electron?.mixerDetachChannel(this.index);
+    return this;
+  }
 
-    attach(instrument: { id: string } | string): IChannelControl | BounceResult {
-      const id = typeof instrument === "string" ? instrument : instrument?.id;
-      if (!id) {
-        return new BounceResult("\x1b[31mattach() requires an instrument or instrument ID string\x1b[0m");
-      }
-      state.attachedInstrumentId = id;
-      window.electron?.mixerAttachInstrument(index, id);
-      return ctrl;
-    },
-
-    detach(): IChannelControl {
-      state.attachedInstrumentId = null;
-      window.electron?.mixerDetachChannel(index);
-      return ctrl;
-    },
-
-    toString(): string {
-      return channelSummary(index, state);
-    },
-
-    help: (): BounceResult => new BounceResult([
-      `\x1b[1;36mmx.ch(${index + 1})\x1b[0m — mixer channel ${index + 1}`,
+  help(): BounceResult {
+    return new BounceResult([
+      `\x1b[1;36mmx.ch(${this.index + 1})\x1b[0m — mixer channel ${this.index + 1}`,
       "",
       "  \x1b[1m.gain(db?)\x1b[0m    get or set gain in dB (-96 to +6). Chainable.",
       "  \x1b[1m.pan(val?)\x1b[0m    get or set pan: -1.0 (L) .. 0 (C) .. +1.0 (R). Chainable.",
@@ -150,41 +126,43 @@ function makeChannelControl(index: number, state: ChannelState): IChannelControl
       "  \x1b[1m.detach()\x1b[0m     remove instrument from this channel. Chainable.",
       "",
       "  Example:",
-      `    mx.ch(${index + 1}).gain(-12).pan(-0.3)`,
-      `    mx.ch(${index + 1}).attach(inst)`,
-    ].join("\n")),
-  };
-
-  return ctrl;
+      `    mx.ch(${this.index + 1}).gain(-12).pan(-0.3)`,
+      `    mx.ch(${this.index + 1}).attach(inst)`,
+    ].join("\n"));
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Preview channel control
 // ---------------------------------------------------------------------------
 
-function makePreviewControl(state: ChannelState): IPreviewControl {
-  const ctrl: IPreviewControl = {
-    gain(db?: number): IPreviewControl | BounceResult {
-      if (db === undefined) {
-        return new BounceResult(`Preview gain: ${formatDb(state.gainDb)}`);
-      }
-      state.gainDb = db;
-      window.electron?.mixerSetChannelGain(PREVIEW_CHANNEL_IDX, db);
-      return ctrl;
-    },
+class PreviewControl extends BounceResult {
+  constructor(private readonly state: ChannelState) {
+    super("");
+  }
 
-    mute(): IPreviewControl {
-      state.mute = !state.mute;
-      window.electron?.mixerSetChannelMute(PREVIEW_CHANNEL_IDX, state.mute);
-      return ctrl;
-    },
+  override toString(): string {
+    const muteLabel = this.state.mute ? "  \x1b[33mmuted\x1b[0m" : "";
+    return `  Preview: gain ${formatDb(this.state.gainDb)}${muteLabel}`;
+  }
 
-    toString(): string {
-      const muteLabel = state.mute ? "  \x1b[33mmuted\x1b[0m" : "";
-      return `  Preview: gain ${formatDb(state.gainDb)}${muteLabel}`;
-    },
+  gain(db?: number): this | BounceResult {
+    if (db === undefined) {
+      return new BounceResult(`Preview gain: ${formatDb(this.state.gainDb)}`);
+    }
+    this.state.gainDb = db;
+    window.electron?.mixerSetChannelGain(PREVIEW_CHANNEL_IDX, db);
+    return this;
+  }
 
-    help: (): BounceResult => new BounceResult([
+  mute(): this {
+    this.state.mute = !this.state.mute;
+    window.electron?.mixerSetChannelMute(PREVIEW_CHANNEL_IDX, this.state.mute);
+    return this;
+  }
+
+  help(): BounceResult {
+    return new BounceResult([
       "\x1b[1;36mmx.preview\x1b[0m — preview channel (used by sample.play() / sample.loop())",
       "",
       "  \x1b[1m.gain(db?)\x1b[0m  get or set gain in dB. Chainable.",
@@ -192,39 +170,41 @@ function makePreviewControl(state: ChannelState): IPreviewControl {
       "",
       "  Example:",
       "    mx.preview.gain(-6)   // quieter sample previews",
-    ].join("\n")),
-  };
-
-  return ctrl;
+    ].join("\n"));
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Master bus control
 // ---------------------------------------------------------------------------
 
-function makeMasterControl(state: MasterState): IMasterControl {
-  const ctrl: IMasterControl = {
-    gain(db?: number): IMasterControl | BounceResult {
-      if (db === undefined) {
-        return new BounceResult(`Master gain: ${formatDb(state.gainDb)}`);
-      }
-      state.gainDb = db;
-      window.electron?.mixerSetMasterGain(db);
-      return ctrl;
-    },
+class MasterControl extends BounceResult {
+  constructor(private readonly state: MasterState) {
+    super("");
+  }
 
-    mute(): IMasterControl {
-      state.mute = !state.mute;
-      window.electron?.mixerSetMasterMute(state.mute);
-      return ctrl;
-    },
+  override toString(): string {
+    const muteLabel = this.state.mute ? "  \x1b[33mmuted\x1b[0m" : "";
+    return `  Master: gain ${formatDb(this.state.gainDb)}${muteLabel}`;
+  }
 
-    toString(): string {
-      const muteLabel = state.mute ? "  \x1b[33mmuted\x1b[0m" : "";
-      return `  Master: gain ${formatDb(state.gainDb)}${muteLabel}`;
-    },
+  gain(db?: number): this | BounceResult {
+    if (db === undefined) {
+      return new BounceResult(`Master gain: ${formatDb(this.state.gainDb)}`);
+    }
+    this.state.gainDb = db;
+    window.electron?.mixerSetMasterGain(db);
+    return this;
+  }
 
-    help: (): BounceResult => new BounceResult([
+  mute(): this {
+    this.state.mute = !this.state.mute;
+    window.electron?.mixerSetMasterMute(this.state.mute);
+    return this;
+  }
+
+  help(): BounceResult {
+    return new BounceResult([
       "\x1b[1;36mmx.master\x1b[0m — master bus",
       "",
       "  \x1b[1m.gain(db?)\x1b[0m  get or set master gain in dB. Chainable.",
@@ -232,10 +212,8 @@ function makeMasterControl(state: MasterState): IMasterControl {
       "",
       "  Example:",
       "    mx.master.gain(-3)",
-    ].join("\n")),
-  };
-
-  return ctrl;
+    ].join("\n"));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -248,9 +226,9 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
   const previewState: ChannelState = { ...defaultChannelState(), gainDb: 0 };
   const masterState: MasterState = defaultMasterState();
 
-  const channelControls = channelStates.map((st, i) => makeChannelControl(i, st));
-  const previewControl = makePreviewControl(previewState);
-  const masterControl = makeMasterControl(masterState);
+  const channelControls = channelStates.map((st, i) => new ChannelControl(i, st));
+  const previewControl = new PreviewControl(previewState);
+  const masterControl = new MasterControl(masterState);
 
   // Restore persisted mixer state from the DB on startup.
   function restoreFromDb(): void {
@@ -349,15 +327,13 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
 // Type exports
 // ---------------------------------------------------------------------------
 
-export type ChannelControl = IChannelControl;
-export type PreviewControl = IPreviewControl;
-export type MasterControl = IMasterControl;
+export type { ChannelControl, PreviewControl, MasterControl };
 
 export interface MixerNamespace {
-  ch(n: number): IChannelControl | BounceResult;
+  ch(n: number): ChannelControl | BounceResult;
   readonly channels: BounceResult;
-  readonly preview: IPreviewControl;
-  readonly master: IMasterControl;
+  readonly preview: PreviewControl;
+  readonly master: MasterControl;
   help(): BounceResult;
 }
 
