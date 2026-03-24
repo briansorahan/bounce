@@ -336,6 +336,7 @@ interface Window {
     onPlaybackPosition: (callback: (hash: string, positionInSamples: number) => void) => void;
     onPlaybackEnded: (callback: (hash: string) => void) => void;
     onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;
+    onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => void;
     // Background errors
     getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
     dismissBackgroundError: (id: number) => Promise<boolean>;

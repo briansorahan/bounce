@@ -75,7 +75,17 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   // Listen for telemetry on port2
   port2.on("message", (event) => {
-    const data = event.data as { type: string; sampleHash?: string; positionInSamples?: number; code?: string; message?: string };
+    const data = event.data as {
+      type: string;
+      sampleHash?: string;
+      positionInSamples?: number;
+      code?: string;
+      message?: string;
+      channelPeaksL?: number[];
+      channelPeaksR?: number[];
+      masterPeakL?: number;
+      masterPeakR?: number;
+    };
     if (data.type === "position" && data.sampleHash !== undefined) {
       mainWindow.webContents.send("playback-position", {
         hash: data.sampleHash,
@@ -83,6 +93,13 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
       });
     } else if (data.type === "ended" && data.sampleHash !== undefined) {
       mainWindow.webContents.send("playback-ended", { hash: data.sampleHash });
+    } else if (data.type === "mixer-levels") {
+      mainWindow.webContents.send("mixer-levels", {
+        channelPeaksL: data.channelPeaksL ?? [],
+        channelPeaksR: data.channelPeaksR ?? [],
+        masterPeakL: data.masterPeakL ?? 0,
+        masterPeakR: data.masterPeakR ?? 0,
+      });
     } else if (data.type === "error") {
       mainWindow.webContents.send("playback-error", {
         sampleHash: data.sampleHash,

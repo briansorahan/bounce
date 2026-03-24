@@ -201,6 +201,9 @@ const api: ElectronAPI = {
   onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => {
     ipcRenderer.on("playback-error", (_event, data) => callback(data));
   },
+  onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => {
+    ipcRenderer.on("mixer-levels", (_event, data) => callback(data));
+  },
 };
 
 contextBridge.exposeInMainWorld("electron", api);

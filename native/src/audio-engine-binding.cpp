@@ -40,12 +40,14 @@ private:
     Napi::Value MixerDetachChannel(const Napi::CallbackInfo& info);
     Napi::Value MixerSetMasterGain(const Napi::CallbackInfo& info);
     Napi::Value MixerSetMasterMute(const Napi::CallbackInfo& info);
+    Napi::Value OnMixerLevels(const Napi::CallbackInfo& info);
 
     std::unique_ptr<AudioEngine> engine_;
 
     // Threadsafe functions for telemetry callbacks
     Napi::ThreadSafeFunction positionTsfn_;
     Napi::ThreadSafeFunction endedTsfn_;
+    Napi::ThreadSafeFunction metersTsfn_;
 };
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,7 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("mixerDetachChannel",      &AudioEngineWrapper::MixerDetachChannel),
         InstanceMethod("mixerSetMasterGain",      &AudioEngineWrapper::MixerSetMasterGain),
         InstanceMethod("mixerSetMasterMute",      &AudioEngineWrapper::MixerSetMasterMute),
+        InstanceMethod("onMixerLevels",           &AudioEngineWrapper::OnMixerLevels),
     });
 
     Napi::FunctionReference* ctor = new Napi::FunctionReference();
@@ -198,6 +201,49 @@ Napi::Value AudioEngineWrapper::OnEnded(const Napi::CallbackInfo& info) {
         auto* h = new std::string(hash);
         endedTsfn_.NonBlockingCall(h, [](Napi::Env env, Napi::Function cb, std::string* data) {
             cb.Call({ Napi::String::New(env, *data) });
+            delete data;
+        });
+    });
+
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// onMixerLevels(callback: (chPeaksL: number[], chPeaksR: number[], masterL: number, masterR: number) => void)
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::OnMixerLevels(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        Napi::TypeError::New(env, "onMixerLevels(callback) requires a function argument")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    if (metersTsfn_) metersTsfn_.Release();
+
+    metersTsfn_ = Napi::ThreadSafeFunction::New(
+        env, info[0].As<Napi::Function>(),
+        "BounceMixerLevelsCallback", 0, 1);
+
+    engine_->onMixerLevels([this](const std::array<float, 9>& peaksL,
+                                   const std::array<float, 9>& peaksR,
+                                   float masterL, float masterR) {
+        struct MeterData {
+            std::array<float, 9> peaksL;
+            std::array<float, 9> peaksR;
+            float masterL, masterR;
+        };
+        auto* d = new MeterData{ peaksL, peaksR, masterL, masterR };
+        metersTsfn_.NonBlockingCall(d, [](Napi::Env env, Napi::Function cb, MeterData* data) {
+            auto chL = Napi::Array::New(env, 9);
+            auto chR = Napi::Array::New(env, 9);
+            for (uint32_t i = 0; i < 9; ++i) {
+                chL.Set(i, Napi::Number::New(env, static_cast<double>(data->peaksL[i])));
+                chR.Set(i, Napi::Number::New(env, static_cast<double>(data->peaksR[i])));
+            }
+            cb.Call({ chL, chR,
+                Napi::Number::New(env, static_cast<double>(data->masterL)),
+                Napi::Number::New(env, static_cast<double>(data->masterR)) });
             delete data;
         });
     });

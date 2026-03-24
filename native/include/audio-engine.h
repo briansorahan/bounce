@@ -24,6 +24,10 @@ class AudioEngine {
 public:
     using PositionCallback = std::function<void(const std::string&, int)>;
     using EndedCallback    = std::function<void(const std::string&)>;
+    // channelPeaksL[9], channelPeaksR[9], masterPeakL, masterPeakR (20 floats)
+    using MeterLevelsCallback = std::function<void(const std::array<float, 9>&,
+                                                    const std::array<float, 9>&,
+                                                    float, float)>;
 
     static constexpr int kMaxProcessors    = 32;
     static constexpr int kNumUserChannels  = 8;
@@ -77,6 +81,7 @@ public:
 
     void onPosition(PositionCallback cb);
     void onEnded(EndedCallback cb);
+    void onMixerLevels(MeterLevelsCallback cb);
 
 private:
     // Called on the miniaudio audio callback thread
@@ -175,7 +180,15 @@ private:
 
     PositionCallback positionCb_;
     EndedCallback    endedCb_;
+    MeterLevelsCallback meterLevelsCb_;
     std::mutex       cbMutex_;
+
+    // Per-channel peak levels (written by audio thread, read by telemetry thread)
+    // Index 0-7: user channels, index 8: preview channel
+    std::array<std::atomic<float>, kNumChannels> peakL_{};
+    std::array<std::atomic<float>, kNumChannels> peakR_{};
+    std::atomic<float> masterPeakL_{0.f};
+    std::atomic<float> masterPeakR_{0.f};
 
     // miniaudio device (heap-allocated to avoid including miniaudio.h here)
     struct DeviceDeleter { void operator()(ma_device*) const; };

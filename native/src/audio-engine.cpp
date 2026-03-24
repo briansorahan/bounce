@@ -345,6 +345,11 @@ void AudioEngine::onEnded(EndedCallback cb) {
     endedCb_ = std::move(cb);
 }
 
+void AudioEngine::onMixerLevels(MeterLevelsCallback cb) {
+    std::lock_guard<std::mutex> lk(cbMutex_);
+    meterLevelsCb_ = std::move(cb);
+}
+
 // ---------------------------------------------------------------------------
 // Audio callback (miniaudio audio thread)
 // ---------------------------------------------------------------------------
@@ -556,6 +561,32 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
             *out++ = masterBufR_[f] * masterGain;
         }
     }
+
+    // Update peak levels for metering (audio-thread-only writes)
+    for (int ch = 0; ch < kNumChannels; ++ch) {
+        float pkL = 0.f, pkR = 0.f;
+        for (unsigned int f = 0; f < frameCount; ++f) {
+            pkL = std::max(pkL, std::abs(chanBufL_[ch][f]));
+            pkR = std::max(pkR, std::abs(chanBufR_[ch][f]));
+        }
+        // Atomic relaxed store — telemetry thread reads these periodically
+        float prev = peakL_[ch].load(std::memory_order_relaxed);
+        if (pkL > prev) peakL_[ch].store(pkL, std::memory_order_relaxed);
+        prev = peakR_[ch].load(std::memory_order_relaxed);
+        if (pkR > prev) peakR_[ch].store(pkR, std::memory_order_relaxed);
+    }
+    {
+        const float masterGain = master_.mute ? 0.f : std::pow(10.f, master_.gainDb / 20.f);
+        float pkL = 0.f, pkR = 0.f;
+        for (unsigned int f = 0; f < frameCount; ++f) {
+            pkL = std::max(pkL, std::abs(masterBufL_[f] * masterGain));
+            pkR = std::max(pkR, std::abs(masterBufR_[f] * masterGain));
+        }
+        float prev = masterPeakL_.load(std::memory_order_relaxed);
+        if (pkL > prev) masterPeakL_.store(pkL, std::memory_order_relaxed);
+        prev = masterPeakR_.load(std::memory_order_relaxed);
+        if (pkR > prev) masterPeakR_.store(pkR, std::memory_order_relaxed);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +594,14 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
 // ---------------------------------------------------------------------------
 void AudioEngine::telemetryLoop() {
     using namespace std::chrono_literals;
+
+    // Peak-hold state (telemetry thread only)
+    std::array<float, kNumChannels> holdL{}, holdR{};
+    float holdMasterL = 0.f, holdMasterR = 0.f;
+    static constexpr int kHoldFrames = 120; // ~2 s at 60 Hz
+    std::array<int, kNumChannels> holdCounterL{}, holdCounterR{};
+    int holdCounterMasterL = 0, holdCounterMasterR = 0;
+
     while (telemetryRunning_.load()) {
         std::this_thread::sleep_for(16ms); // ~60 Hz
 
@@ -571,10 +610,12 @@ void AudioEngine::telemetryLoop() {
 
         PositionCallback posCb;
         EndedCallback    endCb;
+        MeterLevelsCallback meterCb;
         {
             std::lock_guard<std::mutex> lk(cbMutex_);
-            posCb = positionCb_;
-            endCb = endedCb_;
+            posCb   = positionCb_;
+            endCb   = endedCb_;
+            meterCb = meterLevelsCb_;
         }
 
         while (r != w) {
@@ -587,5 +628,39 @@ void AudioEngine::telemetryLoop() {
             ++r;
         }
         ringReadPos_.store(r, std::memory_order_release);
+
+        if (meterCb) {
+            // Swap-and-reset peaks atomically
+            std::array<float, kNumChannels> rawL{}, rawR{};
+            for (int ch = 0; ch < kNumChannels; ++ch) {
+                rawL[ch] = peakL_[ch].exchange(0.f, std::memory_order_relaxed);
+                rawR[ch] = peakR_[ch].exchange(0.f, std::memory_order_relaxed);
+            }
+            float rawML = masterPeakL_.exchange(0.f, std::memory_order_relaxed);
+            float rawMR = masterPeakR_.exchange(0.f, std::memory_order_relaxed);
+
+            // Apply peak hold
+            std::array<float, kNumChannels> outL{}, outR{};
+            for (int ch = 0; ch < kNumChannels; ++ch) {
+                if (rawL[ch] >= holdL[ch]) { holdL[ch] = rawL[ch]; holdCounterL[ch] = kHoldFrames; }
+                else if (holdCounterL[ch] > 0) --holdCounterL[ch];
+                else holdL[ch] = rawL[ch];
+                outL[ch] = holdL[ch];
+
+                if (rawR[ch] >= holdR[ch]) { holdR[ch] = rawR[ch]; holdCounterR[ch] = kHoldFrames; }
+                else if (holdCounterR[ch] > 0) --holdCounterR[ch];
+                else holdR[ch] = rawR[ch];
+                outR[ch] = holdR[ch];
+            }
+            if (rawML >= holdMasterL) { holdMasterL = rawML; holdCounterMasterL = kHoldFrames; }
+            else if (holdCounterMasterL > 0) --holdCounterMasterL;
+            else holdMasterL = rawML;
+
+            if (rawMR >= holdMasterR) { holdMasterR = rawMR; holdCounterMasterR = kHoldFrames; }
+            else if (holdCounterMasterR > 0) --holdCounterMasterR;
+            else holdMasterR = rawMR;
+
+            meterCb(outL, outR, holdMasterL, holdMasterR);
+        }
     }
 }

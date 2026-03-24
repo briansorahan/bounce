@@ -6,6 +6,7 @@ import { buildBounceApi, BounceResult } from "./bounce-api.js";
 import { TabCompletion } from "./tab-completion.js";
 import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 import { StatusLine } from "./status-line.js";
+import { MixerMeters } from "./mixer-meters.js";
 
 enum ControlCode {
   CTRL_A = 1,
@@ -47,12 +48,14 @@ export class BounceApp {
   private redrawVersion: number = 0;
   private sceneManager: VisualizationSceneManager;
   private statusLine: StatusLine;
+  private mixerMeters: MixerMeters;
 
   constructor() {
     this.terminal = new BounceTerminal();
     this.audioManager = new AudioManager();
     this.completion = new TabCompletion();
     this.statusLine = new StatusLine();
+    this.mixerMeters = new MixerMeters();
     this.sceneManager = new VisualizationSceneManager(() => this.terminal.fit());
     const bounceApi = buildBounceApi({
       terminal: this.terminal,
@@ -99,6 +102,7 @@ export class BounceApp {
 
     window.addEventListener("beforeunload", () => {
       this.statusLine.stop();
+      this.mixerMeters.stop();
       const entries = this.replEvaluator.serializeScope();
       void window.electron.saveReplEnv(entries);
     });
@@ -123,6 +127,7 @@ export class BounceApp {
 
     this.terminal.open(container);
     this.statusLine.mount();
+    this.mixerMeters.mount();
     this.terminal.fit();
 
     // Load history and scope before showing the prompt

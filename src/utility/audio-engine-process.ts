@@ -56,6 +56,7 @@ interface AudioEngineNative {
   mixerDetachChannel(channelIndex: number): void;
   mixerSetMasterGain(gainDb: number): void;
   mixerSetMasterMute(mute: boolean): void;
+  onMixerLevels(cb: (channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => void): void;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -84,6 +85,10 @@ if (engine) {
 
   engine.onEnded((hash: string) => {
     port?.postMessage({ type: "ended", sampleHash: hash });
+  });
+
+  engine.onMixerLevels((channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => {
+    port?.postMessage({ type: "mixer-levels", channelPeaksL, channelPeaksR, masterPeakL, masterPeakR });
   });
 }
 
