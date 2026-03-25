@@ -84,10 +84,11 @@ struct Transport {
 
 struct ScheduledEvent {
     uint64_t samplePosition;        // absolute sample count when event fires
-    enum class Type { NoteOn, NoteOff } type;
-    int channelIndex;
-    uint8_t note;
-    float velocity;
+    enum class Type { NoteOn, NoteOff, TransportStart, TransportStop, BpmChange } type;
+    int channelIndex;               // used by NoteOn/NoteOff
+    uint8_t note;                   // used by NoteOn/NoteOff
+    float velocity;                 // used by NoteOn/NoteOff
+    double bpm;                     // used by BpmChange; ignored for other types
 };
 
 // Snapshot of transport state owned entirely by the scheduler thread.
@@ -170,13 +171,11 @@ std::atomic<uint64_t> sampleCounter_{0};
 // Written by scheduler thread; read by scheduler thread only.
 std::atomic<uint64_t> scheduledUpTo_{0};
 
-// Lock-free transport state for audio thread tick telemetry.
-// Written by scheduler thread after draining transportControlQueue_.
-// Read by audio thread without any lock.
-std::atomic<bool>     transportRunning_{false};
-std::atomic<uint64_t> transportStartSample_{0};
-// BPM as fixed-point uint64_t (bpm * 1000) — guaranteed lock-free on all platforms.
-std::atomic<uint64_t> transportBpmFixed_{120000};  // default 120.000 BPM
+// NOTE: No per-transport-state atomics. The audio thread maintains its own
+// local (non-shared) transport state (running, bpm, startSample) updated
+// exclusively by consuming TransportStart / TransportStop / BpmChange events
+// from schedRing_. These are plain fields — no atomics needed since only the
+// audio thread reads or writes them.
 
 // ── Scheduler thread ──────────────────────────────────────────────────────────
 std::thread schedulerThread_;
@@ -222,6 +221,12 @@ void AudioEngine::transportClearPattern(int channelIndex) {
 
 **Audio thread additions to `processBlock()`** (after existing ControlMsg drain, before rendering):
 ```cpp
+// Local transport state — private to the audio thread; updated via ring events.
+// Declared as class members (not stack locals) so they persist across blocks.
+// bool   localTransportRunning_  = false;
+// double localTransportBpm_      = 120.0;
+// uint64_t localTransportStart_  = 0;
+
 const uint64_t blockStart = sampleCounter_.load(std::memory_order_relaxed);
 const uint64_t blockEnd   = blockStart + frameCount;
 
@@ -232,11 +237,25 @@ const uint64_t blockEnd   = blockStart + frameCount;
     while (r != w) {
         const ScheduledEvent& ev = schedRing_[r % kSchedRingSize];
         if (ev.samplePosition >= blockEnd) break;
-        if (ev.samplePosition >= blockStart) {
-            if (ev.type == ScheduledEvent::Type::NoteOn)
+        switch (ev.type) {
+        case ScheduledEvent::Type::TransportStart:
+            localTransportRunning_ = true;
+            localTransportStart_   = ev.samplePosition;
+            break;
+        case ScheduledEvent::Type::TransportStop:
+            localTransportRunning_ = false;
+            break;
+        case ScheduledEvent::Type::BpmChange:
+            localTransportBpm_ = ev.bpm;
+            break;
+        case ScheduledEvent::Type::NoteOn:
+            if (ev.samplePosition >= blockStart)
                 fireNoteOn(ev.channelIndex, ev.note, ev.velocity);
-            else
+            break;
+        case ScheduledEvent::Type::NoteOff:
+            if (ev.samplePosition >= blockStart)
                 fireNoteOff(ev.channelIndex, ev.note);
+            break;
         }
         ++r;
         schedReadPos_.store(r, std::memory_order_release);
@@ -244,12 +263,10 @@ const uint64_t blockEnd   = blockStart + frameCount;
 }
 sampleCounter_.store(blockEnd, std::memory_order_release);
 
-// Emit tick telemetry — reads only lock-free atomics, zero mutex involvement
-if (transportRunning_.load(std::memory_order_acquire)) {
-    const uint64_t startSample = transportStartSample_.load(std::memory_order_relaxed);
-    const double bpm = transportBpmFixed_.load(std::memory_order_relaxed) / 1000.0;
-    const double spt = sampleRate_ * 60.0 / bpm / 4.0;
-    const uint64_t elapsed   = blockStart - startSample;
+// Emit tick telemetry — uses only local (non-shared) transport state
+if (localTransportRunning_) {
+    const double spt = sampleRate_ * 60.0 / localTransportBpm_ / 4.0;
+    const uint64_t elapsed   = blockStart - localTransportStart_;
     const uint64_t tickBefore = (uint64_t)(elapsed / spt);
     const uint64_t tickAfter  = (uint64_t)((elapsed + frameCount) / spt);
     if (tickAfter > tickBefore) {
@@ -269,7 +286,7 @@ if (transportRunning_.load(std::memory_order_acquire)) {
 
 **Scheduler thread** (`schedulerLoop()`):
 
-The scheduler thread is the **sole owner of `SchedulerData`** and the **sole consumer of `transportControlQueue_`**. It first drains the transport queue to update its private state, then publishes lock-free atomics for the audio thread, then computes events for the lookahead window.
+The scheduler thread is the **sole owner of `SchedulerData`** and the **sole consumer of `transportControlQueue_`**. It first drains the transport queue to update its private state, then writes control events (`TransportStart`, `TransportStop`, `BpmChange`) **into `schedRing_`** along with note events — making `schedRing_` the single scheduler→audio communication channel. The audio thread reads only from this ring; no atomics for transport state.
 
 ```cpp
 void AudioEngine::schedulerLoop() {
@@ -290,7 +307,7 @@ void AudioEngine::schedulerLoop() {
             }
             for (auto& msg : incoming) {
                 switch (msg.op) {
-                case Op::TransportStart:
+                case Op::TransportStart: {
                     schedulerData_.startSampleCount =
                         sampleCounter_.load(std::memory_order_acquire);
                     schedulerData_.running = true;
@@ -298,28 +315,43 @@ void AudioEngine::schedulerLoop() {
                                          std::memory_order_release);
                     for (auto& [ch, pd] : schedulerData_.activePatterns)
                         if (pd->scheduledBar < 0) pd->scheduledBar = 0;
-                    // Publish to audio thread atomics (lock-free writes)
-                    transportStartSample_.store(schedulerData_.startSampleCount,
-                                                 std::memory_order_release);
-                    transportBpmFixed_.store((uint64_t)(schedulerData_.bpm * 1000),
-                                              std::memory_order_release);
-                    transportRunning_.store(true, std::memory_order_release);
+                    // Publish transport start to audio thread via ring
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        schedulerData_.startSampleCount,
+                        ScheduledEvent::Type::TransportStart, 0, 0, 0.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
                     break;
+                }
 
-                case Op::TransportStop:
+                case Op::TransportStop: {
                     schedulerData_.running = false;
-                    transportRunning_.store(false, std::memory_order_release);
-                    // Queued NoteOffs in schedRing_ will play out naturally —
-                    // they are in the near future and cause no harm.
+                    // Scheduler stops writing new note events; already-queued
+                    // NoteOffs will drain naturally. Publish stop to audio thread.
+                    const uint64_t stopSample =
+                        sampleCounter_.load(std::memory_order_acquire);
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        stopSample, ScheduledEvent::Type::TransportStop,
+                        0, 0, 0.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
                     break;
+                }
 
-                case Op::TransportSetBpm:
+                case Op::TransportSetBpm: {
                     schedulerData_.bpm = msg.transportBpm;
-                    transportBpmFixed_.store((uint64_t)(msg.transportBpm * 1000),
-                                              std::memory_order_release);
                     scheduledUpTo_.store(sampleCounter_.load(std::memory_order_acquire),
                                           std::memory_order_release);
+                    // Publish BPM change to audio thread via ring
+                    const uint64_t changeSample =
+                        sampleCounter_.load(std::memory_order_acquire);
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        changeSample, ScheduledEvent::Type::BpmChange,
+                        0, 0, 0.f, msg.transportBpm};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
                     break;
+                }
 
                 case Op::TransportSetPattern: {
                     auto pd = msg.patternData;
@@ -925,7 +957,7 @@ test("pat.xox() displays ASCII grid in terminal", async ({ page }) => {
 
 | Risk | Mitigation |
 |---|---|
-| Audio thread acquires a lock | **Eliminated by design.** The audio thread reads only lock-free SPSC ring and 3 atomics. `transportControlQueue_` and `SchedulerData` are never touched by the audio thread. |
+| Audio thread acquires a lock | **Eliminated by design.** The audio thread reads only from the lock-free SPSC `schedRing_`. `transportControlQueue_` and `SchedulerData` are never touched by the audio thread. |
 | `schedRing_` overflow | Ring size 4096; at 120 BPM with 2 events/step × 8 channels × 10-block lookahead = 160 events maximum — far below capacity |
 | Scheduler sees stale `startSampleCount` after `TransportStart` | The scheduler thread writes `startSampleCount` itself (reads `sampleCounter_` at drain time) — no stale data issue |
 | BPM change mid-bar leaves stale precomputed events in `schedRing_` | `TransportSetBpm` resets `scheduledUpTo_` so scheduler recomputes from current position; stale NoteOffs in ring are harmless |
@@ -967,7 +999,7 @@ test("pat.xox() displays ASCII grid in terminal", async ({ page }) => {
 - [x] All sections agree: note-off fires at next tick start (100% gate), scheduled by scheduler thread
 - [x] All sections agree: `pat.xox(notation).play(n)` uses 1-indexed channel numbers (1–8) for consistency with `mx.ch(n)`
 - [x] All sections agree: JSON string serialization confirmed for `PatternData` over IPC, parsed in C++ with nlohmann/json
-- [x] All sections agree: dedicated scheduler thread with 8-10 block lookahead writes to SPSC ring; audio thread only drains ring and reads 3 lock-free atomics — **audio thread never acquires any lock**
+- [x] All sections agree: dedicated scheduler thread with 8-10 block lookahead writes to SPSC ring; `schedRing_` is the **single** scheduler→audio channel — transport control events (`TransportStart`, `TransportStop`, `BpmChange`) flow through it alongside note events; no separate atomics for transport state; audio thread maintains local (non-shared) transport state updated from ring events — **audio thread never acquires any lock**
 - [x] REPL-facing changes: `transport` has `help()`, `pat` has `help()`, `Pattern` has `help()`, all have useful terminal summaries
 - [x] Status bar extended with transport and device info zones
 - [x] Testing strategy: `src/pattern-parser.test.ts` (parser), `src/transport-namespace.test.ts` (REPL help/display), `tests/transport-pattern.spec.ts` (E2E tick + playback + status bar)
