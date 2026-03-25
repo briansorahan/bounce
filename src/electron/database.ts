@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { app } from "electron";
 import * as path from "path";
 import * as crypto from "crypto";
+import type { MidiEvent, MidiSequenceRecord } from "../shared/ipc-contract";
 
 export interface DebugLogEntry {
   id: number;
@@ -384,6 +385,31 @@ export class DatabaseManager {
         mute       INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS midi_sequences (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT    NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        duration_ms REAL   NOT NULL DEFAULT 0,
+        event_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(project_id, name)
+      );
+
+      CREATE TABLE IF NOT EXISTS midi_events (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        sequence_id INTEGER NOT NULL REFERENCES midi_sequences(id) ON DELETE CASCADE,
+        timestamp_ms REAL   NOT NULL,
+        event_type  TEXT    NOT NULL,
+        channel     INTEGER NOT NULL,
+        note        INTEGER,
+        velocity    REAL,
+        cc_number   INTEGER,
+        cc_value    REAL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_midi_events_sequence
+        ON midi_events(sequence_id, timestamp_ms);
     `);
   }
 
@@ -1409,5 +1435,100 @@ LIMIT 1
       .prepare("UPDATE background_errors SET dismissed = 1 WHERE dismissed = 0")
       .run();
     return result.changes;
+  }
+
+  // ---------------------------------------------------------------------------
+  // MIDI sequences
+  // ---------------------------------------------------------------------------
+
+  saveMidiSequence(name: string, events: MidiEvent[], durationMs: number): MidiSequenceRecord {
+    const projectId = this.requireCurrentProjectId();
+    const eventCount = events.length;
+
+    const seq = this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO midi_sequences (name, project_id, duration_ms, event_count)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project_id, name) DO UPDATE SET
+             duration_ms = excluded.duration_ms,
+             event_count = excluded.event_count`,
+        )
+        .run(name, projectId, durationMs, eventCount);
+
+      const record = this.db
+        .prepare("SELECT * FROM midi_sequences WHERE project_id = ? AND name = ?")
+        .get(projectId, name) as MidiSequenceRecord;
+
+      this.db.prepare("DELETE FROM midi_events WHERE sequence_id = ?").run(record.id);
+
+      const insertEvent = this.db.prepare(
+        `INSERT INTO midi_events
+           (sequence_id, timestamp_ms, event_type, channel, note, velocity, cc_number, cc_value)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const ev of events) {
+        insertEvent.run(
+          record.id,
+          ev.timestampMs,
+          ev.type,
+          ev.channel,
+          ev.note ?? null,
+          ev.velocity ?? null,
+          ev.ccNumber ?? null,
+          ev.ccValue ?? null,
+        );
+      }
+
+      return record;
+    })();
+
+    return seq as MidiSequenceRecord;
+  }
+
+  getMidiSequence(id: number): (MidiSequenceRecord & { events: MidiEvent[] }) | null {
+    const record = this.db
+      .prepare("SELECT * FROM midi_sequences WHERE id = ?")
+      .get(id) as MidiSequenceRecord | undefined;
+    if (!record) return null;
+
+    const rows = this.db
+      .prepare(
+        "SELECT * FROM midi_events WHERE sequence_id = ? ORDER BY timestamp_ms ASC",
+      )
+      .all(id) as Array<{
+        timestamp_ms: number;
+        event_type: string;
+        channel: number;
+        note: number | null;
+        velocity: number | null;
+        cc_number: number | null;
+        cc_value: number | null;
+      }>;
+
+    const events: MidiEvent[] = rows.map((r) => ({
+      timestampMs: r.timestamp_ms,
+      type: r.event_type as MidiEvent["type"],
+      channel: r.channel,
+      ...(r.note !== null ? { note: r.note } : {}),
+      ...(r.velocity !== null ? { velocity: r.velocity } : {}),
+      ...(r.cc_number !== null ? { ccNumber: r.cc_number } : {}),
+      ...(r.cc_value !== null ? { ccValue: r.cc_value } : {}),
+    }));
+
+    return { ...record, events };
+  }
+
+  listMidiSequences(): MidiSequenceRecord[] {
+    const projectId = this.requireCurrentProjectId();
+    return this.db
+      .prepare(
+        "SELECT * FROM midi_sequences WHERE project_id = ? ORDER BY created_at DESC",
+      )
+      .all(projectId) as MidiSequenceRecord[];
+  }
+
+  deleteMidiSequence(id: number): void {
+    this.db.prepare("DELETE FROM midi_sequences WHERE id = ?").run(id);
   }
 }

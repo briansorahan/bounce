@@ -48,6 +48,7 @@ import { buildGlobals } from "./namespaces/globals.js";
 import { buildVisNamespace } from "./namespaces/vis-namespace.js";
 import { buildSampleNamespace } from "./namespaces/sample-namespace.js";
 import { buildInstNamespace } from "./namespaces/instrument-namespace.js";
+import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
 import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
 
 export {
@@ -136,6 +137,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const fs = buildFsNamespace(namespaceDeps);
   const inst = buildInstNamespace(namespaceDeps);
   const { mx } = buildMixerNamespace(namespaceDeps);
+  const { midi } = buildMidiNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps);
 
   const api = {
@@ -147,6 +149,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     fs,
     inst,
     mx,
+    midi,
     ...globals,
   };
 

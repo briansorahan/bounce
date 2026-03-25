@@ -1,4 +1,38 @@
 // ---------------------------------------------------------------------------
+// MIDI types
+// ---------------------------------------------------------------------------
+
+export interface MidiInputDevice {
+  index: number;
+  name: string;
+}
+
+export interface MidiEvent {
+  timestampMs: number;
+  type: "note_on" | "note_off" | "cc";
+  channel: number;
+  note?: number;      // 0-127 for note events
+  velocity?: number;  // 0.0-1.0 for note_on/note_off
+  ccNumber?: number;  // 0-127 for cc
+  ccValue?: number;   // 0.0-1.0 for cc
+}
+
+export interface MidiSequenceRecord {
+  id: number;
+  name: string;
+  project_id: number;
+  duration_ms: number;
+  event_count: number;
+  created_at: string;
+}
+
+export interface MidiFileParseResult {
+  events: MidiEvent[];
+  durationMs: number;
+  smfType: number;
+}
+
+// ---------------------------------------------------------------------------
 // Analysis option types (mirrors src/electron/ipc-types.ts)
 // ---------------------------------------------------------------------------
 
@@ -388,6 +422,24 @@ export const IpcChannel = {
   PlaybackEnded: "playback-ended",
   PlaybackError: "playback-error",
   OverlayNMFVisualization: "overlay-nmf-visualization",
+
+  // MIDI
+  MidiListInputs: "midi-list-inputs",
+  MidiOpenInput: "midi-open-input",
+  MidiCloseInput: "midi-close-input",
+  MidiInjectEvent: "midi-inject-event",
+  MidiStartRecording: "midi-start-recording",
+  MidiStopRecording: "midi-stop-recording",
+  MidiSaveSequence: "midi-save-sequence",
+  MidiLoadSequence: "midi-load-sequence",
+  MidiListSequences: "midi-list-sequences",
+  MidiDeleteSequence: "midi-delete-sequence",
+  MidiLoadFile: "midi-load-file",
+  MidiStartPlayback: "midi-start-playback",
+  MidiStopPlayback: "midi-stop-playback",
+  // MIDI telemetry (main → renderer)
+  MidiInputEvent: "midi-input-event",
+  MidiPlaybackEnded: "midi-playback-ended",
 } as const;
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -595,6 +647,58 @@ export interface IpcHandleContract {
     request: [];
     response: MixerStateResponse | null;
   };
+  "midi-list-inputs": {
+    request: [];
+    response: MidiInputDevice[];
+  };
+  "midi-open-input": {
+    request: [index: number];
+    response: { name: string };
+  };
+  "midi-close-input": {
+    request: [];
+    response: void;
+  };
+  "midi-inject-event": {
+    request: [status: number, data1: number, data2: number];
+    response: void;
+  };
+  "midi-start-recording": {
+    request: [instrumentId: string];
+    response: void;
+  };
+  "midi-stop-recording": {
+    request: [];
+    response: MidiEvent[];
+  };
+  "midi-save-sequence": {
+    request: [name: string, events: MidiEvent[], durationMs: number];
+    response: MidiSequenceRecord;
+  };
+  "midi-load-sequence": {
+    request: [id: number];
+    response: (MidiSequenceRecord & { events: MidiEvent[] }) | null;
+  };
+  "midi-list-sequences": {
+    request: [];
+    response: MidiSequenceRecord[];
+  };
+  "midi-delete-sequence": {
+    request: [id: number];
+    response: void;
+  };
+  "midi-load-file": {
+    request: [filePath: string];
+    response: MidiFileParseResult;
+  };
+  "midi-start-playback": {
+    request: [sequenceId: number, instrumentId: string];
+    response: void;
+  };
+  "midi-stop-playback": {
+    request: [];
+    response: void;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -682,6 +786,12 @@ export interface IpcPushContract {
       masterPeakL: number;
       masterPeakR: number;
     };
+  };
+  "midi-input-event": {
+    data: MidiEvent;
+  };
+  "midi-playback-ended": {
+    data: { sequenceId: number };
   };
 }
 
@@ -814,4 +924,21 @@ export interface ElectronAPI {
   onPlaybackError: (callback: (data: { sampleHash?: string; code: string; message: string }) => void) => void;
   onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
   onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => void;
+
+  // MIDI
+  midiListInputs: () => Promise<MidiInputDevice[]>;
+  midiOpenInput: (index: number) => Promise<{ name: string }>;
+  midiCloseInput: () => Promise<void>;
+  midiInjectEvent: (status: number, data1: number, data2: number) => Promise<void>;
+  midiStartRecording: (instrumentId: string) => Promise<void>;
+  midiStopRecording: () => Promise<MidiEvent[]>;
+  midiSaveSequence: (name: string, events: MidiEvent[], durationMs: number) => Promise<MidiSequenceRecord>;
+  midiLoadSequence: (id: number) => Promise<(MidiSequenceRecord & { events: MidiEvent[] }) | null>;
+  midiListSequences: () => Promise<MidiSequenceRecord[]>;
+  midiDeleteSequence: (id: number) => Promise<void>;
+  midiLoadFile: (filePath: string) => Promise<MidiFileParseResult>;
+  midiStartPlayback: (sequenceId: number, instrumentId: string) => Promise<void>;
+  midiStopPlayback: () => Promise<void>;
+  onMidiInputEvent: (callback: (event: MidiEvent) => void) => void;
+  onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
 }

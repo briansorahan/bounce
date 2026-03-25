@@ -61,12 +61,16 @@
         "native/src/audio-engine-binding.cpp",
         "native/src/audio-engine.cpp",
         "native/src/sample-playback-engine.cpp",
-        "native/src/sampler-instrument.cpp"
+        "native/src/sampler-instrument.cpp",
+        "native/src/midi-input.cpp",
+        "native/src/midi-file-parser.cpp",
+        "third_party/rtmidi/RtMidi.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
         "native/include",
-        "third_party/miniaudio"
+        "third_party/miniaudio",
+        "third_party/rtmidi"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "xcode_settings": {
@@ -75,21 +79,30 @@
         "MACOSX_DEPLOYMENT_TARGET": "11.0",
         "OTHER_CPLUSPLUSFLAGS": ["-std=c++17", "-stdlib=libc++"],
         "GCC_SYMBOLS_PRIVATE_EXTERN": "YES",
-        "OTHER_LDFLAGS": ["-framework AudioToolbox", "-framework CoreAudio", "-framework CoreFoundation"]
+        "OTHER_LDFLAGS": ["-framework AudioToolbox", "-framework CoreAudio", "-framework CoreFoundation", "-framework CoreMIDI"]
       },
       "conditions": [
         [
           "OS=='mac'",
           {
             "cflags+": ["-fvisibility=hidden"],
-            "cflags_cc+": ["-std=c++17"]
+            "cflags_cc+": ["-std=c++17"],
+            "defines+": ["__MACOSX_CORE__"]
           }
         ],
         [
           "OS=='linux'",
           {
             "cflags_cc": ["-std=c++17", "-fexceptions"],
-            "libraries": ["-lpthread", "-lm", "-ldl"]
+            "libraries": ["-lpthread", "-lm", "-ldl", "-lasound"],
+            "defines+": ["__LINUX_ALSA__"]
+          }
+        ],
+        [
+          "OS=='win'",
+          {
+            "libraries": ["Winmm.lib"],
+            "defines+": ["__WINDOWS_MM__"]
           }
         ]
       ]

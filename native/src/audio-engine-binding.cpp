@@ -1,5 +1,7 @@
 #include <napi.h>
 #include "audio-engine.h"
+#include "midi-input.h"
+#include "midi-file-parser.h"
 #include <memory>
 #include <vector>
 
@@ -511,7 +513,10 @@ Napi::Value AudioEngineWrapper::MixerSetMasterMute(const Napi::CallbackInfo& inf
 // Module init
 // ---------------------------------------------------------------------------
 Napi::Object InitAudioEngine(Napi::Env env, Napi::Object exports) {
-    return AudioEngineWrapper::Init(env, exports);
+    AudioEngineWrapper::Init(env, exports);
+    InitMidiInput(env, exports);
+    InitMidiFileParser(env, exports);
+    return exports;
 }
 
 NODE_API_MODULE(audio_engine_native, InitAudioEngine)

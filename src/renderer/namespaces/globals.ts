@@ -12,6 +12,8 @@ export function buildGlobals(deps: NamespaceDeps) {
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
         "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .load() .list() .current() .stop() .help()",
+        "  \x1b[33minst\x1b[0m                             Instrument namespace: .sampler() .get() .list() .help()",
+        "  \x1b[33mmidi\x1b[0m                             MIDI recording and playback: .record() .sequences() .devices() .help()",
         "  \x1b[33menv\x1b[0m                              Runtime introspection: .vars() .globals() .inspect() .functions()",
         "  \x1b[33mproj\x1b[0m                             Project namespace: .current() .list() .load() .rm() .help()",
         "  \x1b[33mvis\x1b[0m                              Visualization namespace: .waveform() .list() .remove() .clear()",

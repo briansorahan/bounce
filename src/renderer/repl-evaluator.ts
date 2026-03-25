@@ -10,6 +10,7 @@ export const BOUNCE_GLOBALS = new Set([
   "fs",
   "proj",
   "inst",
+  "midi",
 ]);
 
 /**
