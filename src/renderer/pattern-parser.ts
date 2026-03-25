@@ -1,5 +1,3 @@
-import { BounceError } from "../shared/bounce-error.js";
-
 export interface CompiledStep {
   events: Array<{ note: number; velocity: number }>;
 }
@@ -17,7 +15,7 @@ export function velocityFromChar(ch: string): number {
   } else if (code >= 65 && code <= 90) {  // A-Z → indices 26-51
     index = code - 65 + 26;
   } else {
-    throw new BounceError("INVALID_VELOCITY_CHAR", `Invalid velocity character: '${ch}'`);
+    throw new Error(`Invalid velocity character: '${ch}'`);
   }
   return Math.round(1 + (index / 51) * 126); // 1–127
 }
@@ -26,7 +24,7 @@ export function parseMidiNote(name: string): number {
   // Format: [a-gA-G]'?[0-9]+
   // Examples: c4→60, c'4→61, a4→69, b'3→58
   const match = name.match(/^([a-gA-G])('?)(\d+)$/);
-  if (!match) throw new BounceError("INVALID_NOTE_NAME", `Invalid note name: '${name}'`);
+  if (!match) throw new Error(`Invalid note name: '${name}'`);
   const [, letter, sharp, octaveStr] = match;
   const octave = parseInt(octaveStr, 10);
   const baseNotes: Record<string, number> = {
@@ -36,7 +34,7 @@ export function parseMidiNote(name: string): number {
   const semitone = base + (sharp === "'" ? 1 : 0);
   // MIDI: C-1=0, C0=12, C4=60
   const midi = (octave + 1) * 12 + semitone;
-  if (midi < 0 || midi > 127) throw new BounceError("NOTE_OUT_OF_RANGE", `Note '${name}' out of MIDI range (0–127)`);
+  if (midi < 0 || midi > 127) throw new Error(`Note '${name}' out of MIDI range (0–127)`);
   return midi;
 }
 
@@ -48,7 +46,7 @@ export function parsePattern(notation: string): CompiledPattern {
   for (const line of lines) {
     // Format: "NOTE = STEPS"
     const eqIdx = line.indexOf("=");
-    if (eqIdx === -1) throw new BounceError("INVALID_PATTERN_LINE", `Invalid pattern line (missing '='): '${line}'`);
+    if (eqIdx === -1) throw new Error(`Invalid pattern line (missing '='): '${line}'`);
 
     const noteName = line.slice(0, eqIdx).trim();
     const stepsStr = line.slice(eqIdx + 1).trim();
@@ -59,8 +57,7 @@ export function parsePattern(notation: string): CompiledPattern {
     const chars = stepsStr.split("").filter(c => !/\s/.test(c));
 
     if (chars.length > 16) {
-      throw new BounceError(
-        "TOO_MANY_STEPS",
+      throw new Error(
         `Pattern row '${noteName}' has ${chars.length} steps — expected at most 16`,
       );
     }
