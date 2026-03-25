@@ -77,12 +77,12 @@ test.describe("Transport and Pattern DSL", () => {
     const rows = window.locator(".xterm-rows");
 
     await sendCommand(window, "transport.bpm(-1)");
-    await expect(rows).toContainText(/[Ee]rror|invalid|out of range/i, {
+    await expect(rows).toContainText(/BPM must be between|[Ee]rror|invalid|out of range/i, {
       timeout: 5000,
     });
 
     await sendCommand(window, "transport.bpm(401)");
-    await expect(rows).toContainText(/[Ee]rror|invalid|out of range/i, {
+    await expect(rows).toContainText(/BPM must be between|[Ee]rror|invalid|out of range/i, {
       timeout: 5000,
     });
 
