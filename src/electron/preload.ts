@@ -6,7 +6,7 @@ import type {
   NMFVisualizationData,
   OnsetSliceOptions,
 } from "./ipc-types";
-import type { ElectronAPI } from "../shared/ipc-contract";
+import type { ElectronAPI, MidiEvent } from "../shared/ipc-contract";
 
 const api: ElectronAPI = {
   version: process.versions.electron,
@@ -203,6 +203,40 @@ const api: ElectronAPI = {
   },
   onMixerLevels: (callback: (data: { channelPeaksL: number[]; channelPeaksR: number[]; masterPeakL: number; masterPeakR: number }) => void) => {
     ipcRenderer.on("mixer-levels", (_event, data) => callback(data));
+  },
+
+  // MIDI
+  midiListInputs: () =>
+    ipcRenderer.invoke("midi-list-inputs"),
+  midiOpenInput: (index: number) =>
+    ipcRenderer.invoke("midi-open-input", index),
+  midiCloseInput: () =>
+    ipcRenderer.invoke("midi-close-input"),
+  midiInjectEvent: (status: number, data1: number, data2: number) =>
+    ipcRenderer.invoke("midi-inject-event", status, data1, data2),
+  midiStartRecording: (instrumentId: string) =>
+    ipcRenderer.invoke("midi-start-recording", instrumentId),
+  midiStopRecording: () =>
+    ipcRenderer.invoke("midi-stop-recording"),
+  midiSaveSequence: (name: string, events: unknown[], durationMs: number) =>
+    ipcRenderer.invoke("midi-save-sequence", name, events, durationMs),
+  midiLoadSequence: (id: number) =>
+    ipcRenderer.invoke("midi-load-sequence", id),
+  midiListSequences: () =>
+    ipcRenderer.invoke("midi-list-sequences"),
+  midiDeleteSequence: (id: number) =>
+    ipcRenderer.invoke("midi-delete-sequence", id),
+  midiLoadFile: (filePath: string) =>
+    ipcRenderer.invoke("midi-load-file", filePath),
+  midiStartPlayback: (sequenceId: number, instrumentId: string) =>
+    ipcRenderer.invoke("midi-start-playback", sequenceId, instrumentId),
+  midiStopPlayback: () =>
+    ipcRenderer.invoke("midi-stop-playback"),
+  onMidiInputEvent: (callback: (event: MidiEvent) => void) => {
+    ipcRenderer.on("midi-input-event", (_event, data) => callback(data));
+  },
+  onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => {
+    ipcRenderer.on("midi-playback-ended", (_event, data) => callback(data));
   },
 };
 

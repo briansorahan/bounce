@@ -1,7 +1,7 @@
 FROM node:24-trixie-slim
 RUN apt-get update
-RUN apt-get install -y -qq build-essential cmake libblas-dev liblapack-dev xvfb xauth \
-                           python3 python-is-python3 libgtk-3-0t64 libgbm1 libasound2t64
+RUN apt-get install -y -qq build-essential cmake libblas-dev liblapack-dev xvfb xauth alsa-utils \
+                           python3 python-is-python3 libgtk-3-0t64 libgbm1 libasound2t64 libasound2-dev
 WORKDIR /build
 COPY binding.gyp \
      eslint.config.mjs \

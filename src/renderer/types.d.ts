@@ -341,5 +341,21 @@ interface Window {
     getBackgroundErrors: () => Promise<BackgroundErrorRecord[]>;
     dismissBackgroundError: (id: number) => Promise<boolean>;
     dismissAllBackgroundErrors: () => Promise<number>;
+    // MIDI
+    midiListInputs: () => Promise<Array<{ index: number; name: string }>>;
+    midiOpenInput: (index: number) => Promise<{ name: string }>;
+    midiCloseInput: () => Promise<void>;
+    midiInjectEvent: (status: number, data1: number, data2: number) => Promise<void>;
+    midiStartRecording: (instrumentId: string) => Promise<void>;
+    midiStopRecording: () => Promise<Array<{ timestampMs: number; type: string; channel: number; note?: number; velocity?: number; ccNumber?: number; ccValue?: number }>>;
+    midiSaveSequence: (name: string, events: unknown[], durationMs: number) => Promise<{ id: number; name: string; project_id: number; duration_ms: number; event_count: number; created_at: string }>;
+    midiLoadSequence: (id: number) => Promise<{ id: number; name: string; project_id: number; duration_ms: number; event_count: number; created_at: string; events: unknown[] } | null>;
+    midiListSequences: () => Promise<Array<{ id: number; name: string; project_id: number; duration_ms: number; event_count: number; created_at: string }>>;
+    midiDeleteSequence: (id: number) => Promise<void>;
+    midiLoadFile: (filePath: string) => Promise<{ events: unknown[]; durationMs: number; smfType: number }>;
+    midiStartPlayback: (sequenceId: number, instrumentId: string) => Promise<void>;
+    midiStopPlayback: () => Promise<void>;
+    onMidiInputEvent: (callback: (event: unknown) => void) => void;
+    onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
   };
 }
