@@ -85,6 +85,14 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
       channelPeaksR?: number[];
       masterPeakL?: number;
       masterPeakR?: number;
+      // Transport telemetry
+      absoluteTick?: number;
+      bar?: number;
+      beat?: number;
+      step?: number;
+      // Device info
+      sampleRate?: number;
+      bufferSize?: number;
     };
     if (data.type === "position" && data.sampleHash !== undefined) {
       mainWindow.webContents.send("playback-position", {
@@ -99,6 +107,18 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
         channelPeaksR: data.channelPeaksR ?? [],
         masterPeakL: data.masterPeakL ?? 0,
         masterPeakR: data.masterPeakR ?? 0,
+      });
+    } else if (data.type === "transport-tick") {
+      mainWindow.webContents.send("transport-tick", {
+        absoluteTick: data.absoluteTick ?? 0,
+        bar: data.bar ?? 0,
+        beat: data.beat ?? 0,
+        step: data.step ?? 0,
+      });
+    } else if (data.type === "audio-device-info") {
+      mainWindow.webContents.send("audio-device-info", {
+        sampleRate: data.sampleRate ?? 0,
+        bufferSize: data.bufferSize ?? 0,
       });
     } else if (data.type === "error") {
       mainWindow.webContents.send("playback-error", {

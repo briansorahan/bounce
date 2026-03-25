@@ -357,5 +357,13 @@ interface Window {
     midiStopPlayback: () => Promise<void>;
     onMidiInputEvent: (callback: (event: unknown) => void) => void;
     onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
+    // Transport
+    transportStart(): void;
+    transportStop(): void;
+    transportSetBpm(bpm: number): void;
+    transportSetPattern(channelIndex: number, stepsJson: string): void;
+    transportClearPattern(channelIndex: number): void;
+    onTransportTick(cb: (data: import('../shared/ipc-contract').TransportTickData) => void): void;
+    onAudioDeviceInfo(cb: (data: import('../shared/ipc-contract').AudioDeviceInfoData) => void): void;
   };
 }

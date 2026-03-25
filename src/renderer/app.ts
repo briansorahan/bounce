@@ -2,7 +2,7 @@ import { AudioManager, type PlaybackCursorState } from "./audio-context.js";
 import { BounceTerminal } from "./terminal.js";
 import { WaveformVisualizer } from "./waveform-visualizer.js";
 import { ReplEvaluator } from "./repl-evaluator.js";
-import { buildBounceApi, BounceResult } from "./bounce-api.js";
+import { buildBounceApi, BounceResult, getBounceCurrentBpm } from "./bounce-api.js";
 import { TabCompletion } from "./tab-completion.js";
 import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 import { StatusLine } from "./status-line.js";
@@ -99,6 +99,14 @@ export class BounceApp {
         this.terminal.writeln(`\x1b[31m[playback error] ${data.code}: ${data.message}\x1b[0m`);
       });
     }
+
+    // Listen for transport tick and device info telemetry
+    window.electron.onTransportTick((data) => {
+      this.statusLine.updateTransport(data, getBounceCurrentBpm());
+    });
+    window.electron.onAudioDeviceInfo((data) => {
+      this.statusLine.updateDeviceInfo(data.sampleRate, data.bufferSize);
+    });
 
     window.addEventListener("beforeunload", () => {
       this.statusLine.stop();

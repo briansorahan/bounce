@@ -50,6 +50,8 @@ import { buildSampleNamespace } from "./namespaces/sample-namespace.js";
 import { buildInstNamespace } from "./namespaces/instrument-namespace.js";
 import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
 import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
+import { buildTransportNamespace } from "./namespaces/transport-namespace.js";
+import { buildPatNamespace } from "./namespaces/pat-namespace.js";
 
 export {
   BounceResult,
@@ -101,6 +103,12 @@ export interface BounceApiDeps {
   };
 }
 
+// Module-level BPM accessor so app.ts can read current BPM without coupling to the namespace.
+let _getCurrentBpm: () => number = () => 120;
+export function getBounceCurrentBpm(): number {
+  return _getCurrentBpm();
+}
+
 export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { terminal } = deps;
 
@@ -138,6 +146,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const inst = buildInstNamespace(namespaceDeps);
   const { mx } = buildMixerNamespace(namespaceDeps);
   const { midi } = buildMidiNamespace(namespaceDeps);
+  const { transport, getCurrentBpm } = buildTransportNamespace(namespaceDeps);
+  const { pat } = buildPatNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps);
 
   const api = {
@@ -150,9 +160,12 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     inst,
     mx,
     midi,
+    transport,
+    pat,
     ...globals,
   };
 
   sharedState.api = api;
+  _getCurrentBpm = getCurrentBpm;
   return api;
 }
