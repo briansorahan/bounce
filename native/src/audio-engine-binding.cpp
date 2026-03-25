@@ -2,6 +2,7 @@
 #include "audio-engine.h"
 #include "midi-input.h"
 #include "midi-file-parser.h"
+#include "../../third_party/nlohmann/json.hpp"
 #include <memory>
 #include <vector>
 
@@ -44,12 +45,23 @@ private:
     Napi::Value MixerSetMasterMute(const Napi::CallbackInfo& info);
     Napi::Value OnMixerLevels(const Napi::CallbackInfo& info);
 
+    // Transport API
+    Napi::Value TransportStart(const Napi::CallbackInfo& info);
+    Napi::Value TransportStop(const Napi::CallbackInfo& info);
+    Napi::Value TransportSetBpm(const Napi::CallbackInfo& info);
+    Napi::Value TransportSetPattern(const Napi::CallbackInfo& info);
+    Napi::Value TransportClearPattern(const Napi::CallbackInfo& info);
+    Napi::Value OnTransportTick(const Napi::CallbackInfo& info);
+    Napi::Value OnDeviceInfo(const Napi::CallbackInfo& info);
+
     std::unique_ptr<AudioEngine> engine_;
 
     // Threadsafe functions for telemetry callbacks
     Napi::ThreadSafeFunction positionTsfn_;
     Napi::ThreadSafeFunction endedTsfn_;
     Napi::ThreadSafeFunction metersTsfn_;
+    Napi::ThreadSafeFunction tickTsfn_;
+    Napi::ThreadSafeFunction deviceInfoTsfn_;
 };
 
 // ---------------------------------------------------------------------------
@@ -79,6 +91,14 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("mixerSetMasterGain",      &AudioEngineWrapper::MixerSetMasterGain),
         InstanceMethod("mixerSetMasterMute",      &AudioEngineWrapper::MixerSetMasterMute),
         InstanceMethod("onMixerLevels",           &AudioEngineWrapper::OnMixerLevels),
+        // Transport API
+        InstanceMethod("transportStart",          &AudioEngineWrapper::TransportStart),
+        InstanceMethod("transportStop",           &AudioEngineWrapper::TransportStop),
+        InstanceMethod("transportSetBpm",         &AudioEngineWrapper::TransportSetBpm),
+        InstanceMethod("transportSetPattern",     &AudioEngineWrapper::TransportSetPattern),
+        InstanceMethod("transportClearPattern",   &AudioEngineWrapper::TransportClearPattern),
+        InstanceMethod("onTransportTick",         &AudioEngineWrapper::OnTransportTick),
+        InstanceMethod("onDeviceInfo",            &AudioEngineWrapper::OnDeviceInfo),
     });
 
     Napi::FunctionReference* ctor = new Napi::FunctionReference();
@@ -99,8 +119,10 @@ AudioEngineWrapper::AudioEngineWrapper(const Napi::CallbackInfo& info)
 }
 
 AudioEngineWrapper::~AudioEngineWrapper() {
-    if (positionTsfn_) positionTsfn_.Release();
-    if (endedTsfn_)    endedTsfn_.Release();
+    if (positionTsfn_)   positionTsfn_.Release();
+    if (endedTsfn_)      endedTsfn_.Release();
+    if (tickTsfn_)       tickTsfn_.Release();
+    if (deviceInfoTsfn_) deviceInfoTsfn_.Release();
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +528,100 @@ Napi::Value AudioEngineWrapper::MixerSetMasterMute(const Napi::CallbackInfo& inf
         return env.Undefined();
     }
     engine_->mixerSetMasterMute(info[0].As<Napi::Boolean>().Value());
+    return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// Transport API
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::TransportStart(const Napi::CallbackInfo& info) {
+    engine_->transportStart();
+    return info.Env().Undefined();
+}
+
+Napi::Value AudioEngineWrapper::TransportStop(const Napi::CallbackInfo& info) {
+    engine_->transportStop();
+    return info.Env().Undefined();
+}
+
+Napi::Value AudioEngineWrapper::TransportSetBpm(const Napi::CallbackInfo& info) {
+    double bpm = info[0].As<Napi::Number>().DoubleValue();
+    engine_->transportSetBpm(bpm);
+    return info.Env().Undefined();
+}
+
+Napi::Value AudioEngineWrapper::TransportSetPattern(const Napi::CallbackInfo& info) {
+    int channelIndex     = info[0].As<Napi::Number>().Int32Value();
+    std::string stepsJson = info[1].As<Napi::String>().Utf8Value();
+
+    auto pd = std::make_shared<PatternData>();
+    pd->channelIndex = channelIndex;
+    pd->scheduledBar = -1; // scheduler computes actual bar at drain time
+
+    auto j = nlohmann::json::parse(stepsJson);
+    for (int i = 0; i < 16 && i < static_cast<int>(j.size()); ++i) {
+        for (auto& ev : j[i]["events"])
+            pd->steps[i].events.push_back(
+                {static_cast<uint8_t>(ev["note"].get<int>()),
+                 static_cast<uint8_t>(ev["velocity"].get<int>())});
+    }
+    engine_->transportSetPattern(pd);
+    return info.Env().Undefined();
+}
+
+Napi::Value AudioEngineWrapper::TransportClearPattern(const Napi::CallbackInfo& info) {
+    int channelIndex = info[0].As<Napi::Number>().Int32Value();
+    engine_->transportClearPattern(channelIndex);
+    return info.Env().Undefined();
+}
+
+Napi::Value AudioEngineWrapper::OnTransportTick(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (!info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Expected function").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (tickTsfn_) tickTsfn_.Release();
+    tickTsfn_ = Napi::ThreadSafeFunction::New(
+        env, info[0].As<Napi::Function>(), "onTransportTick", 0, 1);
+
+    engine_->onTransportTick([this](int abs, int bar, int beat, int step) {
+        struct D { int abs, bar, beat, step; };
+        auto* d = new D{abs, bar, beat, step};
+        tickTsfn_.NonBlockingCall(d, [](Napi::Env env2, Napi::Function cb, D* data) {
+            cb.Call({
+                Napi::Number::New(env2, data->abs),
+                Napi::Number::New(env2, data->bar),
+                Napi::Number::New(env2, data->beat),
+                Napi::Number::New(env2, data->step)
+            });
+            delete data;
+        });
+    });
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::OnDeviceInfo(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (!info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Expected function").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (deviceInfoTsfn_) deviceInfoTsfn_.Release();
+    deviceInfoTsfn_ = Napi::ThreadSafeFunction::New(
+        env, info[0].As<Napi::Function>(), "onDeviceInfo", 0, 1);
+
+    engine_->onDeviceInfo([this](int sr, int bs) {
+        struct D { int sr, bs; };
+        auto* d = new D{sr, bs};
+        deviceInfoTsfn_.NonBlockingCall(d, [](Napi::Env env2, Napi::Function cb, D* data) {
+            cb.Call({
+                Napi::Number::New(env2, data->sr),
+                Napi::Number::New(env2, data->bs)
+            });
+            delete data;
+        });
+    });
     return env.Undefined();
 }
 
