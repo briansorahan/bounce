@@ -35,3 +35,37 @@ export interface NMFVisualizationData {
   };
   featureHash: string;
 }
+
+export interface AmpSliceOptions {
+  fastRampUp?: number;
+  fastRampDown?: number;
+  slowRampUp?: number;
+  slowRampDown?: number;
+  onThreshold?: number;
+  offThreshold?: number;
+  floor?: number;
+  minSliceLength?: number;
+  highPassFreq?: number;
+}
+
+export interface NoveltySliceOptions {
+  kernelSize?: number;
+  threshold?: number;
+  filterSize?: number;
+  minSliceLength?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+}
+
+export interface TransientSliceOptions {
+  order?: number;
+  blockSize?: number;
+  padSize?: number;
+  skew?: number;
+  threshFwd?: number;
+  threshBack?: number;
+  windowSize?: number;
+  clumpLength?: number;
+  minSliceLength?: number;
+}

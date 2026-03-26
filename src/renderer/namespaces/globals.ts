@@ -27,7 +27,7 @@ export function buildGlobals(deps: NamespaceDeps) {
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
         "  env.inspect(\"samp\")                                   \x1b[90m# inspect a binding\x1b[0m",
         "  proj.load(\"drums\")                                    \x1b[90m# switch project context\x1b[0m",
-        "  const onsets = samp.onsets(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
+        "  const onsets = samp.onsetSlice(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
         "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
         "  vis.waveform(samp).overlay(onsets).show()               \x1b[90m# visualize onsets\x1b[0m",
         "  vis.waveform(samp).overlay(samp.nmf()).show()           \x1b[90m# visualize NMF\x1b[0m",

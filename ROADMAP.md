@@ -339,69 +339,6 @@ Would this be a robust way to understand the structure of the code that the user
 typing into the REPL? Would it be performant enough to not compromise the rapid
 interactivity that users will want from tab completion?
 
-## Audio Recordings With No Name
-
-This seems to work
-```typescript
-const mic = sn.dev(0)
-const rec = mic.record()
-rec.stop()
-```
-
-But I'm curious what happens to the recorded sample in this case.
-I think we need a better data model for recorded samples in general.
-I was looking at the samples table I have in my local bounce db.
-I see there are two samples where file_path is null, but neither of these two samples have a linked row in the samples_features
-table so they can't be derived samples.
-I think these are recorded samples that were recorded with no name, like in the snippet above.
-I also think that it is stupid to use the NAME from mic.record(NAME) as the file_path in the db since we aren't actually
-writing these recorded samples to the filesystem.
-Should we just add a name column?
-If this column is populated then we could infer that it's a recorded sample.
-I would like to impose a constraint on the schema: we can never have both file_path and name both be populated, i.e.
-either exactly one of them is null or both are null. If both are null then it's a derived sample. In this case it would
-be nice to have a constraint that there is a linked row in samples_features, but maybe that's a bit heavy and might
-not actually be supported in any way by sqlite.
-But I think that sqlite's CHECK contraints will prevent us from having a row where both file_path and name are populated.
-
-Actually, we may also want to think about the planned freesound integration when we design the schema for the samples table.
-For freesound samples, we're going to want a `url` column that points to the sample's freesound page, or maybe the download
-link we used from the API. Either way, we will want to record a url for freesound samples.
-Maybe it would be convenient to have a `sample_type` column with a CHECK constraint that ensures that all rows have a value in
-the set `('raw', 'derived', 'recording', 'freesound')`.
-
-After chatting with my web browser's AI Mode, I think that the suggested "hybrid approach" seems like a good path forward.
-In this approach, we would have 4 new tables:
-```sql
-CREATE TABLE samples_raw_metadata       (file_path TEXT NOT NULL);
-CREATE TABLE samples_recorded_metadata  (name      TEXT NOT NULL);
-CREATE TABLE samples_freesound_metadata (url       TEXT NOT NULL);
-```
-For each sample_type we insert into the samples table (except for `derived`), we would atomically insert a row into the
-corresponding metadata table.
-This appeals to me because then we have an easy way in the samples table to filter for different types of samples without
-bloating the schema with nullable columns.
-Application code would enforce the fact that a given sample_type MUST have a linked row in the corresponding metadata table
-by atomically inserting to the two tables.
-
-I also think I may want to consider rethinking how we're storing audio data in the db.
-I think it might be a good idea to avoid storing this blob data to conserve disk space, e.g. for slices or grains
-the only place where we actually have a strong technical reason to cache the actual audio data is in the
-audio utility process. The instrument that is going to play the samples will need to cache it in memory because it
-wouldn't be realtime-safe for the instrument to read from the filesystem or from sqlite.
-
-But if look at the GranularInstrument example as a thought experiment, where would the audio data for each grain be computed?
-I think there are 2 IPC calls involved in defining an instrument:
-renderer -> main -> audio utility
-And as far as I know, we want to ensure that nothing in the audio utility process is reading from the filesystem or sqlite.
-So it seems like the audio data for each grain would be computed by the main process?
-Then it would be encoded into the message that is sent via IPC to the audio utility process?
-
-Either way, I think that the audio_data column should only be populated for recorded samples, so maybe it actually belongs
-in the samples_recorded_metadata table?
-We may also want to consider adding an audio_data column to the samples_freesound_metadata table so that we actually
-cache freesound audio data in the sqlite db? That would avoid potentially slow calls to the freesound API every time
-we define an instrument that uses freesound samples.
 
 ## sn.help()
 

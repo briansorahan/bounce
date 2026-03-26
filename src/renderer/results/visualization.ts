@@ -1,5 +1,5 @@
 import { BounceResult, HelpableResult, isPromiseLike, type HelpFactory } from "./base.js";
-import type { OnsetFeature, NmfFeature, NxFeature } from "./features.js";
+import type { SliceFeature, NmfFeature, NxFeature } from "./features.js";
 import type { Sample } from "./sample.js";
 
 export interface VisSceneBindings {
@@ -22,7 +22,7 @@ export interface VisSceneSummary {
 }
 
 export class VisScene extends HelpableResult {
-  readonly overlays: Array<OnsetFeature | NmfFeature | NxFeature> = [];
+  readonly overlays: Array<SliceFeature | NmfFeature | NxFeature> = [];
   readonly panels: NmfFeature[] = [];
   private readonly pendingOps: Array<Promise<void>> = [];
   private shownSceneId: string | undefined;
@@ -59,8 +59,8 @@ export class VisScene extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisScene {
-    if (isPromiseLike<OnsetFeature | NmfFeature | NxFeature>(feature)) {
+  overlay(feature: SliceFeature | NmfFeature | NxFeature | PromiseLike<SliceFeature | NmfFeature | NxFeature>): VisScene {
+    if (isPromiseLike<SliceFeature | NmfFeature | NxFeature>(feature)) {
       this.pendingOps.push(Promise.resolve(feature).then((f) => { this.overlays.push(f); }));
     } else {
       this.overlays.push(feature);
@@ -106,7 +106,7 @@ export class VisScenePromise implements PromiseLike<VisScene> {
     return new VisScenePromise(this.promise.then((scene) => scene.title(text)));
   }
 
-  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisScenePromise {
+  overlay(feature: SliceFeature | NmfFeature | NxFeature | PromiseLike<SliceFeature | NmfFeature | NxFeature>): VisScenePromise {
     return new VisScenePromise(
       Promise.all([this.promise, Promise.resolve(feature)]).then(([scene, f]) => scene.overlay(f)),
     );
@@ -170,9 +170,9 @@ export class VisStack extends HelpableResult {
     return this;
   }
 
-  overlay(feature: OnsetFeature | NmfFeature | NxFeature | PromiseLike<OnsetFeature | NmfFeature | NxFeature>): VisStack {
+  overlay(feature: SliceFeature | NmfFeature | NxFeature | PromiseLike<SliceFeature | NmfFeature | NxFeature>): VisStack {
     const latest = this.requireLatestScene();
-    if (isPromiseLike<OnsetFeature | NmfFeature | NxFeature>(feature)) {
+    if (isPromiseLike<SliceFeature | NmfFeature | NxFeature>(feature)) {
       this.pendingOps.push(Promise.resolve(feature).then((f) => { latest.overlay(f); }));
     } else {
       latest.overlay(feature);
