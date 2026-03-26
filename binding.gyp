@@ -13,6 +13,9 @@
         "native/src/spectral_shape.cpp",
         "native/src/normalization.cpp",
         "native/src/kdtree.cpp",
+        "native/src/amp_slice.cpp",
+        "native/src/novelty_slice.cpp",
+        "native/src/transient_slice.cpp",
         "third_party/hisstools/HISSTools_FFT/HISSTools_FFT.cpp"
       ],
       "include_dirs": [

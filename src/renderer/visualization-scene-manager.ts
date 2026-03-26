@@ -1,11 +1,11 @@
 import { NMFVisualizer } from "./nmf-visualizer.js";
 import type { PlaybackCursorState } from "./audio-context.js";
 import { type NMFOverlayData, WaveformVisualizer } from "./waveform-visualizer.js";
-import type { NmfFeature, NxFeature, OnsetFeature, Sample } from "./bounce-result.js";
+import type { NmfFeature, NxFeature, SliceFeature, Sample } from "./bounce-result.js";
 
 export interface RenderableVisScene {
   readonly sample: Sample;
-  readonly overlays: readonly (OnsetFeature | NmfFeature | NxFeature)[];
+  readonly overlays: readonly (SliceFeature | NmfFeature | NxFeature)[];
   readonly panels: readonly NmfFeature[];
   readonly titleText?: string;
   markShown(id: string): void;
@@ -54,7 +54,7 @@ export class VisualizationSceneManager {
     const audioFileData = await window.electron.readAudioFile(scene.sample.hash);
     const waveformVisualizer = new WaveformVisualizer(waveformCanvas);
     const onsetOverlay = scene.overlays.find(
-      (feature): feature is OnsetFeature => feature.featureType === "onset-slice",
+      (feature): feature is SliceFeature => feature.featureType === "onset-slice",
     );
     const nmfOverlay = scene.overlays.find(
       (feature): feature is NmfFeature => feature.featureType === "nmf",

@@ -5,6 +5,9 @@ import type {
   MFCCOptions,
   NMFVisualizationData,
   OnsetSliceOptions,
+  AmpSliceOptions,
+  NoveltySliceOptions,
+  TransientSliceOptions,
 } from "./ipc-types";
 import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData } from "../shared/ipc-contract";
 
@@ -13,6 +16,12 @@ const api: ElectronAPI = {
   readAudioFile: (path: string) => ipcRenderer.invoke("read-audio-file", path),
   analyzeOnsetSlice: (audioData: Float32Array, options?: OnsetSliceOptions) =>
     ipcRenderer.invoke("analyze-onset-slice", audioData, options),
+  analyzeAmpSlice: (audioData: Float32Array, options?: AmpSliceOptions) =>
+    ipcRenderer.invoke("analyze-amp-slice", audioData, options),
+  analyzeNoveltySlice: (audioData: Float32Array, options?: NoveltySliceOptions) =>
+    ipcRenderer.invoke("analyze-novelty-slice", audioData, options),
+  analyzeTransientSlice: (audioData: Float32Array, options?: TransientSliceOptions) =>
+    ipcRenderer.invoke("analyze-transient-slice", audioData, options),
   analyzeBufNMF: (
     audioData: Float32Array,
     sampleRate: number,

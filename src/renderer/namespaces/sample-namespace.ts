@@ -3,14 +3,14 @@
 import {
   BounceResult,
   Sample,
-  OnsetFeature,
+  SliceFeature,
   NmfFeature,
   NxFeature,
   MfccFeature,
   SampleNamespace,
   SampleListResult,
   SamplePromise,
-  OnsetFeaturePromise,
+  SliceFeaturePromise,
   NmfFeaturePromise,
   NxFeaturePromise,
   MfccFeaturePromise,
@@ -21,6 +21,7 @@ import {
   RecordingHandle,
   type AudioInputDevice,
   type RecordOptions,
+  InstrumentResult,
 } from "../bounce-result.js";
 import { GrainCollection } from "../grain-collection.js";
 import type { NamespaceDeps } from "./types.js";
@@ -113,7 +114,10 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       "    sample.loop({ loopStart?, loopEnd? })",
       "    sample.stop()",
       "    sample.display()",
-      "    sample.onsets()",
+      "    sample.onsetSlice()",
+      "    sample.ampSlice()",
+      "    sample.noveltySlice()",
+      "    sample.transientSlice()",
       "    sample.nmf()",
       "    sample.mfcc()",
       "    sample.slice(options?)",
@@ -141,9 +145,9 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     ].join("\n"));
   }
 
-  function onsetHelpText(feature: OnsetFeature): BounceResult {
+  function onsetHelpText(feature: SliceFeature): BounceResult {
     return new BounceResult([
-      `\x1b[1;36mOnsetFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
+      `\x1b[1;36mSliceFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
       "",
       `  source: ${feature.sourceHash.substring(0, 8)}`,
       `  slices: ${feature.count}`,
@@ -151,6 +155,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       "  Methods:",
       "    feature.slice(options?)",
       "    feature.playSlice(index?)",
+      "    feature.toSampler({ name, startNote?, polyphony? })",
     ].join("\n"));
   }
 
@@ -226,7 +231,10 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         slice: (options) => slice(bound, options),
         sep: (options) => sep(bound, options),
         granularize: (options) => granularize(bound, options),
-        onsets: (options) => analyze(bound, options),
+        onsetSlice: (options) => analyze(bound, options),
+        ampSlice: (options) => analyzeAmpSlice(bound, options),
+        noveltySlice: (options) => analyzeNoveltySlice(bound, options),
+        transientSlice: (options) => analyzeTransientSlice(bound, options),
         nmf: (options) => analyzeNmf(bound, options),
         mfcc: (options) => analyzeMFCC(bound, options),
         nx: (other, options) => analyzeNx(bound, other, options),
@@ -235,14 +243,14 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     return bound;
   }
 
-  function bindOnsetFeature(
+  function bindSliceFeature(
     source: Sample,
     featureHash: string,
     slices: number[],
-    options?: AnalyzeOptions,
+    options?: Record<string, unknown>,
     displayText = `\x1b[32mFound ${slices.length} onset slices (feature: ${featureHash.substring(0, 8)})\x1b[0m`,
-  ): OnsetFeature {
-    const bound: OnsetFeature = new OnsetFeature(
+  ): SliceFeature {
+    const bound: SliceFeature = new SliceFeature(
       displayText,
       source,
       featureHash,
@@ -252,9 +260,58 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
         help: (): BounceResult => onsetHelpText(bound),
         slice: (sliceOptions) => slice(bound, sliceOptions),
         playSlice: (index = 0) => playSlice(index, bound),
+        toSampler: (opts) => toSamplerBinding(source, featureHash, opts),
       },
     );
     return bound;
+  }
+
+  async function toSamplerBinding(
+    sample: Sample,
+    featureHash: string,
+    opts: { name: string; startNote?: number; polyphony?: number },
+  ): Promise<InstrumentResult> {
+    const { name, startNote = 36, polyphony = 16 } = opts;
+
+    const sliceRecords = await window.electron.createSliceSamples(sample.hash, featureHash);
+
+    const maxNotes = 128 - startNote;
+    const toLoad = sliceRecords.slice(0, maxNotes);
+    const dropped = sliceRecords.length - toLoad.length;
+
+    const instrumentId = `inst_${name}_${Date.now()}`;
+    window.electron.defineInstrument(instrumentId, "sampler", polyphony);
+
+    window.electron.createDbInstrument?.(name, "sampler", { polyphony })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[toSampler] Failed to persist instrument: ${msg}`);
+      });
+
+    for (const { hash: sliceHash, index } of toLoad) {
+      const note = startNote + index;
+      window.electron.loadInstrumentSample(instrumentId, note, sliceHash);
+      window.electron.addDbInstrumentSample?.(name, sliceHash, note, false, 0, -1)
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[toSampler] Failed to persist sample: ${msg}`);
+        });
+    }
+
+    let displayLine = `${name} (sampler, ${toLoad.length} notes loaded, polyphony ${polyphony})`;
+    if (dropped > 0) {
+      displayLine = `\x1b[33mWarning: ${dropped} slices beyond note 127 were dropped.\x1b[0m\n${displayLine}`;
+    }
+
+    return new InstrumentResult(
+      displayLine,
+      instrumentId,
+      name,
+      "sampler",
+      polyphony,
+      toLoad.length,
+      () => new BounceResult(`${name} (${toLoad.length} samples loaded)`),
+    );
   }
 
   function bindNmfFeature(
@@ -500,7 +557,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
   async function analyze(
     source?: Sample | PromiseLike<Sample> | AnalyzeOptions,
     options?: AnalyzeOptions,
-  ): Promise<OnsetFeature> {
+  ): Promise<SliceFeature> {
     const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
     const sample = resolvedSource instanceof Sample ? resolvedSource : await loadByHash(getCurrentHash());
     const opts = resolvedSource instanceof Sample ? options : (resolvedSource as AnalyzeOptions | undefined);
@@ -522,7 +579,97 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
       throw new Error("Failed to load stored onset feature.");
     }
 
-    return bindOnsetFeature(sample, feature.feature_hash, slices, opts);
+    return bindSliceFeature(sample, feature.feature_hash, slices, opts as Record<string, unknown> | undefined);
+  }
+
+  async function analyzeAmpSlice(
+    sample: Sample,
+    options?: AmpSliceOptions,
+  ): Promise<SliceFeature> {
+    if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
+      await loadByHash(sample.hash);
+    }
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mAnalyzing amplitude slices...\x1b[0m");
+
+    const slices = await window.electron.analyzeAmpSlice(audio.audioData, options);
+    await window.electron.storeFeature(audio.hash, "amp-slice", slices, options as FeatureOptions | undefined);
+    const feature = await window.electron.getMostRecentFeature(audio.hash, "amp-slice");
+    if (!feature) {
+      throw new Error("Failed to load stored amp-slice feature.");
+    }
+
+    return bindSliceFeature(
+      sample,
+      feature.feature_hash,
+      slices,
+      options as Record<string, unknown> | undefined,
+      `\x1b[32mFound ${slices.length} amplitude slices (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
+    );
+  }
+
+  async function analyzeNoveltySlice(
+    sample: Sample,
+    options?: NoveltySliceOptions,
+  ): Promise<SliceFeature> {
+    if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
+      await loadByHash(sample.hash);
+    }
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mAnalyzing novelty slices...\x1b[0m");
+
+    const slices = await window.electron.analyzeNoveltySlice(audio.audioData, options);
+    await window.electron.storeFeature(audio.hash, "novelty-slice", slices, options as FeatureOptions | undefined);
+    const feature = await window.electron.getMostRecentFeature(audio.hash, "novelty-slice");
+    if (!feature) {
+      throw new Error("Failed to load stored novelty-slice feature.");
+    }
+
+    return bindSliceFeature(
+      sample,
+      feature.feature_hash,
+      slices,
+      options as Record<string, unknown> | undefined,
+      `\x1b[32mFound ${slices.length} novelty slices (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
+    );
+  }
+
+  async function analyzeTransientSlice(
+    sample: Sample,
+    options?: TransientSliceOptions,
+  ): Promise<SliceFeature> {
+    if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
+      await loadByHash(sample.hash);
+    }
+    const audio = audioManager.getCurrentAudio();
+    if (!audio?.hash) {
+      throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+    }
+
+    terminal.writeln("\x1b[36mAnalyzing transient slices...\x1b[0m");
+
+    const slices = await window.electron.analyzeTransientSlice(audio.audioData, options);
+    await window.electron.storeFeature(audio.hash, "transient-slice", slices, options as FeatureOptions | undefined);
+    const feature = await window.electron.getMostRecentFeature(audio.hash, "transient-slice");
+    if (!feature) {
+      throw new Error("Failed to load stored transient-slice feature.");
+    }
+
+    return bindSliceFeature(
+      sample,
+      feature.feature_hash,
+      slices,
+      options as Record<string, unknown> | undefined,
+      `\x1b[32mFound ${slices.length} transient slices (feature: ${feature.feature_hash.substring(0, 8)})\x1b[0m`,
+    );
   }
 
   async function analyzeNmf(
@@ -665,17 +812,17 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
 
   const slice = Object.assign(
     async function slice(
-      source?: OnsetFeature | Sample | PromiseLike<Sample> | SliceOptions,
+      source?: SliceFeature | Sample | PromiseLike<Sample> | SliceOptions,
       options?: SliceOptions,
     ): Promise<BounceResult> {
       const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const explicitOptions =
-        resolvedSource instanceof OnsetFeature || resolvedSource instanceof Sample
+        resolvedSource instanceof SliceFeature || resolvedSource instanceof Sample
           ? options
           : (resolvedSource as SliceOptions | undefined);
       let feature: FeatureData | null;
       let sampleHash: string;
-      if (resolvedSource instanceof OnsetFeature) {
+      if (resolvedSource instanceof SliceFeature) {
         sampleHash = resolvedSource.sourceHash;
         feature = explicitOptions?.featureHash
           ? await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice")
@@ -845,17 +992,17 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
   );
 
   const playSlice = Object.assign(
-    async function playSlice(index = 0, source?: OnsetFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
+    async function playSlice(index = 0, source?: SliceFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
       const currentHash = getCurrentHash();
 
       const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
       const lookupHash = resolvedSource instanceof Sample
         ? resolvedSource.hash
-        : resolvedSource instanceof OnsetFeature
+        : resolvedSource instanceof SliceFeature
           ? resolvedSource.sourceHash
           : currentHash;
 
-      const feature = resolvedSource instanceof OnsetFeature
+      const feature = resolvedSource instanceof SliceFeature
         ? await window.electron.getMostRecentFeature(lookupHash, "onset-slice")
         : await window.electron.getMostRecentFeature(lookupHash, "onset-slice");
 
@@ -912,7 +1059,7 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     },
     {
       help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mOnsetFeature.playSlice(index?)\x1b[0m",
+        "\x1b[1;36mSliceFeature.playSlice(index?)\x1b[0m",
         "",
         "  Play a specific onset-derived slice by index. Requires feature.slice()",
         "  to have been run first. Index defaults to 0.",

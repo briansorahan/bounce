@@ -1,10 +1,18 @@
 import { BounceResult, FeatureResult, type HelpFactory } from "./base.js";
 import { SamplePromise, type Sample } from "./sample.js";
+import { InstrumentResult } from "./instrument.js";
 
-export interface OnsetFeatureBindings {
+export interface ToSamplerOptions {
+  name: string;
+  startNote?: number;
+  polyphony?: number;
+}
+
+export interface SliceFeatureBindings {
   help: HelpFactory;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
   playSlice: (index?: number) => Promise<Sample>;
+  toSampler: (opts: ToSamplerOptions) => Promise<InstrumentResult>;
 }
 
 export interface NmfFeatureBindings {
@@ -22,14 +30,14 @@ export interface MfccFeatureBindings {
   help: HelpFactory;
 }
 
-export class OnsetFeature extends FeatureResult {
+export class SliceFeature extends FeatureResult {
   constructor(
     display: string,
     source: Sample,
     featureHash: string,
-    options: AnalyzeOptions | undefined,
+    options: Record<string, unknown> | undefined,
     public readonly slices: number[],
-    private readonly bindings: OnsetFeatureBindings,
+    private readonly bindings: SliceFeatureBindings,
   ) {
     super(display, source, featureHash, "onset-slice", options, bindings.help);
   }
@@ -44,6 +52,10 @@ export class OnsetFeature extends FeatureResult {
 
   playSlice(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playSlice(index));
+  }
+
+  toSampler(opts: ToSamplerOptions): Promise<InstrumentResult> {
+    return this.bindings.toSampler(opts);
   }
 }
 
@@ -107,11 +119,11 @@ export class MfccFeature extends FeatureResult {
   }
 }
 
-export class OnsetFeaturePromise implements PromiseLike<OnsetFeature> {
-  constructor(private readonly promise: Promise<OnsetFeature>) {}
+export class SliceFeaturePromise implements PromiseLike<SliceFeature> {
+  constructor(private readonly promise: Promise<SliceFeature>) {}
 
-  then<TResult1 = OnsetFeature, TResult2 = never>(
-    onfulfilled?: ((value: OnsetFeature) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = SliceFeature, TResult2 = never>(
+    onfulfilled?: ((value: SliceFeature) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -119,7 +131,7 @@ export class OnsetFeaturePromise implements PromiseLike<OnsetFeature> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<OnsetFeature | TResult> {
+  ): Promise<SliceFeature | TResult> {
     return this.promise.catch(onrejected);
   }
 
@@ -133,6 +145,10 @@ export class OnsetFeaturePromise implements PromiseLike<OnsetFeature> {
 
   playSlice(index = 0): SamplePromise {
     return new SamplePromise(this.promise.then((feature) => feature.playSlice(index)));
+  }
+
+  toSampler(opts: ToSamplerOptions): Promise<InstrumentResult> {
+    return this.promise.then((feature) => feature.toSampler(opts));
   }
 }
 

@@ -230,9 +230,9 @@ async function testReplEvaluator() {
       };
     },
     makeAwaitlessSample: () => ({
-      then: (resolve: (value: { onsets: () => { slice: () => Promise<string> } }) => void) => {
+      then: (resolve: (value: { onsetSlice: () => { slice: () => Promise<string> } }) => void) => {
         Promise.resolve({
-          onsets: () => ({
+          onsetSlice: () => ({
             slice: async () => {
               await new Promise((resolveDelay) => setTimeout(resolveDelay, 0));
               events.push("sliced");
@@ -241,7 +241,7 @@ async function testReplEvaluator() {
           }),
         }).then(resolve);
       },
-      onsets: () => ({
+      onsetSlice: () => ({
         then: (resolve: (value: { slice: () => Promise<string> }) => void) => {
           Promise.resolve({
             slice: async () => {
@@ -325,7 +325,7 @@ async function testReplEvaluator() {
     "top-level expression statements are awaited in order",
   );
 
-  const r11 = await evaluator.evaluate("makeAwaitlessSample().onsets().slice()");
+  const r11 = await evaluator.evaluate("makeAwaitlessSample().onsetSlice().slice()");
   assert.strictEqual(r11, "sliced", "thenable wrappers support awaitless chained calls");
   assert.deepStrictEqual(
     events,

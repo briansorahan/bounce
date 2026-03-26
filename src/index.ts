@@ -121,6 +121,7 @@ export default OnsetFeature;
  * MFCCFeature analyzer wrapper
  */
 export class MFCCFeature {
+
   private _native: NativeMFCCFeature;
 
   constructor(options?: {
@@ -146,6 +147,92 @@ export class MFCCFeature {
   /**
    * Reset analyzer state
    */
+  reset(): void {
+    this._native.reset();
+  }
+}
+
+/**
+ * AmpSlice analyzer wrapper — amplitude-based audio slicing
+ */
+export class AmpSlice {
+  private _native: any;
+
+  constructor(options?: {
+    fastRampUp?: number;
+    fastRampDown?: number;
+    slowRampUp?: number;
+    slowRampDown?: number;
+    onThreshold?: number;
+    offThreshold?: number;
+    floor?: number;
+    minSliceLength?: number;
+    highPassFreq?: number;
+    sampleRate?: number;
+  }) {
+    this._native = new addon.AmpSlice(options || {});
+  }
+
+  process(audioBuffer: Float32Array | Float64Array): number[] {
+    return this._native.process(audioBuffer);
+  }
+
+  reset(): void {
+    this._native.reset();
+  }
+}
+
+/**
+ * NoveltySlice analyzer wrapper — novelty-curve-based audio slicing
+ */
+export class NoveltySlice {
+  private _native: any;
+
+  constructor(options?: {
+    kernelSize?: number;
+    threshold?: number;
+    filterSize?: number;
+    minSliceLength?: number;
+    windowSize?: number;
+    fftSize?: number;
+    hopSize?: number;
+  }) {
+    this._native = new addon.NoveltySlice(options || {});
+  }
+
+  process(audioBuffer: Float32Array | Float64Array): number[] {
+    return this._native.process(audioBuffer);
+  }
+
+  reset(): void {
+    this._native.reset();
+  }
+}
+
+/**
+ * TransientSlice analyzer wrapper — transient-based audio slicing
+ */
+export class TransientSlice {
+  private _native: any;
+
+  constructor(options?: {
+    order?: number;
+    blockSize?: number;
+    padSize?: number;
+    skew?: number;
+    threshFwd?: number;
+    threshBack?: number;
+    windowSize?: number;
+    clumpLength?: number;
+    minSliceLength?: number;
+  }) {
+    this._native = new addon.TransientSlice(options || {});
+  }
+
+  process(audioBuffer: Float32Array | Float64Array): number[] {
+    return this._native.process(audioBuffer);
+  }
+
   reset(): void {
     this._native.reset();
   }

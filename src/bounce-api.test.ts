@@ -5,8 +5,8 @@ import {
   Sample,
   SamplePromise,
   CurrentSamplePromise,
-  OnsetFeature,
-  OnsetFeaturePromise,
+  SliceFeature,
+  SliceFeaturePromise,
   NmfFeature,
   NmfFeaturePromise,
   MfccFeature,
@@ -310,7 +310,7 @@ async function main() {
 
   const sample = await sn.read("/test.wav");
   assert.ok(sample instanceof Sample, "sn.read returns Sample");
-  assert.ok(sample.help().toString().includes("sample.onsets()"));
+  assert.ok(sample.help().toString().includes("sample.onsetSlice()"));
   assert.ok(sample.help().toString().includes("sample.loop("), "sample.help() mentions loop method");
   assert.ok(sample.help().toString().includes("sample.loop.help()"), "sample.help() hints at loop.help()");
   assert.ok(sample.toString().includes("Loaded"));
@@ -354,8 +354,8 @@ async function main() {
   const namespaceStopped = sn.stop();
   assert.ok(namespaceStopped.toString().includes("Playback stopped"), "sn.stop stops all playback");
 
-  const onsetFeature = await sample.onsets();
-  assert.ok(onsetFeature instanceof OnsetFeature, "sample.onsets returns OnsetFeature");
+  const onsetFeature = await sample.onsetSlice();
+  assert.ok(onsetFeature instanceof SliceFeature, "sample.onsets returns OnsetFeature");
   assert.ok(onsetFeature.help().toString().includes("playSlice"));
   await onsetFeature.slice();
   const sliceSample = await onsetFeature.playSlice(0);
@@ -388,13 +388,13 @@ async function main() {
   assert.equal(typeof scenePromise.show, "function", "VisScenePromise exposes show()");
 
   // VisScene / VisScenePromise / VisStack accept promise-typed feature args
-  const onsetPromise = sample.onsets();
+  const onsetPromise = sample.onsetSlice();
   const nmfPromise = sample.nmf();
-  assert.ok(onsetPromise instanceof OnsetFeaturePromise, "sample.onsets() returns OnsetFeaturePromise");
+  assert.ok(onsetPromise instanceof SliceFeaturePromise, "sample.onsetSlice() returns OnsetFeaturePromise");
   assert.ok(nmfPromise instanceof NmfFeaturePromise, "sample.nmf() returns NmfFeaturePromise");
 
   // Use already-resolved promises for population tests so one microtask flush is sufficient
-  const resolvedOnsetPromise: PromiseLike<OnsetFeature> = Promise.resolve(onsetFeature);
+  const resolvedOnsetPromise: PromiseLike<SliceFeature> = Promise.resolve(onsetFeature);
   const resolvedNmfPromise: PromiseLike<NmfFeature> = Promise.resolve(nmfFeature);
 
   // VisScene.overlay / panel accept PromiseLike feature args, return same VisScene
@@ -464,11 +464,11 @@ async function main() {
   const removeResult = await proj.rm("drums");
   assert.ok(removeResult.toString().includes("Removed project drums"), "proj.rm confirms project deletion");
 
-  const chainedOnsetFeature = await sn.read("/test.wav").onsets();
-  assert.ok(chainedOnsetFeature instanceof OnsetFeature, "sn.read().onsets() returns OnsetFeature");
+  const chainedOnsetFeature = await sn.read("/test.wav").onsetSlice();
+  assert.ok(chainedOnsetFeature instanceof SliceFeature, "sn.read().onsetSlice() returns SliceFeature");
 
-  const chainedSliceResult = await sn.read("/test.wav").onsets().slice();
-  assert.ok(chainedSliceResult instanceof BounceResult, "sn.read().onsets().slice() returns BounceResult");
+  const chainedSliceResult = await sn.read("/test.wav").onsetSlice().slice();
+  assert.ok(chainedSliceResult instanceof BounceResult, "sn.read().onsetSlice().slice() returns BounceResult");
 
   const chainedComponent = await sn.read("/test.wav").nmf().playComponent(0);
   assert.ok(chainedComponent instanceof Sample, "sn.read().nmf().playComponent() returns Sample");

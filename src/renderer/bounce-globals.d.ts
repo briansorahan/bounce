@@ -49,6 +49,46 @@ interface GranularizeOptions {
   silenceThreshold?: number;
 }
 
+interface AmpSliceOptions {
+  fastRampUp?: number;
+  fastRampDown?: number;
+  slowRampUp?: number;
+  slowRampDown?: number;
+  onThreshold?: number;
+  offThreshold?: number;
+  floor?: number;
+  minSliceLength?: number;
+  highPassFreq?: number;
+}
+
+interface NoveltySliceOptions {
+  kernelSize?: number;
+  threshold?: number;
+  filterSize?: number;
+  minSliceLength?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+}
+
+interface TransientSliceOptions {
+  order?: number;
+  blockSize?: number;
+  padSize?: number;
+  skew?: number;
+  threshFwd?: number;
+  threshBack?: number;
+  windowSize?: number;
+  clumpLength?: number;
+  minSliceLength?: number;
+}
+
+interface ToSamplerOptions {
+  name: string;
+  startNote?: number;
+  polyphony?: number;
+}
+
 declare class BounceResult {
   toString(): string;
 }
@@ -71,7 +111,10 @@ declare class Sample extends BounceResult {
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
   granularize(options?: GranularizeOptions): ReplValue<Promise<GrainCollection>>;
-  onsets(options?: AnalyzeOptions): ReplValue<Promise<OnsetFeature>>;
+  onsetSlice(options?: AnalyzeOptions): ReplValue<Promise<SliceFeature>>;
+  ampSlice(options?: AmpSliceOptions): ReplValue<Promise<SliceFeature>>;
+  noveltySlice(options?: NoveltySliceOptions): ReplValue<Promise<SliceFeature>>;
+  transientSlice(options?: TransientSliceOptions): ReplValue<Promise<SliceFeature>>;
   nmf(options?: NmfOptions): ReplValue<Promise<NmfFeature>>;
   mfcc(options?: MFCCOptions): ReplValue<Promise<MfccFeature>>;
 }
@@ -85,11 +128,12 @@ declare class FeatureResult extends BounceResult {
   help(): BounceResult;
 }
 
-declare class OnsetFeature extends FeatureResult {
+declare class SliceFeature extends FeatureResult {
   readonly slices: number[];
   readonly count: number;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
   playSlice(index?: number): ReplValue<Promise<Sample>>;
+  toSampler(opts: ToSamplerOptions): ReplValue<Promise<InstrumentResult>>;
 }
 
 declare class NmfFeature extends FeatureResult {
@@ -105,6 +149,15 @@ declare class NmfFeature extends FeatureResult {
 declare class MfccFeature extends FeatureResult {
   readonly numFrames: number;
   readonly numCoeffs: number;
+}
+
+declare class InstrumentResult extends BounceResult {
+  readonly instrumentId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly polyphony: number;
+  readonly sampleCount: number;
+  help(): BounceResult;
 }
 
 interface SampleSummaryFeature {
@@ -257,13 +310,13 @@ declare const proj: ProjectNamespace;
 
 declare class VisScene extends BounceResult {
   readonly sample: Sample;
-  readonly overlays: Array<OnsetFeature | NmfFeature>;
+  readonly overlays: Array<SliceFeature | NmfFeature>;
   readonly panels: NmfFeature[];
   readonly sceneId: string | undefined;
   readonly titleText: string | undefined;
   help(): BounceResult;
   title(text: string): VisScene;
-  overlay(feature: OnsetFeature | NmfFeature): VisScene;
+  overlay(feature: SliceFeature | NmfFeature): VisScene;
   panel(feature: NmfFeature): VisScene;
   show(): ReplValue<Promise<BounceResult>>;
 }
@@ -273,7 +326,7 @@ declare class VisStack extends BounceResult {
   help(): BounceResult;
   waveform(sample: Sample): VisStack;
   title(text: string): VisStack;
-  overlay(feature: OnsetFeature | NmfFeature): VisStack;
+  overlay(feature: SliceFeature | NmfFeature): VisStack;
   panel(feature: NmfFeature): VisStack;
   show(): ReplValue<Promise<BounceResult>>;
 }

@@ -1,11 +1,11 @@
 import type { GrainCollection } from "../grain-collection.js";
 import { BounceResult, HelpableResult, defaultHelp, type HelpFactory } from "./base.js";
 import {
-  OnsetFeaturePromise,
+  SliceFeaturePromise,
   NmfFeaturePromise,
   MfccFeaturePromise,
   NxFeaturePromise,
-  type OnsetFeature,
+  type SliceFeature,
   type NmfFeature,
   type MfccFeature,
   type NxFeature,
@@ -26,7 +26,10 @@ export interface SampleMethodBindings {
   slice: (options?: SliceOptions) => Promise<BounceResult>;
   sep: (options?: SepOptions) => Promise<BounceResult>;
   granularize: (options?: GranularizeOptions) => Promise<GrainCollection>;
-  onsets: (options?: AnalyzeOptions) => Promise<OnsetFeature>;
+  onsetSlice: (options?: AnalyzeOptions) => Promise<SliceFeature>;
+  ampSlice: (options?: AmpSliceOptions) => Promise<SliceFeature>;
+  noveltySlice: (options?: NoveltySliceOptions) => Promise<SliceFeature>;
+  transientSlice: (options?: TransientSliceOptions) => Promise<SliceFeature>;
   nmf: (options?: NmfOptions) => Promise<NmfFeature>;
   mfcc: (options?: MFCCOptions) => Promise<MfccFeature>;
   nx: (other: Sample | PromiseLike<Sample>, options?: { components?: number }) => Promise<NxFeature>;
@@ -56,8 +59,17 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
     granularize: async () => {
       throw new Error(`${name} does not support granularization in this context.`);
     },
-    onsets: async () => {
+    onsetSlice: async () => {
       throw new Error(`${name} does not support onset analysis in this context.`);
+    },
+    ampSlice: async () => {
+      throw new Error(`${name} does not support amplitude slice analysis in this context.`);
+    },
+    noveltySlice: async () => {
+      throw new Error(`${name} does not support novelty slice analysis in this context.`);
+    },
+    transientSlice: async () => {
+      throw new Error(`${name} does not support transient slice analysis in this context.`);
     },
     nmf: async () => {
       throw new Error(`${name} does not support NMF analysis in this context.`);
@@ -118,8 +130,20 @@ export class Sample extends HelpableResult {
     return new GrainCollectionPromise(this.bindings.granularize(options));
   }
 
-  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
-    return new OnsetFeaturePromise(this.bindings.onsets(options));
+  onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.bindings.onsetSlice(options));
+  }
+
+  ampSlice(options?: AmpSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.bindings.ampSlice(options));
+  }
+
+  noveltySlice(options?: NoveltySliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.bindings.noveltySlice(options));
+  }
+
+  transientSlice(options?: TransientSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.bindings.transientSlice(options));
   }
 
   nmf(options?: NmfOptions): NmfFeaturePromise {
@@ -286,8 +310,20 @@ export class SamplePromise implements PromiseLike<Sample> {
     return new GrainCollectionPromise(this.promise.then((sample) => sample.granularize(options)));
   }
 
-  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
-    return new OnsetFeaturePromise(this.promise.then((sample) => sample.onsets(options)));
+  onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.promise.then((sample) => sample.onsetSlice(options)));
+  }
+
+  ampSlice(options?: AmpSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.promise.then((sample) => sample.ampSlice(options)));
+  }
+
+  noveltySlice(options?: NoveltySliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.promise.then((sample) => sample.noveltySlice(options)));
+  }
+
+  transientSlice(options?: TransientSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.promise.then((sample) => sample.transientSlice(options)));
   }
 
   nmf(options?: NmfOptions): NmfFeaturePromise {
@@ -360,8 +396,20 @@ export class CurrentSamplePromise implements PromiseLike<Sample | null> {
     return new GrainCollectionPromise(this.requireSample().then((sample) => sample.granularize(options)));
   }
 
-  onsets(options?: AnalyzeOptions): OnsetFeaturePromise {
-    return new OnsetFeaturePromise(this.requireSample().then((sample) => sample.onsets(options)));
+  onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.requireSample().then((sample) => sample.onsetSlice(options)));
+  }
+
+  ampSlice(options?: AmpSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.requireSample().then((sample) => sample.ampSlice(options)));
+  }
+
+  noveltySlice(options?: NoveltySliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.requireSample().then((sample) => sample.noveltySlice(options)));
+  }
+
+  transientSlice(options?: TransientSliceOptions): SliceFeaturePromise {
+    return new SliceFeaturePromise(this.requireSample().then((sample) => sample.transientSlice(options)));
   }
 
   nmf(options?: NmfOptions): NmfFeaturePromise {

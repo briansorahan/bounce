@@ -64,6 +64,40 @@ export interface MFCCOptions {
   sampleRate?: number;
 }
 
+export interface AmpSliceOptions {
+  fastRampUp?: number;
+  fastRampDown?: number;
+  slowRampUp?: number;
+  slowRampDown?: number;
+  onThreshold?: number;
+  offThreshold?: number;
+  floor?: number;
+  minSliceLength?: number;
+  highPassFreq?: number;
+}
+
+export interface NoveltySliceOptions {
+  kernelSize?: number;
+  threshold?: number;
+  filterSize?: number;
+  minSliceLength?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+}
+
+export interface TransientSliceOptions {
+  order?: number;
+  blockSize?: number;
+  padSize?: number;
+  skew?: number;
+  threshFwd?: number;
+  threshBack?: number;
+  windowSize?: number;
+  clumpLength?: number;
+  minSliceLength?: number;
+}
+
 export interface NMFVisualizationData {
   sampleHash: string;
   nmfData: {
@@ -322,6 +356,9 @@ export const IpcChannel = {
   // Audio
   ReadAudioFile: "read-audio-file",
   AnalyzeOnsetSlice: "analyze-onset-slice",
+  AnalyzeAmpSlice: "analyze-amp-slice",
+  AnalyzeNoveltySlice: "analyze-novelty-slice",
+  AnalyzeTransientSlice: "analyze-transient-slice",
   AnalyzeBufNMF: "analyze-buf-nmf",
   AnalyzeMFCC: "analyze-mfcc",
 
@@ -481,6 +518,18 @@ export interface IpcHandleContract {
   };
   "analyze-onset-slice": {
     request: [audioData: number[], options?: OnsetSliceOptions];
+    response: number[];
+  };
+  "analyze-amp-slice": {
+    request: [audioData: number[], options?: AmpSliceOptions];
+    response: number[];
+  };
+  "analyze-novelty-slice": {
+    request: [audioData: number[], options?: NoveltySliceOptions];
+    response: number[];
+  };
+  "analyze-transient-slice": {
+    request: [audioData: number[], options?: TransientSliceOptions];
     response: number[];
   };
   "analyze-buf-nmf": {
@@ -864,6 +913,9 @@ export interface ElectronAPI {
   // Audio
   readAudioFile: (path: string) => Promise<ReadAudioFileResult>;
   analyzeOnsetSlice: (audioData: Float32Array, options?: OnsetSliceOptions) => Promise<number[]>;
+  analyzeAmpSlice: (audioData: Float32Array, options?: AmpSliceOptions) => Promise<number[]>;
+  analyzeNoveltySlice: (audioData: Float32Array, options?: NoveltySliceOptions) => Promise<number[]>;
+  analyzeTransientSlice: (audioData: Float32Array, options?: TransientSliceOptions) => Promise<number[]>;
   analyzeBufNMF: (audioData: Float32Array, sampleRate: number, options?: BufNMFOptions) => Promise<BufNMFResult>;
   analyzeMFCC: (audioData: Float32Array, options?: MFCCOptions) => Promise<unknown>;
 

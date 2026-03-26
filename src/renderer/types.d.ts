@@ -113,6 +113,40 @@ interface OnsetSliceOptions {
   metric?: number;
 }
 
+interface AmpSliceOptions {
+  fastRampUp?: number;
+  fastRampDown?: number;
+  slowRampUp?: number;
+  slowRampDown?: number;
+  onThreshold?: number;
+  offThreshold?: number;
+  floor?: number;
+  minSliceLength?: number;
+  highPassFreq?: number;
+}
+
+interface NoveltySliceOptions {
+  kernelSize?: number;
+  threshold?: number;
+  filterSize?: number;
+  minSliceLength?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+}
+
+interface TransientSliceOptions {
+  order?: number;
+  blockSize?: number;
+  padSize?: number;
+  skew?: number;
+  threshFwd?: number;
+  threshBack?: number;
+  windowSize?: number;
+  clumpLength?: number;
+  minSliceLength?: number;
+}
+
 interface BufNMFOptions {
   components?: number;
   iterations?: number;
@@ -185,6 +219,18 @@ interface Window {
     analyzeOnsetSlice: (
       audioData: Float32Array,
       options?: OnsetSliceOptions,
+    ) => Promise<number[]>;
+    analyzeAmpSlice: (
+      audioData: Float32Array,
+      options?: AmpSliceOptions,
+    ) => Promise<number[]>;
+    analyzeNoveltySlice: (
+      audioData: Float32Array,
+      options?: NoveltySliceOptions,
+    ) => Promise<number[]>;
+    analyzeTransientSlice: (
+      audioData: Float32Array,
+      options?: TransientSliceOptions,
     ) => Promise<number[]>;
     analyzeBufNMF: (
       audioData: Float32Array,

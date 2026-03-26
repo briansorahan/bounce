@@ -61,7 +61,7 @@ test.describe("Onset Slice Analysis", () => {
     await waitForReady(window);
 
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.onsets()");
+    await sendCommand(window, "samp.onsetSlice()");
 
     await expect(window.locator(".xterm-rows")).toContainText("Found", {
       timeout: 5000,
@@ -72,7 +72,7 @@ test.describe("Onset Slice Analysis", () => {
 
     await expect(window.locator(".visualization-scene-waveform-canvas")).toHaveCount(0);
 
-    await sendCommand(window, "const onsetScene = vis.waveform(samp).overlay(samp.onsets())");
+    await sendCommand(window, "const onsetScene = vis.waveform(samp).overlay(samp.onsetSlice())");
     await sendCommand(window, "onsetScene.show()");
 
     await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
@@ -97,7 +97,7 @@ test.describe("Onset Slice Analysis", () => {
 
     // First analysis
     await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "const onsetsA = samp.onsets()");
+    await sendCommand(window, "const onsetsA = samp.onsetSlice()");
     await sendCommand(window, "vis.waveform(samp).overlay(onsetsA).show()");
     await expect(window.locator(".xterm-rows")).toContainText("Analyzing onset slices...", {
       timeout: 5000,
@@ -105,7 +105,7 @@ test.describe("Onset Slice Analysis", () => {
     await expect(window.locator(".visualization-scene")).toHaveCount(1);
 
     // Second analysis with different threshold
-    await sendCommand(window, "const onsetsB = samp.onsets({ threshold: 0.5 })");
+    await sendCommand(window, "const onsetsB = samp.onsetSlice({ threshold: 0.5 })");
     await sendCommand(window, "vis.waveform(samp).overlay(onsetsB).show()");
 
     await expect(window.locator(".visualization-scene")).toHaveCount(2);

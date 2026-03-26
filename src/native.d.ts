@@ -211,3 +211,56 @@ export class KDTree {
   size(): number;
   clear(): void;
 }
+
+export interface AmpSliceOptions {
+  fastRampUp?: number;
+  fastRampDown?: number;
+  slowRampUp?: number;
+  slowRampDown?: number;
+  onThreshold?: number;
+  offThreshold?: number;
+  floor?: number;
+  minSliceLength?: number;
+  highPassFreq?: number;
+  sampleRate?: number;
+}
+
+export class AmpSlice {
+  constructor(options?: AmpSliceOptions);
+  process(audioBuffer: Float32Array | Float64Array): number[];
+  reset(): void;
+}
+
+export interface NoveltySliceOptions {
+  kernelSize?: number;
+  threshold?: number;
+  filterSize?: number;
+  minSliceLength?: number;
+  windowSize?: number;
+  fftSize?: number;
+  hopSize?: number;
+}
+
+export class NoveltySlice {
+  constructor(options?: NoveltySliceOptions);
+  process(audioBuffer: Float32Array | Float64Array): number[];
+  reset(): void;
+}
+
+export interface TransientSliceOptions {
+  order?: number;
+  blockSize?: number;
+  padSize?: number;
+  skew?: number;
+  threshFwd?: number;
+  threshBack?: number;
+  windowSize?: number;
+  clumpLength?: number;
+  minSliceLength?: number;
+}
+
+export class TransientSlice {
+  constructor(options?: TransientSliceOptions);
+  process(audioBuffer: Float32Array | Float64Array): number[];
+  reset(): void;
+}
