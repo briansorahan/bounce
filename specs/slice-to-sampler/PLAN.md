@@ -11,8 +11,10 @@ Only `OnsetSlice` is wrapped as a native binding. Three additional FluCoMa slici
 Decisions:
 - `toSampler()` lives on the slice feature result; calls `slice()` internally.
 - Default `startNote` = 36 (C2). Overflow: warn and load what fits.
-- REPL naming: `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`.
+- REPL naming: `sample.onsetSlice()`, `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`.
+- Rename `sample.onsets()` → `sample.onsetSlice()` for consistency (keep `onsets()` as deprecated alias).
 - Rename `OnsetFeature` → `SliceFeature` to generalize across all algorithms.
+- All four methods have `help()` and tab-completion (e.g. `samp.ampSlice.help()`).
 
 ## Approach Summary
 
@@ -95,9 +97,11 @@ No changes to the native audio engine (playback/sampler).
 - Update `OnsetFeaturePromise` → `SliceFeaturePromise` (with alias).
 
 **`src/renderer/namespaces/sample-namespace.ts`** (modify)
+- Rename the `onsets` binding to `onsetSlice`. Keep `onsets` as a deprecated alias that calls `onsetSlice`.
 - Add `ampSlice(options?)`, `noveltySlice(options?)`, `transientSlice(options?)` methods on the Sample binding.
 - Each calls the corresponding `window.electron.analyze*` IPC, stores feature, returns `SliceFeature`.
 - Wire `toSampler` binding into `bindSliceFeature` (renamed from `bindOnsetFeature`).
+- All four methods (`onsetSlice`, `ampSlice`, `noveltySlice`, `transientSlice`) have `help` properties with description+examples.
 
 **`src/renderer/bounce-globals.d.ts`** (modify)
 - Add `AmpSliceOptions`, `NoveltySliceOptions`, `TransientSliceOptions` interfaces.
@@ -129,6 +133,8 @@ drums (sampler, 88 notes loaded, polyphony 16)
 
 **New API surface on `Sample`:**
 ```typescript
+samp.onsetSlice()              // → SliceFeature (renamed from samp.onsets())
+samp.onsetSlice({ threshold: 0.3, minSliceLength: 4 })
 samp.ampSlice()                // → SliceFeature
 samp.ampSlice({ onThreshold: 10, fastRampUp: 5 })
 samp.noveltySlice()            // → SliceFeature
@@ -143,16 +149,18 @@ slices.toSampler({ name: "drums" })
 slices.toSampler({ name: "keys", startNote: 60, polyphony: 8 })
 ```
 
-**Renamed type:**
+**Renamed type + method:**
 ```typescript
 // Old: OnsetFeature  → New: SliceFeature (OnsetFeature kept as alias)
-samp.onsets()  // → SliceFeature (was OnsetFeature)
+// Old: samp.onsets() → New: samp.onsetSlice() (onsets() kept as deprecated alias)
+samp.onsetSlice()  // → SliceFeature
 ```
 
-**help() methods:**
-- `samp.ampSlice.help()` — describes parameters and usage
-- `samp.noveltySlice.help()` — describes parameters and usage
-- `samp.transientSlice.help()` — describes parameters and usage
+**help() methods (all have tab-completion):**
+- `samp.onsetSlice.help()` — describes onset detection parameters and usage
+- `samp.ampSlice.help()` — describes amplitude envelope parameters and usage
+- `samp.noveltySlice.help()` — describes spectral novelty parameters and usage
+- `samp.transientSlice.help()` — describes transient detection parameters and usage
 - `slices.toSampler.help()` — describes startNote, polyphony, usage examples
 
 #### REPL Contract Checklist
@@ -229,7 +237,7 @@ No new npm dependencies. `npm run rebuild` required after C++ changes.
 |------|------------|
 | NoveltySlice needs STFT pre-processing not obvious from algorithm header | Study `NoveltySliceClient.hpp` for the full processing chain; replicate STFT step in the C++ binding |
 | TransientSegmentation inherits from TransientExtraction — complex init | Study the class hierarchy carefully; test with simple signals first |
-| `OnsetFeature` → `SliceFeature` rename breaks existing user scripts | Export alias `OnsetFeature = SliceFeature`; update existing tests gradually |
+| `OnsetFeature` → `SliceFeature` and `onsets()` → `onsetSlice()` rename breaks existing user scripts | Export aliases `OnsetFeature = SliceFeature` and keep `onsets()` as deprecated alias calling `onsetSlice()`; update existing tests |
 | C++ compilation issues on Linux (CI) | Test via `./build.sh` (Docker) early; don't defer to the end |
 | Main-process handler uses IpcChannel enum (breaks CJS build) | Use string literals per project convention |
 
@@ -240,7 +248,7 @@ No new npm dependencies. `npm run rebuild` required after C++ changes.
 3. **Unit tests** for native bindings: `amp-slice.test.ts`, `novelty-slice.test.ts`, `transient-slice.test.ts`.
 4. **IPC channels**: analysis handlers + `get-slice-samples` handler.
 5. **Preload**: expose new IPC methods.
-6. **Rename `OnsetFeature` → `SliceFeature`** across renderer code + maintain alias.
+6. **Rename `OnsetFeature` → `SliceFeature`** and **`samp.onsets()` → `samp.onsetSlice()`** across renderer code + maintain aliases for backwards compat.
 7. **`toSampler()`**: add to `SliceFeature`, wire bindings in sample namespace.
 8. **New Sample methods**: `ampSlice()`, `noveltySlice()`, `transientSlice()` on Sample binding.
 9. **Help text**: for all new methods.
@@ -254,7 +262,7 @@ Large (~15–20 files across C++, TypeScript main/renderer/shared, and tests).
 
 ## Plan Consistency Checklist
 
-- [x] All sections agree on backwards compatibility (alias `OnsetFeature = SliceFeature`, no existing API removed)
+- [x] All sections agree on backwards compatibility (alias `OnsetFeature = SliceFeature`, deprecated `samp.onsets()` → `samp.onsetSlice()`, no existing API removed)
 - [x] All sections agree on the data model (reuses existing DB tables, adds `getSliceSamplesByFeatureHash` query, new feature types `"amp-slice"`, `"novelty-slice"`, `"transient-slice"`)
 - [x] REPL-facing changes define help() surface and SliceFeature/InstrumentResult terminal summaries
 - [x] Testing strategy names unit and Playwright coverage for each algorithm, toSampler, and rename compatibility

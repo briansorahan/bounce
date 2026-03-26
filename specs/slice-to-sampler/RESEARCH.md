@@ -118,8 +118,8 @@ All four algorithms produce the same output format: **an array of sample-index p
 
 **REPL interface (expanded):**
 ```
-// Existing (renamed result type)
-samp.onsets()              // → SliceFeature (was OnsetFeature)
+// Existing (renamed method + result type)
+samp.onsetSlice()          // → SliceFeature (was samp.onsets() → OnsetFeature)
 
 // New slice methods
 samp.ampSlice()            // → SliceFeature
@@ -152,8 +152,10 @@ All resolved during planning:
 1. **`toSampler` calls `slice()` internally** — transparent, one-step. ✅
 2. **Default `startNote` = 36** (C2, drum convention). ✅
 3. **Overflow: warn and load what fits.** ✅
-4. **REPL naming:** `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`. ✅
+4. **REPL naming:** `sample.onsetSlice()`, `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`. ✅
 5. **Shared result type:** Rename `OnsetFeature` → `SliceFeature`. ✅
+6. **Rename `sample.onsets()` → `sample.onsetSlice()`** for consistency. Keep `onsets()` as deprecated alias. ✅
+7. **All methods have `help()` and tab-completion.** ✅
 
 ## Research Findings
 
