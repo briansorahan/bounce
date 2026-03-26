@@ -63,10 +63,21 @@ bool AudioEngine::start() {
     }
 
     deviceRunning_ = true;
+
+    schedulerRunning_.store(true, std::memory_order_release);
+    schedulerThread_ = std::thread([this] { schedulerLoop(); });
+
+    if (deviceInfoCb_)
+        deviceInfoCb_(static_cast<int>(device_->sampleRate),
+                      static_cast<int>(device_->playback.internalPeriodSizeInFrames));
+
     return true;
 }
 
 void AudioEngine::stop() {
+    schedulerRunning_.store(false, std::memory_order_release);
+    if (schedulerThread_.joinable()) schedulerThread_.join();
+
     if (deviceRunning_) {
         ma_device_stop(device_.get());
         deviceRunning_ = false;
@@ -351,6 +362,47 @@ void AudioEngine::onMixerLevels(MeterLevelsCallback cb) {
 }
 
 // ---------------------------------------------------------------------------
+// Transport API (called from JS / utility-process thread)
+// ---------------------------------------------------------------------------
+void AudioEngine::transportStart() {
+    ControlMsg msg; msg.op = ControlMsg::Op::TransportStart;
+    std::lock_guard<std::mutex> lk(transportMutex_);
+    transportControlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::transportStop() {
+    ControlMsg msg; msg.op = ControlMsg::Op::TransportStop;
+    std::lock_guard<std::mutex> lk(transportMutex_);
+    transportControlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::transportSetBpm(double bpm) {
+    ControlMsg msg; msg.op = ControlMsg::Op::TransportSetBpm; msg.transportBpm = bpm;
+    std::lock_guard<std::mutex> lk(transportMutex_);
+    transportControlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::transportSetPattern(std::shared_ptr<PatternData> pattern) {
+    ControlMsg msg; msg.op = ControlMsg::Op::TransportSetPattern; msg.patternData = std::move(pattern);
+    std::lock_guard<std::mutex> lk(transportMutex_);
+    transportControlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::transportClearPattern(int channelIndex) {
+    ControlMsg msg; msg.op = ControlMsg::Op::TransportClearPattern; msg.channelIndex = channelIndex;
+    std::lock_guard<std::mutex> lk(transportMutex_);
+    transportControlQueue_.push_back(std::move(msg));
+}
+
+void AudioEngine::onTransportTick(std::function<void(int, int, int, int)> cb) {
+    tickCb_ = std::move(cb);
+}
+
+void AudioEngine::onDeviceInfo(std::function<void(int, int)> cb) {
+    deviceInfoCb_ = std::move(cb);
+}
+
+// ---------------------------------------------------------------------------
 // Audio callback (miniaudio audio thread)
 // ---------------------------------------------------------------------------
 void AudioEngine::audioCallback(ma_device* device, void* output,
@@ -463,6 +515,63 @@ void AudioEngine::processBlock(float* output, unsigned int frameCount) {
             }
         }
         controlQueue_.clear();
+    }
+
+    // Drain scheduled events for this block (lock-free SPSC — no mutex)
+    {
+        const uint64_t blockStart = sampleCounter_.load(std::memory_order_relaxed);
+        const uint64_t blockEnd   = blockStart + static_cast<uint64_t>(frameCount);
+
+        uint32_t r = schedReadPos_.load(std::memory_order_acquire);
+        uint32_t w = schedWritePos_.load(std::memory_order_acquire);
+        while (r != w) {
+            const ScheduledEvent& ev = schedRing_[r % kSchedRingSize];
+            if (ev.samplePosition >= blockEnd) break;
+            switch (ev.type) {
+            case ScheduledEvent::Type::TransportStart:
+                localTransportRunning_ = true;
+                localTransportStart_   = ev.samplePosition;
+                break;
+            case ScheduledEvent::Type::TransportStop:
+                localTransportRunning_ = false;
+                break;
+            case ScheduledEvent::Type::BpmChange:
+                localTransportBpm_ = ev.bpm;
+                break;
+            case ScheduledEvent::Type::NoteOn:
+                if (ev.samplePosition >= blockStart)
+                    fireNoteOn(ev.channelIndex, ev.note, ev.velocity);
+                break;
+            case ScheduledEvent::Type::NoteOff:
+                if (ev.samplePosition >= blockStart)
+                    fireNoteOff(ev.channelIndex, ev.note);
+                break;
+            }
+            ++r;
+            schedReadPos_.store(r, std::memory_order_release);
+        }
+
+        sampleCounter_.store(blockEnd, std::memory_order_release);
+
+        // Emit tick telemetry (uses only audio-thread-local transport state)
+        if (localTransportRunning_) {
+            const double   spt       = sampleRate_ * 60.0 / localTransportBpm_ / 4.0;
+            const uint64_t elapsed   = blockStart - localTransportStart_;
+            const uint64_t tickBefore = static_cast<uint64_t>(elapsed / spt);
+            const uint64_t tickAfter  = static_cast<uint64_t>((elapsed + frameCount) / spt);
+            if (tickAfter > tickBefore) {
+                const uint64_t t = tickBefore + 1;
+                TelemetryEvent tev;
+                tev.kind         = TelemetryEvent::Kind::Tick;
+                tev.absoluteTick = static_cast<int>(t);
+                tev.bar          = static_cast<int>(t / 16);
+                tev.beat         = static_cast<int>((t % 16) / 4);
+                tev.step         = static_cast<int>(t % 16);
+                int w2 = ringWritePos_.load(std::memory_order_relaxed);
+                ring_[w2 % kRingSize] = std::move(tev);
+                ringWritePos_.store(w2 + 1, std::memory_order_release);
+            }
+        }
     }
 
     // Zero the output buffer
@@ -622,8 +731,10 @@ void AudioEngine::telemetryLoop() {
             const TelemetryEvent& ev = ring_[r % kRingSize];
             if (ev.kind == TelemetryEvent::Kind::Position) {
                 if (posCb) posCb(ev.hash, ev.positionInSamples);
-            } else {
+            } else if (ev.kind == TelemetryEvent::Kind::Ended) {
                 if (endCb) endCb(ev.hash);
+            } else if (ev.kind == TelemetryEvent::Kind::Tick) {
+                if (tickCb_) tickCb_(ev.absoluteTick, ev.bar, ev.beat, ev.step);
             }
             ++r;
         }
@@ -662,5 +773,161 @@ void AudioEngine::telemetryLoop() {
 
             meterCb(outL, outR, holdMasterL, holdMasterR);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Transport helpers (audio-thread only)
+// ---------------------------------------------------------------------------
+void AudioEngine::fireNoteOn(int channelIndex, uint8_t note, float velocity) {
+    if (channelIndex < 0 || channelIndex >= kNumChannels) return;
+    for (auto& inst : instruments_)
+        if (channels_[channelIndex].attachedInstrumentId == inst->id()) {
+            inst->noteOn(static_cast<int>(note), velocity);
+            return;
+        }
+}
+
+void AudioEngine::fireNoteOff(int channelIndex, uint8_t note) {
+    if (channelIndex < 0 || channelIndex >= kNumChannels) return;
+    for (auto& inst : instruments_)
+        if (channels_[channelIndex].attachedInstrumentId == inst->id()) {
+            inst->noteOff(static_cast<int>(note));
+            return;
+        }
+}
+
+// ---------------------------------------------------------------------------
+// Scheduler thread (~4-block lookahead)
+// ---------------------------------------------------------------------------
+void AudioEngine::schedulerLoop() {
+    constexpr int kLookaheadBlocks  = 10;
+    constexpr int kNominalBlockSize = 512;
+
+    while (schedulerRunning_.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(
+                static_cast<int>(4.0 * kNominalBlockSize / sampleRate_ * 1e6)));
+
+        // Step 1: drain transport control queue
+        {
+            std::vector<ControlMsg> incoming;
+            {
+                std::lock_guard<std::mutex> lk(transportMutex_);
+                incoming.swap(transportControlQueue_);
+            }
+            for (auto& msg : incoming) {
+                switch (msg.op) {
+                case ControlMsg::Op::TransportStart: {
+                    schedulerData_.startSampleCount =
+                        sampleCounter_.load(std::memory_order_acquire);
+                    schedulerData_.running = true;
+                    scheduledUpTo_.store(schedulerData_.startSampleCount,
+                                        std::memory_order_release);
+                    for (auto& [ch, pd] : schedulerData_.activePatterns)
+                        if (pd->scheduledBar < 0) pd->scheduledBar = 0;
+                    // Push TransportStart event to audio thread via ring
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        schedulerData_.startSampleCount,
+                        ScheduledEvent::Type::TransportStart,
+                        0, 0, 0.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
+                    break;
+                }
+                case ControlMsg::Op::TransportStop: {
+                    schedulerData_.running = false;
+                    const uint64_t stopSample =
+                        sampleCounter_.load(std::memory_order_acquire);
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        stopSample, ScheduledEvent::Type::TransportStop,
+                        0, 0, 0.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
+                    break;
+                }
+                case ControlMsg::Op::TransportSetBpm: {
+                    schedulerData_.bpm = msg.transportBpm;
+                    const uint64_t changeSample =
+                        sampleCounter_.load(std::memory_order_acquire);
+                    scheduledUpTo_.store(changeSample, std::memory_order_release);
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        changeSample, ScheduledEvent::Type::BpmChange,
+                        0, 0, 0.f, msg.transportBpm};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
+                    break;
+                }
+                case ControlMsg::Op::TransportSetPattern: {
+                    auto pd = msg.patternData;
+                    if (schedulerData_.running) {
+                        const double spt =
+                            sampleRate_ * 60.0 / schedulerData_.bpm / 4.0;
+                        const uint64_t elapsed =
+                            sampleCounter_.load(std::memory_order_relaxed)
+                            - schedulerData_.startSampleCount;
+                        pd->scheduledBar =
+                            static_cast<int>(elapsed / (spt * 16)) + 1;
+                    } else {
+                        pd->scheduledBar = 0;
+                    }
+                    schedulerData_.activePatterns[pd->channelIndex] = pd;
+                    scheduledUpTo_.store(
+                        sampleCounter_.load(std::memory_order_acquire),
+                        std::memory_order_release);
+                    break;
+                }
+                case ControlMsg::Op::TransportClearPattern:
+                    schedulerData_.activePatterns.erase(msg.channelIndex);
+                    break;
+                default: break;
+                }
+            }
+        }
+
+        // Step 2: compute events for lookahead window
+        if (!schedulerData_.running || schedulerData_.activePatterns.empty()) continue;
+
+        const double   spt         = sampleRate_ * 60.0 / schedulerData_.bpm / 4.0;
+        const uint64_t now         = sampleCounter_.load(std::memory_order_acquire);
+        const uint64_t lookaheadEnd =
+            now + static_cast<uint64_t>(kLookaheadBlocks * kNominalBlockSize);
+        const uint64_t upTo = scheduledUpTo_.load(std::memory_order_relaxed);
+        if (lookaheadEnd <= upTo) continue;
+
+        const uint64_t startSample = schedulerData_.startSampleCount;
+        const uint64_t startTick =
+            static_cast<uint64_t>(
+                (upTo > startSample ? upTo - startSample : 0) / spt);
+        const uint64_t endTick =
+            static_cast<uint64_t>((lookaheadEnd - startSample) / spt);
+
+        for (uint64_t tick = startTick; tick <= endTick; ++tick) {
+            const int      bar        = static_cast<int>(tick / 16);
+            const uint64_t tickSample = startSample + static_cast<uint64_t>(tick * spt);
+
+            for (auto& [ch, pd] : schedulerData_.activePatterns) {
+                if (bar < pd->scheduledBar) continue;
+                const int patStep =
+                    static_cast<int>(
+                        (tick - static_cast<uint64_t>(pd->scheduledBar * 16)) % 16);
+                for (auto& [note, vel] : pd->steps[patStep].events) {
+                    uint32_t sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        tickSample, ScheduledEvent::Type::NoteOn,
+                        ch, note, vel / 127.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
+
+                    const uint64_t offSample =
+                        startSample + static_cast<uint64_t>((tick + 1) * spt);
+                    sw = schedWritePos_.load(std::memory_order_relaxed);
+                    schedRing_[sw % kSchedRingSize] = {
+                        offSample, ScheduledEvent::Type::NoteOff,
+                        ch, note, 0.f, 0.0};
+                    schedWritePos_.store(sw + 1, std::memory_order_release);
+                }
+            }
+        }
+        scheduledUpTo_.store(lookaheadEnd, std::memory_order_release);
     }
 }

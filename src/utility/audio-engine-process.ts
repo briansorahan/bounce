@@ -57,6 +57,14 @@ interface AudioEngineNative {
   mixerSetMasterGain(gainDb: number): void;
   mixerSetMasterMute(mute: boolean): void;
   onMixerLevels(cb: (channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => void): void;
+  // Transport API
+  transportStart(): void;
+  transportStop(): void;
+  transportSetBpm(bpm: number): void;
+  transportSetPattern(channelIndex: number, stepsJson: string): void;
+  transportClearPattern(channelIndex: number): void;
+  onTransportTick(cb: (absoluteTick: number, bar: number, beat: number, step: number) => void): void;
+  onDeviceInfo(cb: (sampleRate: number, bufferSize: number) => void): void;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -90,6 +98,14 @@ if (engine) {
   engine.onMixerLevels((channelPeaksL: number[], channelPeaksR: number[], masterPeakL: number, masterPeakR: number) => {
     port?.postMessage({ type: "mixer-levels", channelPeaksL, channelPeaksR, masterPeakL, masterPeakR });
   });
+
+  engine.onTransportTick((absoluteTick: number, bar: number, beat: number, step: number) => {
+    port?.postMessage({ type: "transport-tick", absoluteTick, bar, beat, step });
+  });
+
+  engine.onDeviceInfo((sampleRate: number, bufferSize: number) => {
+    port?.postMessage({ type: "audio-device-info", sampleRate, bufferSize });
+  });
 }
 
 // The main process sends the MessagePort as the first message.
@@ -117,6 +133,9 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     pan?: number;
     mute?: boolean;
     solo?: boolean;
+    // Transport fields
+    bpm?: number;
+    stepsJson?: string;
   }}) => {
     const data = msg.data;
 
@@ -218,6 +237,22 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
         if (engine && data.mute !== undefined) {
           engine.mixerSetMasterMute(data.mute);
         }
+        break;
+      case "transport-start":
+        if (engine) engine.transportStart();
+        break;
+      case "transport-stop":
+        if (engine) engine.transportStop();
+        break;
+      case "transport-set-bpm":
+        if (engine && data.bpm !== undefined) engine.transportSetBpm(data.bpm);
+        break;
+      case "transport-set-pattern":
+        if (engine && data.channelIndex !== undefined && data.stepsJson)
+          engine.transportSetPattern(data.channelIndex, data.stepsJson);
+        break;
+      case "transport-clear-pattern":
+        if (engine && data.channelIndex !== undefined) engine.transportClearPattern(data.channelIndex);
         break;
       default:
         console.warn(`[audio-engine-process] Unknown message type: ${data.type}`);

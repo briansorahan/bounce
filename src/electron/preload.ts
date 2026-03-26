@@ -6,7 +6,7 @@ import type {
   NMFVisualizationData,
   OnsetSliceOptions,
 } from "./ipc-types";
-import type { ElectronAPI, MidiEvent } from "../shared/ipc-contract";
+import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData } from "../shared/ipc-contract";
 
 const api: ElectronAPI = {
   version: process.versions.electron,
@@ -237,6 +237,21 @@ const api: ElectronAPI = {
   },
   onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => {
     ipcRenderer.on("midi-playback-ended", (_event, data) => callback(data));
+  },
+
+  // Transport
+  transportStart: () => ipcRenderer.send("transport-start"),
+  transportStop: () => ipcRenderer.send("transport-stop"),
+  transportSetBpm: (bpm: number) => ipcRenderer.send("transport-set-bpm", { bpm }),
+  transportSetPattern: (channelIndex: number, stepsJson: string) =>
+    ipcRenderer.send("transport-set-pattern", { channelIndex, stepsJson }),
+  transportClearPattern: (channelIndex: number) =>
+    ipcRenderer.send("transport-clear-pattern", { channelIndex }),
+  onTransportTick: (cb: (data: TransportTickData) => void) => {
+    ipcRenderer.on("transport-tick", (_e, data: TransportTickData) => cb(data));
+  },
+  onAudioDeviceInfo: (cb: (data: AudioDeviceInfoData) => void) => {
+    ipcRenderer.on("audio-device-info", (_e, data: AudioDeviceInfoData) => cb(data));
   },
 };
 

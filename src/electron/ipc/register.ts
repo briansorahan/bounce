@@ -16,6 +16,7 @@ import { registerReplHandlers } from "./repl-handlers";
 import { registerErrorHandlers } from "./error-handlers";
 import { registerMixerHandlers } from "./mixer-handlers";
 import { registerMidiHandlers } from "./midi-handlers";
+import { registerTransportHandlers } from "./transport-handlers";
 
 export interface HandlerDeps {
   dbManager: DatabaseManager;
@@ -39,4 +40,5 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   registerErrorHandlers(deps);
   registerMixerHandlers(deps);
   registerMidiHandlers(deps);
+  registerTransportHandlers(deps);
 }

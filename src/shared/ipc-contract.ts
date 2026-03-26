@@ -440,9 +440,35 @@ export const IpcChannel = {
   // MIDI telemetry (main → renderer)
   MidiInputEvent: "midi-input-event",
   MidiPlaybackEnded: "midi-playback-ended",
+
+  // Transport (renderer → main, one-way)
+  TransportStart:        "transport-start",
+  TransportStop:         "transport-stop",
+  TransportSetBpm:       "transport-set-bpm",
+  TransportSetPattern:   "transport-set-pattern",
+  TransportClearPattern: "transport-clear-pattern",
+  // Transport telemetry (main → renderer)
+  TransportTick:         "transport-tick",
+  AudioDeviceInfo:       "audio-device-info",
 } as const;
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel];
+
+// ---------------------------------------------------------------------------
+// Transport shared types
+// ---------------------------------------------------------------------------
+
+export interface TransportTickData {
+  absoluteTick: number;
+  bar: number;
+  beat: number;
+  step: number;
+}
+
+export interface AudioDeviceInfoData {
+  sampleRate: number;
+  bufferSize: number;
+}
 
 // ---------------------------------------------------------------------------
 // Handle contract (ipcMain.handle / ipcRenderer.invoke)
@@ -764,6 +790,22 @@ export interface IpcSendContract {
   "mixer-set-master-mute": {
     data: { mute: boolean };
   };
+  // Transport (renderer → main, one-way)
+  "transport-start": {
+    data: void;
+  };
+  "transport-stop": {
+    data: void;
+  };
+  "transport-set-bpm": {
+    data: { bpm: number };
+  };
+  "transport-set-pattern": {
+    data: { channelIndex: number; stepsJson: string };
+  };
+  "transport-clear-pattern": {
+    data: { channelIndex: number };
+  };
 }
 
 export interface IpcPushContract {
@@ -792,6 +834,12 @@ export interface IpcPushContract {
   };
   "midi-playback-ended": {
     data: { sequenceId: number };
+  };
+  "transport-tick": {
+    data: TransportTickData;
+  };
+  "audio-device-info": {
+    data: AudioDeviceInfoData;
   };
 }
 
@@ -941,4 +989,13 @@ export interface ElectronAPI {
   midiStopPlayback: () => Promise<void>;
   onMidiInputEvent: (callback: (event: MidiEvent) => void) => void;
   onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
+
+  // Transport
+  transportStart: () => void;
+  transportStop: () => void;
+  transportSetBpm: (bpm: number) => void;
+  transportSetPattern: (channelIndex: number, stepsJson: string) => void;
+  transportClearPattern: (channelIndex: number) => void;
+  onTransportTick: (cb: (data: TransportTickData) => void) => void;
+  onAudioDeviceInfo: (cb: (data: AudioDeviceInfoData) => void) => void;
 }

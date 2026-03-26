@@ -449,3 +449,6 @@ declare class GlobResultPromise implements PromiseLike<GlobResult> {
 }
 
 declare const fs: FsApi;
+
+declare const transport: import('./namespaces/transport-namespace').TransportNamespace;
+declare const pat: import('./namespaces/pat-namespace').PatNamespace;
