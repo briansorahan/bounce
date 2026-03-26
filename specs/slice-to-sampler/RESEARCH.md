@@ -15,7 +15,7 @@ Two related gaps in Bounce's audio slicing workflow:
 ## Background
 
 Bounce already has:
-- **Onset analysis:** `sample.onsets()` returns an `OnsetFeature` with a `slices: number[]` array of frame-index positions and a `featureHash` identifying the analysis in the DB.
+- **Onset analysis:** `sample.onsetSlice()` returns a `SliceFeature` with a `slices: number[]` array of frame-index positions and a `featureHash` identifying the analysis in the DB.
 - **Slice creation:** `onsets.slice()` calls `createSliceSamples(sourceHash, featureHash, audioData)` in the DB layer, which creates a derived `samples` record for every adjacent pair of onset positions and links them in `samples_features` with an `index_order`.
 - **Sampler instrument:** `inst.sampler({ name, polyphony? })` returns an `InstrumentResult` with `loadSample(note, sample, opts?)`, `noteOn`, `noteOff`, `stop`, `free`.
 - **DB tables:** `instruments`, `instrument_samples` (with `note_number` 0–127).
@@ -119,7 +119,7 @@ All four algorithms produce the same output format: **an array of sample-index p
 **REPL interface (expanded):**
 ```
 // Existing (renamed method + result type)
-samp.onsetSlice()          // → SliceFeature (was samp.onsets() → OnsetFeature)
+samp.onsetSlice()          // → SliceFeature
 
 // New slice methods
 samp.ampSlice()            // → SliceFeature
@@ -154,7 +154,7 @@ All resolved during planning:
 3. **Overflow: warn and load what fits.** ✅
 4. **REPL naming:** `sample.onsetSlice()`, `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`. ✅
 5. **Shared result type:** Rename `OnsetFeature` → `SliceFeature`. ✅
-6. **Rename `sample.onsets()` → `sample.onsetSlice()`** for consistency. Keep `onsets()` as deprecated alias. ✅
+6. **Rename `sample.onsets()` → `sample.onsetSlice()`** for consistency. Clean break, no alias. ✅
 7. **All methods have `help()` and tab-completion.** ✅
 
 ## Research Findings
@@ -172,7 +172,7 @@ All resolved during planning:
 
 In PLAN phase:
 1. Design the C++ binding structure for each new algorithm.
-2. Plan the `OnsetFeature` → `SliceFeature` rename (backwards-compatible aliasing).
+2. Plan the `OnsetFeature` → `SliceFeature` rename (clean break, no aliases — unreleased project).
 3. Design `toSampler()` API and wiring.
 4. Identify all files needing changes across native, main process, renderer, and tests.
 5. Define testing strategy (unit tests per algorithm, Playwright for end-to-end flow).
