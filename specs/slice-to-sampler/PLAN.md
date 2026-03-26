@@ -1,4 +1,4 @@
-# Plan: Slice-to-Sampler Auto-Mapping
+# Plan: Slice Algorithms + Auto-Map to Sampler
 
 **Spec:** specs/slice-to-sampler  
 **Created:** 2026-03-26  
@@ -6,74 +6,120 @@
 
 ## Context
 
-The sampler instrument, onset analysis, and slice-creation machinery all exist. What is missing is a single-call convenience method `onsets.toSampler({ name, startNote?, polyphony? })` on `OnsetFeature` that:
-1. Internally calls `slice()` (idempotent — DB deduplicates).
-2. Creates a sampler instrument.
-3. Auto-maps each slice to a consecutive MIDI note starting at `startNote` (default 36 / C2).
-4. Returns an `InstrumentResult` ready to play.
+Only `OnsetSlice` is wrapped as a native binding. Three additional FluCoMa slicing algorithms — `AmpSlice`, `NoveltySlice`, and `TransientSlice` — exist in `third_party/flucoma-core/` but have no native bindings. All four produce the same output (array of sample-index positions), so they share a common result type. Additionally, there is no convenience method to auto-map slices to a sampler instrument.
 
-Decisions from research:
-- `toSampler` lives on `OnsetFeature`; chain is `sn.read(…).onsets().toSampler({ name })`.
-- Default `startNote` = **36** (C2, drum convention).
-- If slice count exceeds available MIDI range, **load what fits and warn** the user in the terminal output.
+Decisions:
+- `toSampler()` lives on the slice feature result; calls `slice()` internally.
+- Default `startNote` = 36 (C2). Overflow: warn and load what fits.
+- REPL naming: `sample.ampSlice()`, `sample.noveltySlice()`, `sample.transientSlice()`.
+- Rename `OnsetFeature` → `SliceFeature` to generalize across all algorithms.
 
 ## Approach Summary
 
-Add `toSampler(opts)` to `OnsetFeature`:
-1. Call the existing `slice()` helper (which triggers `window.electron.sliceSamples`).
-2. Retrieve the resulting slice sample hashes from the DB via a new IPC call.
-3. Create the sampler via `window.electron.defineInstrument`.
-4. Call `window.electron.loadInstrumentSample` for each slice at its assigned note.
-5. Return an `InstrumentResult`.
+Three workstreams:
 
-A new IPC channel `"get-slice-samples"` will return `{ hash: string; index: number }[]` given a `featureHash`, letting the renderer retrieve slice hashes without a separate DB access pattern.
+**A. New native bindings** — Wrap `EnvelopeSegmentation` (AmpSlice), `NoveltySegmentation` (NoveltySlice), and `TransientSegmentation` (TransientSlice) as N-API classes following the `onset_slice.cpp` pattern.
+
+**B. Rename `OnsetFeature` → `SliceFeature`** — Rename the class and all references. Keep `"onset-slice"` as the `featureType` string for the existing algorithm; add `"amp-slice"`, `"novelty-slice"`, `"transient-slice"` as new feature types.
+
+**C. Add `toSampler()`** — Add a method on `SliceFeature` that calls `slice()`, retrieves slice sample hashes via a new IPC channel, creates a sampler, and loads all slices at consecutive MIDI notes.
 
 ## Architecture Changes
 
-No new processes or major structural changes. Changes are contained to:
-- Renderer result type (`OnsetFeature`)
-- Renderer sample namespace (bindings wiring)
-- Main-process IPC handler (new `get-slice-samples` channel)
-- DB manager (new `getSliceSamplesByFeatureHash` query)
+- **3 new C++ files** in `native/src/`: `amp_slice.cpp`, `novelty_slice.cpp`, `transient_slice.cpp`.
+- **`native/src/addon.cpp`**: Register three new init functions.
+- **`binding.gyp`**: Add three new source files.
+- **`src/index.ts`**: Add JS wrapper classes `AmpSlice`, `NoveltySlice`, `TransientSlice`.
+- **IPC layer**: 3 new `analyze-*` channels + 1 new `get-slice-samples` channel.
+- **Renderer**: `SliceFeature` (renamed), 3 new methods on `Sample`, `toSampler()` on `SliceFeature`.
+
+No changes to the native audio engine (playback/sampler).
 
 ## Changes Required
 
 ### Native C++ Changes
 
-None.
+**`native/src/amp_slice.cpp`** (new)
+- Wrap `fluid::algorithm::EnvelopeSegmentation` from `EnvelopeSegmentation.hpp`.
+- Class `AmpSlice` with `Init`, constructor, `Process`, `Reset`.
+- Constructor takes options: `fastRampUp`, `fastRampDown`, `slowRampUp`, `slowRampDown`, `onThreshold`, `offThreshold`, `floor`, `minSliceLength`, `highPassFreq`.
+- `Process(Float32Array)` → sample-by-sample processing → returns `number[]` of onset positions.
+
+**`native/src/novelty_slice.cpp`** (new)
+- Wrap `fluid::algorithm::NoveltySegmentation` from `NoveltySegmentation.hpp`.
+- Must also perform STFT internally (NoveltySegmentation operates on feature vectors, not raw audio). Use `fluid::algorithm::STFT` to compute magnitude spectrum, then feed to `NoveltySegmentation.processFrame()`.
+- Constructor takes options: `algorithm`, `kernelSize`, `threshold`, `filterSize`, `minSliceLength`, `windowSize`, `fftSize`, `hopSize`.
+- `Process(Float32Array)` → frame-by-frame processing → returns `number[]` of onset positions.
+
+**`native/src/transient_slice.cpp`** (new)
+- Wrap `fluid::algorithm::TransientSegmentation` from `TransientSegmentation.hpp`.
+- Constructor takes options: `order`, `blockSize`, `padSize`, `skew`, `threshFwd`, `threshBack`, `windowSize`, `clumpLength`, `minSliceLength`.
+- `Process(Float32Array)` → block-based processing → returns `number[]` of onset positions.
+
+**`native/src/addon.cpp`** (modify)
+- Add `InitAmpSlice`, `InitNoveltySlice`, `InitTransientSlice` declarations and calls.
+
+**`binding.gyp`** (modify)
+- Add 3 new source files to the `flucoma_native` target.
 
 ### TypeScript Changes
 
-**`src/electron/database.ts`**
-- Add `getSliceSamplesByFeatureHash(featureHash: string): { hash: string; index: number }[]`
-  - Queries `samples_features JOIN samples` filtering by `feature_hash`, ordered by `index_order`.
+**`src/index.ts`** (modify)
+- Add `AmpSlice`, `NoveltySlice`, `TransientSlice` JS wrapper classes matching the `OnsetSlice` pattern.
+- Each has a constructor taking algorithm-specific options and a `process(audioBuffer)` method returning `number[]`.
 
-**`src/electron/ipc/audio-handlers.ts`** (or a new `slice-handlers.ts`)
-- Add `ipcMain.handle("get-slice-samples", (_event, payload: { featureHash: string }) => ...)` returning `{ hash: string; index: number }[]`.
+**`src/electron/ipc/analysis-handlers.ts`** (modify)
+- Add `ipcMain.handle("analyze-amp-slice", ...)` — instantiates `AmpSlice`, calls `.process()`, returns `number[]`.
+- Add `ipcMain.handle("analyze-novelty-slice", ...)` — same for `NoveltySlice`.
+- Add `ipcMain.handle("analyze-transient-slice", ...)` — same for `TransientSlice`.
+- Add `ipcMain.handle("get-slice-samples", ...)` — queries DB for slice sample hashes by `featureHash`.
+- Use string literals for channel names (NOT IpcChannel enum — project convention for main process).
 
-**`src/electron/preload.ts`**
-- Add `getSliceSamples: (featureHash: string) => Promise<{ hash: string; index: number }[]>` to the exposed electron API.
+**`src/electron/database.ts`** (modify)
+- Add `getSliceSamplesByFeatureHash(featureHash: string): { hash: string; index: number }[]`.
+- Queries `samples_features JOIN samples` filtering by `feature_hash`, ordered by `index_order`.
 
-**`src/shared/ipc-contract.ts`** (if it tracks channel names)
-- Document `"get-slice-samples"` channel. _(Use string literal in handler per project convention — do NOT import IpcChannel enum in main process.)_
+**`src/electron/preload.ts`** (modify)
+- Add `analyzeAmpSlice`, `analyzeNoveltySlice`, `analyzeTransientSlice` IPC invocations.
+- Add `getSliceSamples(featureHash)` IPC invocation.
 
-**`src/renderer/results/features.ts`**
-- Add `toSampler(opts: ToSamplerOptions): Promise<InstrumentResult>` to `OnsetFeature`.
+**`src/shared/ipc-contract.ts`** (modify)
+- Add `AmpSliceOptions`, `NoveltySliceOptions`, `TransientSliceOptions` interfaces.
+- Add channel definitions for 4 new IPC channels.
+
+**`src/renderer/results/features.ts`** (modify)
+- Rename `OnsetFeature` → `SliceFeature`.
+- Add `export { SliceFeature as OnsetFeature }` alias for backwards compat.
+- Add `toSampler(opts: ToSamplerOptions): Promise<InstrumentResult>` method.
 - Add `ToSamplerOptions` interface: `{ name: string; startNote?: number; polyphony?: number }`.
+- Update `OnsetFeaturePromise` → `SliceFeaturePromise` (with alias).
 
-**`src/renderer/namespaces/sample-namespace.ts`**
-- Pass a `toSampler` binding into `bindOnsetFeature(...)` so the method has access to `window.electron.*` calls.
+**`src/renderer/namespaces/sample-namespace.ts`** (modify)
+- Add `ampSlice(options?)`, `noveltySlice(options?)`, `transientSlice(options?)` methods on the Sample binding.
+- Each calls the corresponding `window.electron.analyze*` IPC, stores feature, returns `SliceFeature`.
+- Wire `toSampler` binding into `bindSliceFeature` (renamed from `bindOnsetFeature`).
 
-**`src/renderer/tab-completion.ts`**
-- Ensure `toSampler` appears in tab completion for `OnsetFeature` instances (it will if `getCallablePropertyNames` reflects it from the object, which it should automatically).
+**`src/renderer/bounce-globals.d.ts`** (modify)
+- Add `AmpSliceOptions`, `NoveltySliceOptions`, `TransientSliceOptions` interfaces.
+
+**`src/renderer/bounce-result.ts`** (modify, if thenable wrappers exist here)
+- Rename `OnsetFeaturePromise` → `SliceFeaturePromise` (with alias).
 
 ### Terminal UI Changes
 
-`toSampler` returns an existing `InstrumentResult`. Its terminal summary line already shows:
+`SliceFeature` terminal summary shows the algorithm name:
 ```
-<name> (sampler, <n> notes loaded)
+SliceFeature: 7 slices (onset-slice, threshold=0.5)
+SliceFeature: 12 slices (amp-slice, onThreshold=10)
+SliceFeature: 5 slices (novelty-slice, algorithm=Spectrum)
+SliceFeature: 9 slices (transient-slice, threshFwd=2)
 ```
-The `toSampler` method itself will print a prefix message in the `InstrumentResult` display if any slices were dropped due to MIDI range overflow, e.g.:
+
+`toSampler` returns an existing `InstrumentResult`:
+```
+drums (sampler, 7 notes loaded, polyphony 16)
+```
+With overflow warning prepended if slices are dropped:
 ```
 Warning: 4 slices beyond note 127 were dropped.
 drums (sampler, 88 notes loaded, polyphony 16)
@@ -81,117 +127,136 @@ drums (sampler, 88 notes loaded, polyphony 16)
 
 ### REPL Interface Contract
 
-**New API surface:**
-
+**New API surface on `Sample`:**
 ```typescript
-// On OnsetFeature instance returned by samp.onsets()
-onsets.toSampler({ name: "drums" })
-// → InstrumentResult (reuses existing display + help machinery)
-
-onsets.toSampler({ name: "keys", startNote: 60, polyphony: 8 })
-// → InstrumentResult
-
-onsets.toSampler.help()
-// → prints description + usage examples
+samp.ampSlice()                // → SliceFeature
+samp.ampSlice({ onThreshold: 10, fastRampUp: 5 })
+samp.noveltySlice()            // → SliceFeature
+samp.noveltySlice({ algorithm: 0, kernelSize: 5 })
+samp.transientSlice()          // → SliceFeature
+samp.transientSlice({ order: 40, threshFwd: 3 })
 ```
 
-**`toSampler.help()` output (example):**
-```
-toSampler(opts) — create a sampler instrument from onset slices
-
-  Arguments:
-    opts.name       string   instrument name (required)
-    opts.startNote  number   first MIDI note (default 36 / C2)
-    opts.polyphony  number   max simultaneous voices (default 16)
-
-  Returns: InstrumentResult
-
-  Examples:
-    const drums = onsets.toSampler({ name: "drums" })
-    const keys  = onsets.toSampler({ name: "keys", startNote: 60 })
-    drums.noteOn(36)
+**New method on `SliceFeature` (all algorithms):**
+```typescript
+slices.toSampler({ name: "drums" })
+slices.toSampler({ name: "keys", startNote: 60, polyphony: 8 })
 ```
 
-**Returned `InstrumentResult` terminal summary** (unchanged from existing):
+**Renamed type:**
+```typescript
+// Old: OnsetFeature  → New: SliceFeature (OnsetFeature kept as alias)
+samp.onsets()  // → SliceFeature (was OnsetFeature)
 ```
-drums (sampler, 7 notes loaded, polyphony 16)
-```
-Plus an optional overflow warning prepended when slices are dropped.
+
+**help() methods:**
+- `samp.ampSlice.help()` — describes parameters and usage
+- `samp.noveltySlice.help()` — describes parameters and usage
+- `samp.transientSlice.help()` — describes parameters and usage
+- `slices.toSampler.help()` — describes startNote, polyphony, usage examples
 
 #### REPL Contract Checklist
 
-- [x] `toSampler` has a `help` property consistent with other methods on `OnsetFeature`
-- [x] Returns existing `InstrumentResult` which already has a useful terminal summary
-- [x] Summary highlights name, kind, notes-loaded count, and polyphony
-- [x] Unit tests identified for note-mapping arithmetic and overflow warning
-- [x] Playwright test identified for end-to-end REPL flow
+- [x] Every exposed method has a `help()` entry point
+- [x] Every returned SliceFeature displays algorithm type and slice count
+- [x] InstrumentResult (from toSampler) already displays name, kind, notes-loaded
+- [x] Unit tests identified for each algorithm integration and toSampler arithmetic
+- [x] Playwright tests identified for REPL flow
 
 ### Configuration/Build Changes
 
-None. No new npm packages. No `binding.gyp` or native rebuild required.
+**`binding.gyp`**: Add `native/src/amp_slice.cpp`, `native/src/novelty_slice.cpp`, `native/src/transient_slice.cpp` to sources.
+
+No new npm dependencies. `npm run rebuild` required after C++ changes.
 
 ## Testing Strategy
 
 ### Unit Tests
 
-File: `src/slice-to-sampler.test.ts` (or add cases to an existing features test)
+**`src/amp-slice.test.ts`** (new)
+- Construct `AmpSlice` with default options, process a synthetic signal with clear amplitude peaks, verify returned positions are sensible.
 
-1. **Note mapping arithmetic:** Given N slices and `startNote`, verify notes assigned are `[startNote, startNote+1, …, startNote+N-1]`.
-2. **Overflow warning:** Given `startNote=100` and 40 slices, verify only 28 slices are loaded (notes 100–127) and the display string contains "dropped".
-3. **Zero-slice edge case:** If `onsets.slices` has ≤ 1 entry (no slices), `toSampler` should return an error `BounceResult` rather than an empty instrument.
+**`src/novelty-slice.test.ts`** (new)
+- Construct `NoveltySlice` with default options, process a synthetic signal, verify returned positions.
+
+**`src/transient-slice.test.ts`** (new)
+- Construct `TransientSlice` with default options, process a synthetic signal with transients, verify returned positions.
+
+**`src/slice-to-sampler.test.ts`** (new)
+- Test note-mapping arithmetic: N slices + startNote → correct MIDI note assignments.
+- Test overflow: startNote=100, 40 slices → only 28 loaded, warning in display.
+- Test zero-slice edge case: ≤1 onset position → error result.
+
+**Existing onset tests** — verify they still pass after `OnsetFeature` → `SliceFeature` rename.
 
 ### E2E Tests
 
-File: `tests/slice-to-sampler.spec.ts`
+**`tests/slice-to-sampler.spec.ts`** (new)
+- Load a sample, call `samp.onsets().toSampler({ name: "test" })`, verify REPL output has instrument name + note count > 0.
+- Call `toSampler.help()`, verify help output.
 
-1. Load a sample with onsets (`sn.read(path).onsets()`), call `toSampler({ name: "test-sampler" })`, verify the REPL output contains the instrument name and a note count > 0.
-2. Call `toSampler.help()`, verify help output contains `startNote` and usage example.
-3. Trigger `noteOn` on the returned instrument, verify no error.
+**`tests/amp-slice.spec.ts`** (new)
+- Load a sample, call `samp.ampSlice()`, verify SliceFeature output with slice count.
+- Call `ampSlice.help()`, verify help output.
+
+**`tests/novelty-slice.spec.ts`** (new)
+- Same pattern as amp-slice.
+
+**`tests/transient-slice.spec.ts`** (new)
+- Same pattern as amp-slice.
+
+**Existing onset-analysis.spec.ts** — verify still passes after rename.
 
 ### Manual Testing
 
-- `npm run dev:electron`, load a drum loop, run `samp.onsets().toSampler({ name: "kit" })`, verify notes appear loaded in `kit.help()` output.
-- Trigger `kit.noteOn(36)` through `kit.noteOn(43)` and verify each slice plays.
+- `npm run dev:electron`, load a drum loop, run all 4 slice methods, verify results.
+- Run `slices.toSampler({ name: "kit" })` and play notes 36–43.
 
 ## Success Criteria
 
-1. `sn.read(path).onsets().toSampler({ name })` works end-to-end in the REPL.
-2. Each slice is correctly mapped to a consecutive MIDI note starting at `startNote`.
-3. Overflow (>128-startNote slices) warns and loads what fits.
-4. `toSampler.help()` prints useful docs with usage examples.
-5. Returned `InstrumentResult` displays name + notes-loaded count in the terminal.
-6. All unit tests pass; Playwright e2e test passes via `./build.sh`.
+1. `samp.ampSlice()`, `samp.noveltySlice()`, `samp.transientSlice()` work end-to-end, returning `SliceFeature`.
+2. `samp.onsets()` still works, returning `SliceFeature` (backwards-compatible).
+3. `slices.toSampler({ name })` works on any `SliceFeature`, regardless of which algorithm produced it.
+4. Each new method has `help()` with description and usage examples.
+5. MIDI note mapping starts at `startNote` (default 36), correctly assigns consecutive notes.
+6. Overflow warns and loads what fits.
+7. All unit tests pass; all Playwright e2e tests pass via `./build.sh`.
+8. Existing tests (especially `onset-analysis.spec.ts`) are unbroken.
 
 ## Risks & Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| `createSliceSamples` is not idempotent and errors on re-call | Verify DB uses `INSERT OR IGNORE` / `UNIQUE` constraint — it does (`UNIQUE(project_id, sample_hash)`). Safe to re-call. |
-| `get-slice-samples` IPC returns stale data if slice hasn't completed | `toSampler` must `await` the `sliceSamples` IPC call before calling `get-slice-samples`. |
-| Main-process handler uses IpcChannel enum (breaks CJS build) | Use string literal `"get-slice-samples"` per project convention. |
-| Tab completion doesn't pick up `toSampler` automatically | Verify `getCallablePropertyNames` enumerates it; add explicit entry if not. |
+| NoveltySlice needs STFT pre-processing not obvious from algorithm header | Study `NoveltySliceClient.hpp` for the full processing chain; replicate STFT step in the C++ binding |
+| TransientSegmentation inherits from TransientExtraction — complex init | Study the class hierarchy carefully; test with simple signals first |
+| `OnsetFeature` → `SliceFeature` rename breaks existing user scripts | Export alias `OnsetFeature = SliceFeature`; update existing tests gradually |
+| C++ compilation issues on Linux (CI) | Test via `./build.sh` (Docker) early; don't defer to the end |
+| Main-process handler uses IpcChannel enum (breaks CJS build) | Use string literals per project convention |
 
 ## Implementation Order
 
-1. `database.ts` — add `getSliceSamplesByFeatureHash`.
-2. IPC handler — add `"get-slice-samples"` channel (string literal).
-3. `preload.ts` — expose `getSliceSamples`.
-4. `src/renderer/results/features.ts` — add `ToSamplerOptions` interface and `toSampler` method signature.
-5. `src/renderer/namespaces/sample-namespace.ts` — wire `toSampler` binding into `bindOnsetFeature`.
-6. Unit tests.
-7. Playwright e2e test.
-8. Manual smoke test via `npm run dev:electron`.
-9. `./build.sh` — full suite verification.
+1. **C++ bindings**: `amp_slice.cpp`, `novelty_slice.cpp`, `transient_slice.cpp` + `addon.cpp` + `binding.gyp`. Run `npm run rebuild` to verify compilation.
+2. **JS wrappers**: `AmpSlice`, `NoveltySlice`, `TransientSlice` classes in `src/index.ts`.
+3. **Unit tests** for native bindings: `amp-slice.test.ts`, `novelty-slice.test.ts`, `transient-slice.test.ts`.
+4. **IPC channels**: analysis handlers + `get-slice-samples` handler.
+5. **Preload**: expose new IPC methods.
+6. **Rename `OnsetFeature` → `SliceFeature`** across renderer code + maintain alias.
+7. **`toSampler()`**: add to `SliceFeature`, wire bindings in sample namespace.
+8. **New Sample methods**: `ampSlice()`, `noveltySlice()`, `transientSlice()` on Sample binding.
+9. **Help text**: for all new methods.
+10. **Unit test**: `slice-to-sampler.test.ts`.
+11. **E2E tests**: Playwright specs for each new method + toSampler.
+12. **`./build.sh`**: Full suite verification.
 
 ## Estimated Scope
 
-Medium (≈6–8 TypeScript files, no C++ changes, one new DB query, one new IPC channel).
+Large (~15–20 files across C++, TypeScript main/renderer/shared, and tests).
 
 ## Plan Consistency Checklist
 
-- [x] All sections agree on backwards compatibility (additive only, no existing API changes)
-- [x] All sections agree on the data model (reuses existing `instruments`/`instrument_samples` tables, new `getSliceSamplesByFeatureHash` query only)
-- [x] REPL-facing changes define `help()` surface and `InstrumentResult` terminal summary
-- [x] Testing strategy names unit test for arithmetic/overflow and Playwright test for REPL flow
+- [x] All sections agree on backwards compatibility (alias `OnsetFeature = SliceFeature`, no existing API removed)
+- [x] All sections agree on the data model (reuses existing DB tables, adds `getSliceSamplesByFeatureHash` query, new feature types `"amp-slice"`, `"novelty-slice"`, `"transient-slice"`)
+- [x] REPL-facing changes define help() surface and SliceFeature/InstrumentResult terminal summaries
+- [x] Testing strategy names unit and Playwright coverage for each algorithm, toSampler, and rename compatibility
 - [x] No contradictory constraints between sections
 - [x] `startNote` default (36) is consistent throughout
