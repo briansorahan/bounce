@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog — Bounce</title>
+  <meta name="description" content="News, tutorials, and development updates for the Bounce audio corpus editor." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">bounce<span>.</span></a>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/reference/">Reference</a></li>
+    <li><a href="/blog/" class="active">Blog</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="https://github.com/briansorahan/bounce" class="btn btn-outline" target="_blank" rel="noopener">
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container" style="max-width:760px;">
+      <div class="section-label">Updates</div>
+      <h1 style="font-size:2.25rem;margin-bottom:0.5rem;">Blog</h1>
+      <p class="text-muted" style="margin-bottom:3rem;font-size:0.95rem;">
+        Development updates, tutorials, and ideas from the Bounce project.
+      </p>
+
+      <div class="blog-grid">
+
+        <article class="blog-card">
+          <div class="blog-meta">
+            <time>March 2025</time>
+            <span class="blog-tag">Announcement</span>
+          </div>
+          <h3>Introducing Bounce</h3>
+          <p>
+            Bounce is an experimental audio editor focused on corpus analysis and resynthesis.
+            Driven by a terminal REPL and the FluCoMa toolkit, it lets you load, analyse, slice,
+            and play audio entirely from the keyboard — with inline waveform visualisations
+            rendered right in the terminal.
+          </p>
+          <p>
+            This first post walks through the motivation behind the project, the technology choices,
+            and where we're headed next.
+          </p>
+          <span class="read-more">Coming soon &rarr;</span>
+        </article>
+
+        <article class="blog-card">
+          <div class="blog-meta">
+            <time>Coming soon</time>
+            <span class="blog-tag">Tutorial</span>
+          </div>
+          <h3>Getting Started: Onset Detection in the REPL</h3>
+          <p>
+            A step-by-step tutorial on loading a drum loop, running onset detection with
+            <code style="font-family:var(--font-mono);background:var(--code-bg);padding:0.1rem 0.4rem;border-radius:4px;">sample.onsets()</code>,
+            and visualising the slice markers alongside the waveform.
+          </p>
+          <span class="read-more">Coming soon &rarr;</span>
+        </article>
+
+        <article class="blog-card">
+          <div class="blog-meta">
+            <time>Coming soon</time>
+            <span class="blog-tag">Deep Dive</span>
+          </div>
+          <h3>NMF Decomposition for Drum Separation</h3>
+          <p>
+            Non-negative Matrix Factorisation can separate a mixed drum loop into individual
+            spectral components. This post digs into how Bounce wraps FluCoMa's NMF
+            implementation and how to use <code style="font-family:var(--font-mono);background:var(--code-bg);padding:0.1rem 0.4rem;border-radius:4px;">sample.nmf()</code>
+            for practical drum separation tasks.
+          </p>
+          <span class="read-more">Coming soon &rarr;</span>
+        </article>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <span>&copy; 2025 Bounce contributors</span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/briansorahan/bounce" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="/reference/">Reference</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

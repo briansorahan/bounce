@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bounce — Audio Corpus Editor</title>
+  <meta name="description" content="Bounce is an experimental audio editor for exploring audio corpus analysis and resynthesis, built with Electron and FluCoMa." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">bounce<span>.</span></span>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/reference/">Reference</a></li>
+    <li><a href="/blog/">Blog</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="https://github.com/briansorahan/bounce" class="btn btn-outline" target="_blank" rel="noopener">
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<main>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Open Source &middot; Experimental</div>
+      <h1>Audio corpus analysis<br />in a <span class="accent">terminal UI</span></h1>
+      <p class="hero-subtitle">
+        Bounce is a cross-platform audio editor for exploring corpus analysis and
+        resynthesis, powered by Electron and FluCoMa.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/briansorahan/bounce/releases" class="btn btn-primary" target="_blank" rel="noopener">
+          Download
+        </a>
+        <a href="/reference/" class="btn btn-outline">API Reference</a>
+        <a href="https://github.com/briansorahan/bounce" class="btn btn-outline" target="_blank" rel="noopener">
+          View Source
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick-start -->
+  <section class="section-sm">
+    <div class="container">
+      <div class="code-block">
+        <div class="code-block-header">
+          <span>Bounce REPL</span>
+          <span>bounceaudio.org</span>
+        </div>
+        <pre><code><span class="tok-comment">// Load a sample and analyse its onsets</span>
+<span class="tok-keyword">const</span> sample = <span class="tok-fn">sn.read</span>(<span class="tok-string">"./drums/kick.wav"</span>)
+<span class="tok-keyword">const</span> onsets = sample.<span class="tok-fn">onsets</span>({ threshold: <span class="tok-num">0.3</span> })
+
+<span class="tok-comment">// Render a waveform with slice markers</span>
+<span class="tok-fn">vis.waveform</span>(sample).<span class="tok-fn">show</span>()
+
+<span class="tok-comment">// Run NMF decomposition and explore components</span>
+<span class="tok-keyword">const</span> nmf = sample.<span class="tok-fn">nmf</span>({ components: <span class="tok-num">4</span> })
+nmf.<span class="tok-fn">play</span>(<span class="tok-num">0</span>)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section">
+    <div class="container">
+      <div class="section-label">Why Bounce</div>
+      <h2>Everything you need for<br />audio corpus work</h2>
+      <br />
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🎛️</div>
+          <h3>Terminal-First Interface</h3>
+          <p>A full-featured REPL powered by xterm.js gives you scriptable, reproducible audio analysis workflows without leaving the keyboard.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔬</div>
+          <h3>FluCoMa Analysis</h3>
+          <p>Onset detection, NMF decomposition, novelty slicing, and more — all exposed as composable REPL functions backed by the FluCoMa toolkit.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Inline Visualisation</h3>
+          <p>Waveforms, spectrograms, and slice markers render directly in the terminal canvas alongside your analysis output.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💾</div>
+          <h3>Persistent Cache</h3>
+          <p>SQLite-backed feature store means expensive analyses are computed once and retrieved instantly across sessions.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎚️</div>
+          <h3>Built-in Playback</h3>
+          <p>Play full samples or individual NMF/onset components directly from the REPL using the miniaudio-backed engine.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌍</div>
+          <h3>Cross-Platform</h3>
+          <p>Runs on macOS, Linux, and Windows. Pre-built native addons mean you spend time on audio, not on build systems.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section class="section">
+    <div class="container">
+      <div class="section-label">Get Started</div>
+      <h2>Up and running in minutes</h2>
+      <br />
+      <div class="code-block">
+        <div class="code-block-header"><span>shell</span></div>
+        <pre><code><span class="tok-comment"># Clone with submodules</span>
+git clone --recursive https://github.com/briansorahan/bounce.git
+<span class="tok-keyword">cd</span> bounce
+
+<span class="tok-comment"># Build C++ dependencies first</span>
+npm run build:deps
+
+<span class="tok-comment"># Install and rebuild native modules</span>
+npm install &amp;&amp; npm run rebuild
+
+<span class="tok-comment"># Build TypeScript and launch</span>
+npm run build:electron &amp;&amp; npm run dev:electron</code></pre>
+      </div>
+      <p class="text-muted" style="font-size:0.9rem;">
+        Requires Node.js v24+, a C++17 compiler, Python 3, and CMake 3.10+.
+        See the <a href="https://github.com/briansorahan/bounce#prerequisites" target="_blank" rel="noopener">README</a> for platform-specific prerequisites.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <span>&copy; 2025 Bounce contributors</span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/briansorahan/bounce" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="/reference/">Reference</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

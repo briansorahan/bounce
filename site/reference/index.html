@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Reference — Bounce</title>
+  <meta name="description" content="Complete API reference for the Bounce REPL: sample namespace, visualisation utilities, filesystem helpers, and more." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/css/style.css" />
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">bounce<span>.</span></a>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/reference/" class="active">Reference</a></li>
+    <li><a href="/blog/">Blog</a></li>
+  </ul>
+  <div class="nav-cta">
+    <a href="https://github.com/briansorahan/bounce" class="btn btn-outline" target="_blank" rel="noopener">
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="ref-layout">
+
+    <!-- Sidebar -->
+    <aside class="ref-sidebar">
+      <nav>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Samples</div>
+          <ul class="sidebar-links">
+            <li><a href="#sn">sn namespace</a></li>
+            <li><a href="#sn-read">sn.read()</a></li>
+            <li><a href="#sn-load">sn.load()</a></li>
+            <li><a href="#sn-ls">sn.ls()</a></li>
+            <li><a href="#sn-glob">sn.glob()</a></li>
+            <li><a href="#sample-object">Sample object</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Analysis</div>
+          <ul class="sidebar-links">
+            <li><a href="#onsets">sample.onsets()</a></li>
+            <li><a href="#nmf">sample.nmf()</a></li>
+            <li><a href="#novelty">sample.novelty()</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Visualisation</div>
+          <ul class="sidebar-links">
+            <li><a href="#vis">vis namespace</a></li>
+            <li><a href="#vis-waveform">vis.waveform()</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Playback</div>
+          <ul class="sidebar-links">
+            <li><a href="#sample-play">sample.play()</a></li>
+            <li><a href="#sample-stop">sample.stop()</a></li>
+          </ul>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Help</div>
+          <ul class="sidebar-links">
+            <li><a href="#help">help()</a></li>
+          </ul>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="ref-content">
+      <div class="section-label">Bounce REPL</div>
+      <h1 style="font-size:2rem;margin-bottom:0.5rem;">API Reference</h1>
+      <p class="text-muted" style="margin-bottom:2rem;font-size:0.95rem;">
+        All namespaces and functions available in the Bounce interactive REPL.
+        Top-level expressions are auto-awaited, so <code style="font-family:var(--font-mono);background:var(--code-bg);padding:0.1rem 0.4rem;border-radius:4px;">await</code> is optional.
+      </p>
+
+      <!-- sn namespace -->
+      <h2 id="sn">sn &mdash; Sample Namespace</h2>
+
+      <p style="color:var(--text-muted);margin-bottom:1.5rem;font-size:0.9rem;">
+        The <code style="font-family:var(--font-mono);">sn</code> namespace is the primary entry point for loading and managing audio samples.
+        Call <code style="font-family:var(--font-mono);">sn.help()</code> in the REPL to print a live summary.
+      </p>
+
+      <div class="method-entry" id="sn-read">
+        <div class="method-sig">sn.read(path: string) → SamplePromise</div>
+        <p class="method-desc">
+          Load an audio file from <code style="font-family:var(--font-mono);">path</code> into the sample store and return a
+          <strong>SamplePromise</strong> that resolves to a <a href="#sample-object">Sample</a> object.
+          If the file has been read before its metadata is returned from the SQLite cache immediately.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-keyword">const</span> s = <span class="tok-fn">sn.read</span>(<span class="tok-string">"./kick.wav"</span>)
+s  <span class="tok-comment">// prints: Sample { hash: "a1b2…", duration: 0.52s, channels: 1, sr: 44100 }</span></code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>path</td><td>string</td><td>Absolute or relative path to a WAV, AIFF, FLAC, or MP3 file.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="method-entry" id="sn-load">
+        <div class="method-sig">sn.load(hash: string) → SamplePromise</div>
+        <p class="method-desc">
+          Load a previously-seen sample by its content hash. Useful for re-opening
+          samples across sessions without remembering the original file path.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-keyword">const</span> s = <span class="tok-fn">sn.load</span>(<span class="tok-string">"a1b2c3d4"</span>)</code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>hash</td><td>string</td><td>SHA-based content hash as shown in the Sample object summary.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="method-entry" id="sn-ls">
+        <div class="method-sig">sn.ls(dir?: string) → LsResultPromise</div>
+        <p class="method-desc">
+          List audio files and subdirectories in <code style="font-family:var(--font-mono);">dir</code> (defaults to the current working directory).
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-fn">sn.ls</span>(<span class="tok-string">"./samples"</span>)</code></pre>
+        </div>
+      </div>
+
+      <div class="method-entry" id="sn-glob">
+        <div class="method-sig">sn.glob(pattern: string) → GlobResultPromise</div>
+        <p class="method-desc">
+          Return all audio files matching a glob pattern. Supports <code style="font-family:var(--font-mono);">**</code> recursive matching.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-fn">sn.glob</span>(<span class="tok-string">"./drums/**/*.wav"</span>)</code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>pattern</td><td>string</td><td>Glob pattern relative to the current working directory.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sample object -->
+      <h2 id="sample-object">Sample object</h2>
+
+      <p style="color:var(--text-muted);margin-bottom:1.5rem;font-size:0.9rem;">
+        The <code style="font-family:var(--font-mono);">Sample</code> object is returned by <a href="#sn-read">sn.read()</a>
+        and <a href="#sn-load">sn.load()</a>. Printing it in the REPL shows a one-line summary of its most important properties.
+      </p>
+
+      <!-- Analysis -->
+      <h2 id="onsets">sample.onsets(options?) → OnsetFeaturePromise</h2>
+
+      <div class="method-entry">
+        <div class="method-sig">sample.onsets(options?: OnsetOptions) → OnsetFeaturePromise</div>
+        <p class="method-desc">
+          Run FluCoMa onset detection on the sample. Slice markers are immediately
+          reflected in any waveform visualisation that is already open.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-keyword">const</span> onsets = sample.<span class="tok-fn">onsets</span>({ threshold: <span class="tok-num">0.3</span>, minSliceLength: <span class="tok-num">4410</span> })</code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Option</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>threshold</td><td>number</td><td>Onset sensitivity threshold (0–1). Default <code style="font-family:var(--font-mono);">0.5</code>.</td></tr>
+            <tr><td>minSliceLength</td><td>number</td><td>Minimum slice length in samples. Default <code style="font-family:var(--font-mono);">2205</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="method-entry" id="nmf">
+        <div class="method-sig">sample.nmf(options?: NmfOptions) → NmfResultPromise</div>
+        <p class="method-desc">
+          Run Non-negative Matrix Factorisation on the sample to decompose it into
+          <em>n</em> spectral components and their activations.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-keyword">const</span> nmf = sample.<span class="tok-fn">nmf</span>({ components: <span class="tok-num">4</span> })
+nmf.<span class="tok-fn">play</span>(<span class="tok-num">0</span>)   <span class="tok-comment">// play component 0</span></code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Option</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>components</td><td>number</td><td>Number of NMF components to extract. Default <code style="font-family:var(--font-mono);">4</code>.</td></tr>
+            <tr><td>iterations</td><td>number</td><td>Number of NMF iterations. Default <code style="font-family:var(--font-mono);">100</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="method-entry" id="novelty">
+        <div class="method-sig">sample.novelty(options?: NoveltyOptions) → NoveltyFeaturePromise</div>
+        <p class="method-desc">
+          Slice the sample using FluCoMa novelty-based segmentation, which detects structural changes in spectral content.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-keyword">const</span> nx = sample.<span class="tok-fn">novelty</span>({ threshold: <span class="tok-num">0.4</span> })</code></pre>
+        </div>
+        <table class="param-table">
+          <thead><tr><th>Option</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>threshold</td><td>number</td><td>Novelty sensitivity (0–1). Default <code style="font-family:var(--font-mono);">0.5</code>.</td></tr>
+            <tr><td>filterSize</td><td>number</td><td>Size of the novelty kernel. Default <code style="font-family:var(--font-mono);">3</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Visualisation -->
+      <h2 id="vis">vis &mdash; Visualisation Namespace</h2>
+
+      <div class="method-entry" id="vis-waveform">
+        <div class="method-sig">vis.waveform(sample: Sample) → WaveformScene</div>
+        <p class="method-desc">
+          Create a waveform scene for <code style="font-family:var(--font-mono);">sample</code> and return it. Call <code style="font-family:var(--font-mono);">.show()</code>
+          to render it in the terminal canvas.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-fn">vis.waveform</span>(sample).<span class="tok-fn">show</span>()</code></pre>
+        </div>
+      </div>
+
+      <!-- Playback -->
+      <h2 id="sample-play">Playback</h2>
+
+      <div class="method-entry">
+        <div class="method-sig">sample.play() → void</div>
+        <p class="method-desc">Play the full sample through the audio engine.</p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code>sample.<span class="tok-fn">play</span>()</code></pre>
+        </div>
+      </div>
+
+      <div class="method-entry" id="sample-stop">
+        <div class="method-sig">sample.stop() → void</div>
+        <p class="method-desc">Stop any active playback for this sample.</p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code>sample.<span class="tok-fn">stop</span>()</code></pre>
+        </div>
+      </div>
+
+      <!-- Help -->
+      <h2 id="help">help()</h2>
+
+      <div class="method-entry">
+        <div class="method-sig">sn.help() | vis.help() | sample.help()</div>
+        <p class="method-desc">
+          Every namespace and returned object exposes a <code style="font-family:var(--font-mono);">help()</code> method that
+          prints a usage summary directly in the terminal.
+        </p>
+        <div class="code-block">
+          <div class="code-block-header"><span>REPL</span></div>
+          <pre><code><span class="tok-fn">sn.help</span>()
+<span class="tok-comment">// sn — sample namespace
+//   sn.read(path)   load a sample from disk
+//   sn.load(hash)   load a sample by content hash
+//   sn.ls(dir?)     list audio files
+//   sn.glob(pat)    glob for audio files</span></code></pre>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <span>&copy; 2025 Bounce contributors</span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/briansorahan/bounce" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="/reference/">Reference</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>
