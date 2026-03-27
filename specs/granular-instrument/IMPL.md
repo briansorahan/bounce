@@ -2,54 +2,53 @@
 
 **Spec:** specs/granular-instrument  
 **Created:** 2026-03-21  
-**Status:** Not Started
+**Status:** In Progress — awaiting `./build.sh`
 
 ## Context
 
-<!-- Brief summary referencing key points from PLAN.md -->
+Real-time granular synthesis instrument built on the existing `Instrument` C++ abstract base and `inst` REPL namespace from the sampler-instrument spec. No IPC protocol changes needed — `kind: "granular"` routes to the new `GranularInstrument` class.
 
 ## Implementation Log
 
-<!-- Chronological notes as implementation progresses -->
+- **2026-03-26**: PLAN.md filled out; C++ implementation complete (`GranularInstrument`, `GrainStream`, Hann LUT, grain scheduler); TypeScript `inst.granular()`, `set()`, `load()` added; 6 unit tests passing; Playwright e2e test written.
 
 ## Decisions Made
 
-<!-- Important decisions made during implementation that weren't in the plan -->
+- `set()` method attached to all instrument result objects (not just granular) — but only granular has meaningful non-volume params. Sampler can use `set({ volume: ... })` in future.
+- `load(sample)` convenience method wraps `loadSample(0, sample)` — note=0 convention for single-source instruments.
+- Granular params stored in `InstrumentState.granularParams` for live display updates without re-querying native.
+- Tab completion is runtime-driven (no code changes needed).
 
 ## Deviations from Plan
 
-<!-- Where implementation diverged from plan and why -->
+- `src/renderer/results/instrument.ts` was not changed — the display string is built in `formatInstrument()` inside the namespace, so no constructor changes needed. Simpler.
 
 ## Flaws Discovered in Previous Phases
 
-<!-- Any issues found in RESEARCH.md or PLAN.md during implementation -->
+None.
 
 ## Issues & TODOs
 
-<!-- Known problems, edge cases, future work -->
+- Auto-gain at high density (clipping prevention) deferred per RESEARCH.md.
+- Asynchronous (stochastic) grain scheduling deferred — synchronous scheduling is MVP.
+- Multi-channel source support deferred — first channel only.
 
 ## Testing Results
 
-<!-- Test execution results, including which unit and/or Playwright tests covered REPL help() and returned-object display behavior when applicable -->
+**Unit tests** (`npx tsx --test src/granular-instrument.test.ts`):
+```
+✔ inst.granular.help() mentions granular synthesis (0.45ms)
+✔ inst.granular() returns an object whose toString() starts with Granular (0.25ms)
+✔ inst.granular() default params shown in toString() (0.07ms)
+✔ g.set({ position: 0.3 }) updates toString() (0.13ms)
+✔ g.help() output contains Load the source sample and grainSize (0.12ms)
+✔ g.set({ unknown: 1 }) returns error message containing unknown params (0.06ms)
+pass 6 / fail 0
+```
 
-## Status Updates
+**Lint**: `npm run lint` — clean.
 
-<!-- When pausing work, add concise status here -->
-
-### Last Status: 2026-03-21
-
-**What's Done:**
-- RESEARCH.md completed
-
-**What's Left:**
-- PLAN.md
-- Implementation
-
-**Next Steps:**
-- Fill out PLAN.md
-
-**Blockers/Notes:**
-- Depends on sampler-instrument spec's `inst` namespace being built first (or can be done in parallel)
+**Playwright**: `tests/granular-instrument.spec.ts` written (7 tests). Awaiting `./build.sh`.
 
 ---
 

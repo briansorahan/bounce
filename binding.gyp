@@ -65,6 +65,7 @@
         "native/src/audio-engine.cpp",
         "native/src/sample-playback-engine.cpp",
         "native/src/sampler-instrument.cpp",
+        "native/src/granular-instrument.cpp",
         "native/src/midi-input.cpp",
         "native/src/midi-file-parser.cpp",
         "third_party/rtmidi/RtMidi.cpp"

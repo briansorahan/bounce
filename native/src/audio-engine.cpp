@@ -3,6 +3,7 @@
 
 #include "audio-engine.h"
 #include "sample-playback-engine.h"
+#include "granular-instrument.h"
 #include "sampler-instrument.h"
 
 #include <algorithm>
@@ -148,6 +149,8 @@ void AudioEngine::defineInstrument(const std::string& id,
     std::shared_ptr<Instrument> inst;
     if (kind == "sampler") {
         inst = std::make_shared<SamplerInstrument>(id, polyphony);
+    } else if (kind == "granular") {
+        inst = std::make_shared<GranularInstrument>(id, polyphony, sampleRate_);
     }
     if (!inst) return;
 

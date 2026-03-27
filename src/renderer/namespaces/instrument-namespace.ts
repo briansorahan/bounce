@@ -3,6 +3,16 @@
 import { BounceResult, InstrumentResult, InstrumentListResult } from "../bounce-result.js";
 import type { NamespaceDeps } from "./types.js";
 
+interface GranularParams {
+  position: number;
+  grainSizeMs: number;
+  density: number;
+  scatter: number;
+  envelope: number;
+  pitch: number;
+  volume: number;
+}
+
 interface InstrumentState {
   instrumentId: string;
   name: string;
@@ -10,15 +20,64 @@ interface InstrumentState {
   polyphony: number;
   sampleCount: number;
   loadedNotes: Map<number, { sampleHash: string; loop: boolean; loopStart: number; loopEnd: number }>;
+  granularParams?: GranularParams;
 }
 
 const instruments = new Map<string, InstrumentState>();
 
+const GRANULAR_PARAM_IDS: Record<string, number> = {
+  position: 0,
+  grainSize: 1,
+  density:   2,
+  scatter:   3,
+  envelope:  4,
+  pitch:     5,
+  volume:    6,
+};
+
 function formatInstrument(state: InstrumentState): string {
+  if (state.kind === "granular" && state.granularParams) {
+    const p = state.granularParams;
+    return `Granular '${state.name}' | pos ${p.position.toFixed(2)} | ${p.grainSizeMs.toFixed(0)}ms grains @ ${p.density.toFixed(0)}/s | poly ${state.polyphony}`;
+  }
   return `Sampler '${state.name}' | ${state.sampleCount} samples | poly ${state.polyphony}`;
 }
 
 function instrumentHelp(state: InstrumentState): BounceResult {
+  if (state.kind === "granular") {
+    const lines = [
+      `\x1b[1;36m${state.name}\x1b[0m  (granular instrument)`,
+      "",
+      `  polyphony: ${state.polyphony}`,
+      "",
+      "\x1b[1mMethods:\x1b[0m",
+      "  .load(sample)                          Load the source sample",
+      "  .set({ param: value, ... })            Update parameters",
+      "  .noteOn(note)                          Start grain stream",
+      "  .noteOn(note, { velocity })            Start with velocity",
+      "  .noteOff(note)                         Stop grain stream (grains drain)",
+      "  .stop()                                Stop all voices immediately",
+      "  .free()                                Destroy instrument",
+      "  .help()                                Show this help",
+      "",
+      "\x1b[1mParameters (use .set()):\x1b[0m",
+      "  position   0.0–1.0   Source position (default 0.5)",
+      "  grainSize  1–1000    Grain duration ms (default 80)",
+      "  density    0.1–200   Grains per second (default 20)",
+      "  scatter    0.0–1.0   Position scatter (default 0.1)",
+      "  envelope   0–3       0=Hann 1=Hamming 2=Triangle 3=Tukey",
+      "  pitch      0.25–4.0  Playback rate (default 1.0)",
+      "  volume     0.0–2.0   Output gain (default 1.0)",
+      "",
+      "\x1b[1mExample:\x1b[0m",
+      `  g = inst.granular({ name: '${state.name}' })`,
+      `  g.load(sample)`,
+      `  g.set({ position: 0.3, grainSize: 120 })`,
+      `  g.noteOn(60)`,
+      `  g.noteOff(60)`,
+    ];
+    return new BounceResult(lines.join("\n"));
+  }
   const lines = [
     `\x1b[1;36m${state.name}\x1b[0m  (${state.kind} instrument)`,
     "",
@@ -64,7 +123,12 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
     noteOff: ((note: number) => BounceResult) & { help: () => BounceResult };
     stop: (() => BounceResult) & { help: () => BounceResult };
     free: (() => BounceResult) & { help: () => BounceResult };
+    set: ((params: Record<string, number>) => BounceResult) & { help: () => BounceResult };
+    load: ((sample: { hash: string }) => BounceResult) & { help: () => BounceResult };
   };
+
+  // Override toString() to be dynamic so that param updates via .set() are reflected
+  obj.toString = () => formatInstrument(state);
 
   obj.loadSample = Object.assign(
     function loadSample(note: number, sample: { hash: string }, opts?: { loop?: boolean; loopStart?: number; loopEnd?: number }): BounceResult {
@@ -215,6 +279,90 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
     },
   );
 
+  obj.set = Object.assign(
+    function set(params: Record<string, number>): BounceResult {
+      const unknown = Object.keys(params).filter(k => !(k in GRANULAR_PARAM_IDS));
+      if (unknown.length > 0) {
+        return new BounceResult(`\x1b[31mError: unknown params: ${unknown.join(", ")}\x1b[0m`);
+      }
+      for (const [key, value] of Object.entries(params)) {
+        const paramId = GRANULAR_PARAM_IDS[key];
+        window.electron.setInstrumentParam(state.instrumentId, paramId, value);
+        if (state.granularParams) {
+          const mapping: Record<string, keyof GranularParams> = {
+            position: "position",
+            grainSize: "grainSizeMs",
+            density: "density",
+            scatter: "scatter",
+            envelope: "envelope",
+            pitch: "pitch",
+            volume: "volume",
+          };
+          const field = mapping[key];
+          if (field) state.granularParams[field] = value;
+        }
+      }
+      return new BounceResult(`Updated ${Object.keys(params).join(", ")}`);
+    },
+    {
+      help: (): BounceResult =>
+        new BounceResult(
+          [
+            "\x1b[1;36mset(params)\x1b[0m",
+            "",
+            "  Update granular synthesis parameters.",
+            "",
+            "\x1b[1mParameters:\x1b[0m",
+            "  position   0.0–1.0   Playback position in source (fraction)",
+            "  grainSize  1–1000    Grain duration in milliseconds (default 80)",
+            "  density    0.1–200   Grains per second (default 20)",
+            "  scatter    0.0–1.0   Position randomization (default 0.1)",
+            "  envelope   0–3       Window: 0=Hann, 1=Hamming, 2=Triangle, 3=Tukey",
+            "  pitch      0.25–4.0  Playback rate multiplier (default 1.0)",
+            "  volume     0.0–2.0   Output gain (default 1.0)",
+            "",
+            "\x1b[1mExample:\x1b[0m",
+            `  ${state.name}.set({ position: 0.3, grainSize: 120, density: 25 })`,
+          ].join("\n"),
+        ),
+    },
+  );
+
+  obj.load = Object.assign(
+    function load(sample: { hash: string }): BounceResult {
+      if (!sample?.hash) {
+        return new BounceResult("\x1b[31mError: sample must have a hash property\x1b[0m");
+      }
+      window.electron.loadInstrumentSample(state.instrumentId, 0, sample.hash, false, 0, -1);
+      state.loadedNotes.set(0, { sampleHash: sample.hash, loop: false, loopStart: 0, loopEnd: -1 });
+      state.sampleCount = state.loadedNotes.size;
+
+      window.electron.addDbInstrumentSample?.(state.name, sample.hash, 0, false, 0, -1)
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[inst] Failed to persist source sample: ${msg}`);
+          window.electron.debugLog?.("error", "[inst] Failed to persist source sample", { instrument: state.name, error: msg });
+        });
+
+      return new BounceResult(`Loaded source sample for '${state.name}'`);
+    },
+    {
+      help: (): BounceResult =>
+        new BounceResult(
+          [
+            "\x1b[1;36mload(sample)\x1b[0m",
+            "",
+            "  Load a source sample into the granular instrument.",
+            "  The sample is used as the grain source for all grain streams.",
+            "",
+            "\x1b[1mExample:\x1b[0m",
+            `  const s = sn.read("/path/to/sound.wav")`,
+            `  ${state.name}.load(s)`,
+          ].join("\n"),
+        ),
+    },
+  );
+
   return obj;
 }
 
@@ -226,7 +374,7 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
       const records = await window.electron.listDbInstruments();
       for (const record of records) {
         const config = record.config_json ? JSON.parse(record.config_json) : {};
-        const polyphony = config.polyphony ?? 16;
+        const polyphony = config.polyphony ?? (record.kind === "granular" ? 4 : 16);
         const instrumentId = `inst_${record.name}_${Date.now()}`;
 
         window.electron.defineInstrument(instrumentId, record.kind, polyphony);
@@ -239,6 +387,18 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
           sampleCount: 0,
           loadedNotes: new Map(),
         };
+
+        if (record.kind === "granular") {
+          state.granularParams = {
+            position: 0.5,
+            grainSizeMs: 80,
+            density: 20,
+            scatter: 0.1,
+            envelope: 0,
+            pitch: 1.0,
+            volume: 1.0,
+          };
+        }
 
         // Restore sample mappings
         const samples = await window.electron.getDbInstrumentSamples(record.name);
@@ -279,7 +439,8 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
           "\x1b[1;36minst\x1b[0m  — Instrument namespace",
           "",
           "\x1b[1mFunctions:\x1b[0m",
-          "  inst.sampler({ name, polyphony? })  Create a sampler instrument",
+          "  inst.sampler({ name, polyphony? })   Create a sampler instrument",
+          "  inst.granular({ name, polyphony? })  Create a granular instrument",
           "  inst.list()                          List all instruments",
           "  inst.get(name)                       Get an instrument by name",
           "  inst.help()                          Show this help",
@@ -338,6 +499,70 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
               "",
               "\x1b[1mExample:\x1b[0m",
               "  keys = inst.sampler({ name: 'keys', polyphony: 8 })",
+            ].join("\n"),
+          ),
+      },
+    ),
+
+    granular: Object.assign(
+      function granular(opts: { name: string; polyphony?: number }): InstrumentResult {
+        if (!opts?.name) {
+          throw new Error("inst.granular() requires { name: string }");
+        }
+        const name = opts.name;
+        const polyphony = opts.polyphony ?? 4;
+        const instrumentId = `inst_${name}_${Date.now()}`;
+
+        window.electron.defineInstrument(instrumentId, "granular", polyphony);
+
+        window.electron.createDbInstrument?.(name, "granular", { polyphony })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[inst] Failed to persist granular instrument: ${msg}`);
+            window.electron.debugLog?.("error", "[inst] Failed to persist granular instrument", { instrument: name, error: msg });
+          });
+
+        const state: InstrumentState = {
+          instrumentId,
+          name,
+          kind: "granular",
+          polyphony,
+          sampleCount: 0,
+          loadedNotes: new Map(),
+          granularParams: {
+            position: 0.5,
+            grainSizeMs: 80,
+            density: 20,
+            scatter: 0.1,
+            envelope: 0,
+            pitch: 1.0,
+            volume: 1.0,
+          },
+        };
+        instruments.set(name, state);
+
+        return buildInstrumentObject(state);
+      },
+      {
+        help: (): BounceResult =>
+          new BounceResult(
+            [
+              "\x1b[1;36minst.granular({ name, polyphony? })\x1b[0m",
+              "",
+              "  Create a new granular synthesis instrument.",
+              "  Load a source sample with .load(sample), then trigger with .noteOn(note).",
+              "  Control texture with .set({ position, grainSize, density, ... }).",
+              "",
+              "\x1b[1mParameters:\x1b[0m",
+              "  name       string   (required) Instrument name",
+              "  polyphony  number   (default 4) Max simultaneous grain streams",
+              "",
+              "\x1b[1mExample:\x1b[0m",
+              "  g = inst.granular({ name: 'clouds' })",
+              "  g.load(sn.read('/path/to/sound.wav'))",
+              "  g.set({ position: 0.5, grainSize: 80, density: 20 })",
+              "  g.noteOn(60)",
+              "  g.noteOff(60)",
             ].join("\n"),
           ),
       },
