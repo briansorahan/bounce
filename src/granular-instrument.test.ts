@@ -17,7 +17,13 @@ const mockElectron = {
 
 (globalThis as Record<string, unknown>).window = { electron: mockElectron };
 
-const deps = { onProjectLoad: undefined as (() => Promise<void>) | undefined };
+const deps = {
+  onProjectLoad: undefined as (() => Promise<void>) | undefined,
+  terminal: {} as import("./renderer/terminal.js").BounceTerminal,
+  audioManager: {} as import("./renderer/audio-context.js").AudioManager,
+  sharedState: { api: null, visualizationScenes: null },
+  getSceneManager: () => { throw new Error("not implemented"); },
+};
 const inst = buildInstNamespace(deps);
 
 test("inst.granular.help() mentions granular synthesis", () => {
