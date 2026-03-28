@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const midiDescription: string = "MIDI recording and playback";
+
 export const midiCommands: CommandHelp[] = [
   {
     name: "devices",

@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const corpusDescription: string = "KDTree corpus for nearest-neighbor resynthesis";
+
 export const corpusCommands: CommandHelp[] = [
   {
     name: "build",

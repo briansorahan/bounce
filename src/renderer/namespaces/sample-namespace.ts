@@ -26,7 +26,7 @@ import {
 import { GrainCollection } from "../grain-collection.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { snCommands } from "./sn-commands.generated.js";
+import { snCommands, snDescription } from "./sn-commands.generated.js";
 export { snCommands } from "./sn-commands.generated.js";
 
 export const sampleNamespaceCommands = snCommands;
@@ -45,7 +45,10 @@ export interface SampleBinder {
   ): Sample;
 }
 
-/** @namespace sn */
+/**
+ * Load and play audio samples; entry point for all audio analysis
+ * @namespace sn
+ */
 export function buildSampleNamespace(deps: NamespaceDeps) {
   const { terminal, audioManager } = deps;
 
@@ -1330,12 +1333,13 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   const sn = {
+    description: snDescription,
     toString(): string {
-      return renderNamespaceHelp("sn", "Sample namespace", sampleNamespaceCommands).toString();
+      return renderNamespaceHelp("sn", snDescription, sampleNamespaceCommands).toString();
     },
 
     help(): BounceResult {
-      return renderNamespaceHelp("sn", "Sample namespace", sampleNamespaceCommands);
+      return renderNamespaceHelp("sn", snDescription, sampleNamespaceCommands);
     },
 
     read: withHelp(

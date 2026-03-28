@@ -9,7 +9,7 @@ import {
   formatLsEntries,
 } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
-import { fsCommands } from "./fs-commands.generated.js";
+import { fsCommands, fsDescription } from "./fs-commands.generated.js";
 export { fsCommands } from "./fs-commands.generated.js";
 import type { NamespaceDeps } from "./types.js";
 
@@ -29,12 +29,17 @@ type WalkEntry = { path: string; type: FileTypeValue };
 type WalkCatchAll = (filePath: string, type: FileTypeValue) => Promise<void>;
 type WalkHandlers = Partial<Record<FileTypeValue, (filePath: string) => Promise<void>>>;
 
-/** @namespace fs */
+/**
+ * Filesystem utilities
+ * @namespace fs
+ */
 export function buildFsNamespace(_deps: NamespaceDeps) {
   const fs = {
     FileType,
 
-    help: () => renderNamespaceHelp("fs", "Filesystem utilities", fsCommands),
+    description: fsDescription,
+
+    help: () => renderNamespaceHelp("fs", fsDescription, fsCommands),
 
     ls: withHelp(
       /**

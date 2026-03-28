@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const instDescription: string = "Create and manage sample-based and synthesizer instruments";
+
 export const instCommands: CommandHelp[] = [
   {
     name: "sampler",

@@ -36,8 +36,11 @@ const errorsSupplementalCommands: CommandHelp[] = [
 ];
 
 /** @namespace globals */
-export function buildGlobals(deps: NamespaceDeps) {
+export function buildGlobals(deps: NamespaceDeps, namespaces: Record<string, { description: string }>) {
   const { terminal } = deps;
+
+  const nsNames = Object.keys(namespaces);
+  const maxNsNameLen = nsNames.length > 0 ? Math.max(...nsNames.map((n) => n.length)) : 0;
 
   const help = withHelp(
     /**
@@ -51,20 +54,19 @@ export function buildGlobals(deps: NamespaceDeps) {
      * @example corpus.help()
      */
     function help(): BounceResult {
+      const nsEntries = Object.entries(namespaces).map(([name, ns]) => {
+        const descFirstLine = ns.description.split("\n")[0];
+        const pad = " ".repeat(Math.max(1, maxNsNameLen - name.length + 2));
+        return `  \x1b[33m${name}\x1b[0m${pad}${descFirstLine}`;
+      });
+
       return new BounceResult([
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
-        "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .load() .list() .current() .stop() .help()",
-        "  \x1b[33minst\x1b[0m                             Instrument namespace: .sampler() .get() .list() .help()",
-        "  \x1b[33mmidi\x1b[0m                             MIDI recording and playback: .record() .sequences() .devices() .help()",
-        "  \x1b[33menv\x1b[0m                              Runtime introspection: .vars() .globals() .inspect() .functions()",
-        "  \x1b[33mproj\x1b[0m                             Project namespace: .current() .list() .load() .rm() .help()",
-        "  \x1b[33mvis\x1b[0m                              Visualization namespace: .waveform() .list() .remove() .clear()",
-        "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",
-        "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
-        "  \x1b[33mhelp()\x1b[0m                           Show this help message",
-        "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
-        "  \x1b[33merrors()\x1b[0m                         Show background errors (status line red = errors pending)",
+        ...nsEntries,
+        "  \x1b[33mhelp()\x1b[0m      Show this help message",
+        "  \x1b[33mclear()\x1b[0m     Clear the terminal screen",
+        "  \x1b[33merrors()\x1b[0m    Show background errors",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",

@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const visDescription: string = "Build and manage waveform and analysis visualizations";
+
 export const visCommands: CommandHelp[] = [
   {
     name: "waveform",

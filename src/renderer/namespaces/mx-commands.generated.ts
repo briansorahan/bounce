@@ -3,6 +3,13 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const mxDescription: string = `8-channel mixer
+
+  Also available as properties:
+  mx.preview    preview channel (sample.play / sample.loop)
+  mx.master     master bus
+  mx.channels   list all channels with current settings`;
+
 export const mxCommands: CommandHelp[] = [
   {
     name: "ch",

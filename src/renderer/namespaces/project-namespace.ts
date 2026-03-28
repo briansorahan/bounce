@@ -8,12 +8,15 @@ import {
 } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { projCommands } from "./proj-commands.generated.js";
+import { projCommands, projDescription } from "./proj-commands.generated.js";
 export { projCommands } from "./proj-commands.generated.js";
 
 export const projectCommands = projCommands;
 
-/** @namespace proj */
+/**
+ * Manage Bounce projects — create, switch, and list
+ * @namespace proj
+ */
 export function buildProjectNamespace(deps: NamespaceDeps) {
   function makeProjectDisplayText(project: ProjectSummary, heading = "Current Project"): string {
     return [
@@ -134,11 +137,12 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
   }
 
   const proj = {
+    description: projDescription,
     toString(): string {
-      return renderNamespaceHelp("proj", "Project namespace", projectCommands).toString();
+      return renderNamespaceHelp("proj", projDescription, projectCommands).toString();
     },
 
-    help: () => renderNamespaceHelp("proj", "Project namespace", projectCommands),
+    help: () => renderNamespaceHelp("proj", projDescription, projectCommands),
 
     current: withHelp(
       /**

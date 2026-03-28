@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const fsDescription: string = "Filesystem utilities";
+
 export const fsCommands: CommandHelp[] = [
   {
     name: "ls",

@@ -3,18 +3,23 @@ import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
 import { parsePattern } from "../pattern-parser.js";
 import { Pattern } from "../results/pattern.js";
-import { patCommands } from "./pat-commands.generated.js";
+import { patCommands, patDescription } from "./pat-commands.generated.js";
 export { patCommands } from "./pat-commands.generated.js";
 
 export interface PatNamespace {
+  description: string;
   xox: ((notation: string) => Pattern) & { help: () => BounceResult };
   help(): BounceResult;
 }
 
-/** @namespace pat */
+/**
+ * Pattern DSL for rhythmic sequencing
+ * @namespace pat
+ */
 export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
   const pat: PatNamespace = {
-    help: () => renderNamespaceHelp("pat", "Pattern creators for live-coding", patCommands),
+    description: patDescription,
+    help: () => renderNamespaceHelp("pat", patDescription, patCommands),
 
     xox: withHelp(
       /**

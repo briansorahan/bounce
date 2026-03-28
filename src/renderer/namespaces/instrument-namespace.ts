@@ -3,7 +3,7 @@
 import { BounceResult, InstrumentResult, InstrumentListResult } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { instCommands } from "./inst-commands.generated.js";
+import { instCommands, instDescription } from "./inst-commands.generated.js";
 export { instCommands } from "./inst-commands.generated.js";
 
 interface GranularParams {
@@ -369,7 +369,10 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
   return obj;
 }
 
-/** @namespace inst */
+/**
+ * Create and manage sample-based and synthesizer instruments
+ * @namespace inst
+ */
 export function buildInstNamespace(_deps: NamespaceDeps) {
   // Restore instruments from DB on project load
   async function restoreInstruments(): Promise<void> {
@@ -437,7 +440,8 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
   restoreInstruments();
 
   const inst = {
-    help: () => renderNamespaceHelp("inst", "Instrument namespace", instCommands),
+    description: instDescription,
+    help: () => renderNamespaceHelp("inst", instDescription, instCommands),
 
     sampler: withHelp(
       /**

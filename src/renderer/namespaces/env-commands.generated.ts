@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const envDescription: string = "Runtime introspection — inspect variables, globals, and functions";
+
 export const envCommands: CommandHelp[] = [
   {
     name: "vars",

@@ -7,10 +7,13 @@ import {
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
 import type { SampleBinder } from "./sample-namespace.js";
-import { corpusCommands } from "./corpus-commands.generated.js";
+import { corpusCommands, corpusDescription } from "./corpus-commands.generated.js";
 export { corpusCommands } from "./corpus-commands.generated.js";
 
-/** @namespace corpus */
+/**
+ * KDTree corpus for nearest-neighbor resynthesis
+ * @namespace corpus
+ */
 export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBinder) {
   const { terminal, audioManager } = deps;
 
@@ -28,7 +31,8 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
   }
 
   const corpus = {
-    help: () => renderNamespaceHelp("corpus", "KDTree corpus for nearest-neighbor resynthesis", corpusCommands),
+    description: corpusDescription,
+    help: () => renderNamespaceHelp("corpus", corpusDescription, corpusCommands),
 
     build: withHelp(
       /**

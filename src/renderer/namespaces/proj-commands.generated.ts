@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const projDescription: string = "Manage Bounce projects — create, switch, and list";
+
 export const projCommands: CommandHelp[] = [
   {
     name: "current",

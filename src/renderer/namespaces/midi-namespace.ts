@@ -10,7 +10,7 @@ import {
   type MidiTargetInstrument,
 } from "../results/midi.js";
 import type { NamespaceDeps } from "./types.js";
-import { midiCommands } from "./midi-commands.generated.js";
+import { midiCommands, midiDescription } from "./midi-commands.generated.js";
 export { midiCommands } from "./midi-commands.generated.js";
 
 export interface MidiRecordOptions {
@@ -28,7 +28,10 @@ function channelsFromEvents(events: Array<{ channel: number }>): number[] {
   return [...new Set(events.map((e) => e.channel))].sort((a, b) => a - b);
 }
 
-/** @namespace midi */
+/**
+ * MIDI recording and playback
+ * @namespace midi
+ */
 export function buildMidiNamespace(_deps: NamespaceDeps) {
   // Wire up playback-ended telemetry so seq.stop() state stays consistent.
   window.electron.onMidiPlaybackEnded?.(() => {
@@ -36,7 +39,8 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
   });
 
   const midi = {
-    help: () => renderNamespaceHelp("midi", "MIDI recording and playback", midiCommands),
+    description: midiDescription,
+    help: () => renderNamespaceHelp("midi", midiDescription, midiCommands),
 
     devices: withHelp(
       /**

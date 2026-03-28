@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const snDescription: string = "Load and play audio samples; entry point for all audio analysis";
+
 export const snCommands: CommandHelp[] = [
   {
     name: "read",

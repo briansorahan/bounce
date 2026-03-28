@@ -16,10 +16,13 @@ import {
 } from "../runtime-introspection.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { envCommands } from "./env-commands.generated.js";
+import { envCommands, envDescription } from "./env-commands.generated.js";
 export { envCommands } from "./env-commands.generated.js";
 
-/** @namespace env */
+/**
+ * Runtime introspection — inspect variables, globals, and functions
+ * @namespace env
+ */
 export function buildEnvNamespace(deps: NamespaceDeps) {
   function getApiEntries(): Array<[string, unknown]> {
     return Object.entries(deps.sharedState.api ?? {});
@@ -73,7 +76,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
   }
 
   function envHelpText(): BounceResult {
-    return renderNamespaceHelp("env", "runtime introspection namespace", envCommands);
+    return renderNamespaceHelp("env", envDescription, envCommands);
   }
 
   function envScopeHelpText(label: "vars" | "globals"): BounceResult {
@@ -185,6 +188,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
   }
 
   const env = {
+    description: envDescription,
     help(): BounceResult {
       return envHelpText();
     },

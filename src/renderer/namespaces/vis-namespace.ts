@@ -10,10 +10,13 @@ import {
 } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { visCommands } from "./vis-commands.generated.js";
+import { visCommands, visDescription } from "./vis-commands.generated.js";
 export { visCommands } from "./vis-commands.generated.js";
 
-/** @namespace vis */
+/**
+ * Build and manage waveform and analysis visualizations
+ * @namespace vis
+ */
 export function buildVisNamespace(deps: NamespaceDeps) {
   function sampleLabel(filePath: string | undefined, hash: string): string {
     return filePath?.split("/").pop() ?? hash.substring(0, 8);
@@ -101,7 +104,8 @@ export function buildVisNamespace(deps: NamespaceDeps) {
   }
 
   const vis = {
-    help: () => renderNamespaceHelp("vis", "Visualization namespace", visCommands),
+    description: visDescription,
+    help: () => renderNamespaceHelp("vis", visDescription, visCommands),
 
     waveform: withHelp(
       /**

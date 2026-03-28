@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const transportDescription: string = "Global clock and BPM control";
+
 export const transportCommands: CommandHelp[] = [
   {
     name: "bpm",

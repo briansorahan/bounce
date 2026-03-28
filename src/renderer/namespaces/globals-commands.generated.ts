@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const globalDescription: string = " @namespace globals";
+
 export const globalCommands: CommandHelp[] = [
   {
     name: "help",

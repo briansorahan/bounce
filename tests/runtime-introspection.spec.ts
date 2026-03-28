@@ -14,7 +14,7 @@ test.describe("env namespace runtime introspection", () => {
     await sendCommand(window, "env.help()");
 
     await expect(window.locator(".xterm-rows")).toContainText(
-      "runtime introspection namespace",
+      "Runtime introspection",
       { timeout: 5000 },
     );
 

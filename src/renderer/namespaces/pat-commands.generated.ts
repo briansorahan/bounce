@@ -3,6 +3,8 @@
 
 import type { CommandHelp } from "../help.js";
 
+export const patDescription: string = "Pattern DSL for rhythmic sequencing";
+
 export const patCommands: CommandHelp[] = [
   {
     name: "xox",

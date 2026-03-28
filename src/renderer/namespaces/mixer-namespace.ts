@@ -1,7 +1,7 @@
 import { BounceResult } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { mxCommands } from "./mx-commands.generated.js";
+import { mxCommands, mxDescription } from "./mx-commands.generated.js";
 export { mxCommands } from "./mx-commands.generated.js";
 
 export const mixerCommands = mxCommands;
@@ -226,7 +226,15 @@ class MasterControl extends BounceResult {
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-/** @namespace mx */
+/**
+ * 8-channel mixer
+ *
+ *   Also available as properties:
+ *   mx.preview    preview channel (sample.play / sample.loop)
+ *   mx.master     master bus
+ *   mx.channels   list all channels with current settings
+ * @namespace mx
+ */
 export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace } {
   const channelStates: ChannelState[] = Array.from({ length: NUM_USER_CHANNELS }, defaultChannelState);
   const previewState: ChannelState = { ...defaultChannelState(), gainDb: 0 };
@@ -277,6 +285,7 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
   setTimeout(restoreFromDb, 0);
 
   const mx: MixerNamespace = {
+    description: mxDescription,
     ch: withHelp(
       /**
        * Get a ChannelControl for channel n (1–8)
@@ -319,7 +328,7 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
 
     help: () => renderNamespaceHelp(
       "mx",
-      "8-channel mixer\n\n  Also available as properties:\n  mx.preview    preview channel (sample.play / sample.loop)\n  mx.master     master bus\n  mx.channels   list all channels with current settings",
+      mxDescription,
       mixerCommands,
     ),
   };
@@ -334,6 +343,7 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
 export type { ChannelControl, PreviewControl, MasterControl };
 
 export interface MixerNamespace {
+  description: string;
   ch(n: number): ChannelControl | BounceResult;
   readonly channels: BounceResult;
   readonly preview: PreviewControl;

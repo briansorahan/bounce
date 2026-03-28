@@ -27,7 +27,7 @@ test.describe("Sampler Instrument", () => {
 
     await sendCommand(window, "inst.help()");
     const rows = window.locator(".xterm-rows");
-    await expect(rows).toContainText("Instrument namespace", { timeout: 5000 });
+    await expect(rows).toContainText("Create and manage sample-based and synthesizer instruments", { timeout: 5000 });
     await expect(rows).toContainText("inst.sampler", { timeout: 5000 });
     await expect(rows).toContainText("inst.list()", { timeout: 5000 });
     await expect(rows).toContainText("inst.get(name)", { timeout: 5000 });

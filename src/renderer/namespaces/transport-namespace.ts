@@ -2,10 +2,11 @@
 import { BounceResult } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { transportCommands } from "./transport-commands.generated.js";
+import { transportCommands, transportDescription } from "./transport-commands.generated.js";
 export { transportCommands } from "./transport-commands.generated.js";
 
 export interface TransportNamespace {
+  description: string;
   bpm: ((value?: number) => BounceResult) & { help: () => BounceResult };
   start: (() => BounceResult) & { help: () => BounceResult };
   stop: (() => BounceResult) & { help: () => BounceResult };
@@ -18,7 +19,10 @@ export interface TransportNamespaceResult {
 }
 
 
-/** @namespace transport */
+/**
+ * Global clock and BPM control
+ * @namespace transport
+ */
 export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespaceResult {
   let currentBpm = 120;
   let isRunning = false;
@@ -27,7 +31,8 @@ export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespac
   let lastStep = 0;
 
   const transport: TransportNamespace = {
-    help: () => renderNamespaceHelp("transport", "Controls the global clock", transportCommands),
+    description: transportDescription,
+    help: () => renderNamespaceHelp("transport", transportDescription, transportCommands),
 
     bpm: withHelp(
       /**
