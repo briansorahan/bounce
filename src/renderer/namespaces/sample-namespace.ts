@@ -24,7 +24,90 @@ import {
   InstrumentResult,
 } from "../bounce-result.js";
 import { GrainCollection } from "../grain-collection.js";
+import { type CommandHelp, renderNamespaceHelp, renderCommandHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+
+export const sampleNamespaceCommands: CommandHelp[] = [
+  {
+    name: "read",
+    signature: "sn.read(path)",
+    summary: "Load an audio file from disk and return a Sample object",
+    description:
+      "Load an audio file from disk and return a Sample object.\n" +
+      "The sample is stored in the project database for future access via sn.load().",
+    params: [
+      { name: "path", type: "string", description: "File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS." },
+    ],
+    examples: [
+      "const samp = sn.read(\"kick.wav\")",
+      "const samp = sn.read(\"samples/loop.flac\")",
+    ],
+  },
+  {
+    name: "load",
+    signature: "sn.load(hash)",
+    summary: "Load a stored sample by hash and return a Sample object",
+    description:
+      "Load a stored sample by its hash (or hash prefix) and return a Sample object.\n" +
+      "Use sn.list() to see available sample hashes.",
+    params: [
+      { name: "hash", type: "string", description: "Full or prefix hash from sn.list()." },
+    ],
+    examples: ["const samp = sn.load(\"a1b2c3d4\")"],
+  },
+  {
+    name: "list",
+    signature: "sn.list()",
+    summary: "List stored samples and features",
+    description:
+      "Show all stored samples and features in the database.",
+    examples: ["sn.list()"],
+  },
+  {
+    name: "current",
+    signature: "sn.current()",
+    summary: "Return the currently loaded sample, or null",
+    description:
+      "Return the currently loaded sample or null if no sample is active.",
+    examples: [
+      "const current = sn.current()",
+      "current?.help()",
+    ],
+  },
+  {
+    name: "stop",
+    signature: "sn.stop()",
+    summary: "Stop all active sample playback and looping voices",
+    examples: ["sn.stop()"],
+  },
+  {
+    name: "inputs",
+    signature: "sn.inputs()",
+    summary: "List available audio input devices",
+    description:
+      "List all available audio input devices.\n" +
+      "Triggers a microphone permission request on first call.\n" +
+      "Use the index shown to open a device with sn.dev(index).",
+    examples: ["sn.inputs()", "sn.dev(0)"],
+  },
+  {
+    name: "dev",
+    signature: "sn.dev(index)",
+    summary: "Open an audio input device by index for recording",
+    description:
+      "Open an audio input device by index (from sn.inputs()) and return an AudioDevice.\n" +
+      "Use AudioDevice.record() to start recording.",
+    params: [
+      { name: "index", type: "number", description: "Device index from sn.inputs()." },
+    ],
+    examples: [
+      "const mic = sn.dev(0)",
+      "const h = mic.record(\"take1\")",
+      "h.stop()",
+      "mic.record(\"take2\", { duration: 5 })",
+    ],
+  },
+];
 
 export interface SampleBinder {
   bindSample(
@@ -1324,39 +1407,9 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
   }
 
   const sn = new SampleNamespace(
-    [
-      "\x1b[1;36msn\x1b[0m — sample namespace",
-      "",
-      "  sn.read(path)         Load a sample from disk and return a Sample object",
-      "  sn.load(hash)         Load a stored sample by hash and return a Sample object",
-      "  sn.list()             List stored samples and features",
-      "  sn.current()          Return the currently loaded sample, if any",
-      "  sn.stop()             Stop all active sample playback",
-      "  sn.inputs()           List available audio input devices",
-      "  sn.dev(index)         Open an audio input device for recording",
-      "",
-      "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), sn.load.help()",
-    ].join("\n"),
+    renderNamespaceHelp("sn", "Sample namespace", sampleNamespaceCommands).toString(),
     {
-      help: () => new BounceResult([
-        "\x1b[1;36msn\x1b[0m — sample namespace",
-        "",
-        "  Use sn.read() to load audio files from disk. Use sn.load() to reload",
-        "  a stored sample by hash. Samples expose methods for playback, analysis,",
-        "  resynthesis, and help.",
-        "  Use sn.inputs() and sn.dev() to record from a microphone or audio interface.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
-        "           const stored = sn.load(\"a1b2c3d4\")",
-        "           samp.loop()",
-        "           sn.stop()",
-        "           const feature = samp.nmf()",
-        "           feature.sep()",
-        "           sn.inputs()",
-        "           const mic = sn.dev(0)",
-        "           const h = mic.record(\"take1\")",
-        "           h.stop()",
-      ].join("\n")),
+      help: () => renderNamespaceHelp("sn", "Sample namespace", sampleNamespaceCommands),
       read: (path) => display(path),
       load: (hash) => loadByHash(hash),
       list: () => list(),
@@ -1392,69 +1445,23 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
   );
 
   (sn.read as typeof sn.read & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.read(path)\x1b[0m",
-      "",
-      "  Load an audio file from disk and return a Sample object.",
-      "  The sample is stored in the project database for future access via sn.load().",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"kick.wav\")",
-      "           const samp = sn.read(\"samples/loop.flac\")",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[0]);
 
   (sn.load as typeof sn.load & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.load(hash)\x1b[0m",
-      "",
-      "  Load a stored sample by its hash (or hash prefix) and return a Sample object.",
-      "  Use sn.list() to see available sample hashes.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const samp = sn.load(\"a1b2c3d4\")",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[1]);
 
-  (sn.list as typeof sn.list & { help?: () => BounceResult }).help = () => list.help();
+  (sn.list as typeof sn.list & { help?: () => BounceResult }).help = () =>
+    renderCommandHelp(sampleNamespaceCommands[2]);
   (sn.current as typeof sn.current & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.current()\x1b[0m",
-      "",
-      "  Return the currently loaded sample or null if no sample is active.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const current = sn.current()",
-      "           current?.help()",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[3]);
   (sn.stop as typeof sn.stop & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.stop()\x1b[0m",
-      "",
-      "  Stop all active sample playback and looping voices.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  sn.stop()",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[4]);
 
   (sn.inputs as typeof sn.inputs & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.inputs()\x1b[0m",
-      "",
-      "  List all available audio input devices.",
-      "  Triggers a microphone permission request on first call.",
-      "  Use the index shown to open a device with sn.dev(index).",
-      "",
-      "  \x1b[90mExample:\x1b[0m  sn.inputs()",
-      "           sn.dev(0)",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[5]);
 
   (sn.dev as typeof sn.dev & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.dev(index)\x1b[0m",
-      "",
-      "  Open an audio input device by index (from sn.inputs()) and return an AudioDevice.",
-      "  Use AudioDevice.record() to start recording.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const mic = sn.dev(0)",
-      "           const h = mic.record(\"take1\")",
-      "           h.stop()",
-      "           mic.record(\"take2\", { duration: 5 })",
-    ].join("\n"));
+    renderCommandHelp(sampleNamespaceCommands[6]);
 
   const sampleBinder: SampleBinder = { bindSample };
 
