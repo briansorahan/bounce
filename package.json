@@ -8,7 +8,7 @@
     "build:deps": "cd third_party/memory && rm -rf build install && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=../install -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DFOONATHAN_MEMORY_BUILD_EXAMPLES=OFF -DFOONATHAN_MEMORY_BUILD_TESTS=OFF -DFOONATHAN_MEMORY_BUILD_TOOLS=OFF && make -j4 && make install",
     "build:native": "node-gyp rebuild",
     "build:ts": "tsc",
-    "build:electron": "tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
+    "build:electron": "npm run generate:help && tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
     "build": "npm run build:deps && npm run build:native && npm run build:ts",
     "rebuild": "npm run build:deps && npx @electron/rebuild --force",
     "dev": "npm run rebuild && npm run start:electron",
@@ -17,9 +17,10 @@
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "lint": "eslint src/**/*.ts",
     "start:electron": "npm run build:electron && electron .",
-    "test": "tsx src/test.ts && tsx src/command-parser.test.ts && tsx src/tab-completion.test.ts && tsx src/grain-collection.test.ts && tsx src/settings-store.test.ts && tsx src/help.test.ts && tsx src/help-system.test.ts",
+    "test": "tsx src/test.ts && tsx src/command-parser.test.ts && tsx src/tab-completion.test.ts && tsx src/grain-collection.test.ts && tsx src/settings-store.test.ts && tsx src/help.test.ts && tsx src/help-codegen.test.ts",
     "test:e2e": "playwright test",
-    "test:workflow": "npm ci --ignore-scripts && node node_modules/electron/install.js && npm run rebuild && npm run lint && npm run build && npm test && rm -rf dist && npm run build:electron && npx playwright install --with-deps chromium && npx playwright test"
+    "test:workflow": "npm ci --ignore-scripts && node node_modules/electron/install.js && npm run rebuild && npm run lint && npm run build && npm test && rm -rf dist && npm run build:electron && npx playwright install --with-deps chromium && npx playwright test",
+    "generate:help": "npx tsx scripts/generate-help.ts"
   },
   "keywords": [
     "flucoma",

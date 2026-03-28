@@ -1,8 +1,10 @@
 /// <reference path="../types.d.ts" />
 /// <reference path="../bounce-globals.d.ts" />
 import { BounceResult, InstrumentResult, InstrumentListResult } from "../bounce-result.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { instCommands } from "./inst-commands.generated.js";
+export { instCommands } from "./inst-commands.generated.js";
 
 interface GranularParams {
   position: number;
@@ -367,59 +369,7 @@ function buildInstrumentObject(state: InstrumentState): InstrumentResult {
   return obj;
 }
 
-export const instCommands: CommandHelp[] = [
-  {
-    name: "sampler",
-    signature: "inst.sampler({ name, polyphony? })",
-    summary: "Create a sampler instrument",
-    description:
-      "Create a new sampler instrument. Load samples per MIDI note with\n.loadSample(note, sample), then trigger with .noteOn(note) / .noteOff(note).",
-    params: [
-      { name: "name", type: "string", description: "Instrument name (required)." },
-      { name: "polyphony", type: "number", description: "Max simultaneous voices (default 16).", optional: true },
-    ],
-    examples: [
-      "keys = inst.sampler({ name: 'keys' })",
-      "keys = inst.sampler({ name: 'keys', polyphony: 8 })",
-    ],
-  },
-  {
-    name: "granular",
-    signature: "inst.granular({ name, polyphony? })",
-    summary: "Create a granular synthesis instrument",
-    description:
-      "Create a new granular synthesis instrument. Load a source sample with\n.load(sample), control texture with .set({ position, grainSize, density, ... }),\nand trigger grain streams with .noteOn(note) / .noteOff(note).",
-    params: [
-      { name: "name", type: "string", description: "Instrument name (required)." },
-      { name: "polyphony", type: "number", description: "Max simultaneous grain streams (default 4).", optional: true },
-    ],
-    examples: [
-      "g = inst.granular({ name: 'clouds' })",
-      "g.load(sn.read('/path/to/sound.wav'))",
-      "g.set({ position: 0.5, grainSize: 80, density: 20 })",
-      "g.noteOn(60)",
-      "g.noteOff(60)",
-    ],
-  },
-  {
-    name: "list",
-    signature: "inst.list()",
-    summary: "List all instruments in the current session",
-    description: "List all instruments defined in the current session, showing name, kind, and sample count.",
-    examples: ["inst.list()"],
-  },
-  {
-    name: "get",
-    signature: "inst.get(name)",
-    summary: "Get an instrument by name",
-    description: "Retrieve an existing instrument by name. Returns the instrument object with all methods attached.",
-    params: [
-      { name: "name", type: "string", description: "Instrument name." },
-    ],
-    examples: ["keys = inst.get('keys')"],
-  },
-];
-
+/** @namespace inst */
 export function buildInstNamespace(_deps: NamespaceDeps) {
   // Restore instruments from DB on project load
   async function restoreInstruments(): Promise<void> {
@@ -490,6 +440,16 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
     help: () => renderNamespaceHelp("inst", "Instrument namespace", instCommands),
 
     sampler: withHelp(
+      /**
+       * Create a sampler instrument
+       *
+       * Create a new sampler instrument. Load samples per MIDI note with
+       * .loadSample(note, sample), then trigger with .noteOn(note) / .noteOff(note).
+       *
+       * @param opts Instrument options: name (required), polyphony (default 16).
+       * @example keys = inst.sampler({ name: 'keys' })
+       * @example keys = inst.sampler({ name: 'keys', polyphony: 8 })
+       */
       function sampler(opts: { name: string; polyphony?: number }): InstrumentResult {
         if (!opts?.name) {
           throw new Error("inst.sampler() requires { name: string }");
@@ -524,6 +484,20 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
     ),
 
     granular: withHelp(
+      /**
+       * Create a granular synthesis instrument
+       *
+       * Create a new granular synthesis instrument. Load a source sample with
+       * .load(sample), control texture with .set({ position, grainSize, density, ... }),
+       * and trigger grain streams with .noteOn(note) / .noteOff(note).
+       *
+       * @param opts Instrument options: name (required), polyphony (default 4).
+       * @example g = inst.granular({ name: 'clouds' })
+       * @example g.load(sn.read('/path/to/sound.wav'))
+       * @example g.set({ position: 0.5, grainSize: 80, density: 20 })
+       * @example g.noteOn(60)
+       * @example g.noteOff(60)
+       */
       function granular(opts: { name: string; polyphony?: number }): InstrumentResult {
         if (!opts?.name) {
           throw new Error("inst.granular() requires { name: string }");
@@ -566,6 +540,13 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
     ),
 
     list: withHelp(
+      /**
+       * List all instruments in the current session
+       *
+       * List all instruments defined in the current session, showing name, kind, and sample count.
+       *
+       * @example inst.list()
+       */
       function list(): InstrumentListResult {
         const entries = Array.from(instruments.values()).map((s) => ({
           name: s.name,
@@ -589,6 +570,14 @@ export function buildInstNamespace(_deps: NamespaceDeps) {
     ),
 
     get: withHelp(
+      /**
+       * Get an instrument by name
+       *
+       * Retrieve an existing instrument by name. Returns the instrument object with all methods attached.
+       *
+       * @param name Instrument name.
+       * @example keys = inst.get('keys')
+       */
       function get(name: string): InstrumentResult | BounceResult {
         const state = instruments.get(name);
         if (!state) {

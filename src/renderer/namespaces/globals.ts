@@ -3,41 +3,12 @@
 import { BounceResult } from "../bounce-result.js";
 import { type CommandHelp, withHelp, renderCommandHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { globalCommands } from "./globals-commands.generated.js";
+export { globalCommands } from "./globals-commands.generated.js";
 
-export const globalCommands: CommandHelp[] = [
-  {
-    name: "help",
-    signature: "help()",
-    summary: "Show the organized command reference",
-    description:
-      "Show the organized command reference. For detailed usage of a specific\n" +
-      "command or object, call its .help() method directly.",
-    examples: ["help()", "sn.help()", "corpus.help()"],
-  },
-  {
-    name: "clear",
-    signature: "clear()",
-    summary: "Clear the terminal screen",
-    examples: ["clear()"],
-  },
-  {
-    name: "debug",
-    signature: "debug(limit?)",
-    summary: "Show recent entries from the SQLite debug log store",
-    description:
-      "Show the most recent entries from the SQLite debug log store.\n" +
-      "Useful for diagnosing issues with audio processing or IPC.",
-    params: [
-      { name: "limit", type: "number", description: "Number of entries to show (default 20).", optional: true },
-    ],
-    examples: ["debug()", "debug(50)"],
-  },
-  {
-    name: "clearDebug",
-    signature: "clearDebug()",
-    summary: "Clear all entries from the debug log store",
-    examples: ["clearDebug()"],
-  },
+// Supplemental command entries for errors sub-commands that the generator
+// cannot reach (they live inside Object.assign blocks).
+const errorsSupplementalCommands: CommandHelp[] = [
   {
     name: "errors",
     signature: "errors()",
@@ -64,10 +35,21 @@ export const globalCommands: CommandHelp[] = [
   },
 ];
 
+/** @namespace globals */
 export function buildGlobals(deps: NamespaceDeps) {
   const { terminal } = deps;
 
   const help = withHelp(
+    /**
+     * Show the organized command reference
+     *
+     * Show the organized command reference. For detailed usage of a specific
+     * command or object, call its .help() method directly.
+     *
+     * @example help()
+     * @example sn.help()
+     * @example corpus.help()
+     */
     function help(): BounceResult {
       return new BounceResult([
         "\x1b[1;36mBounce REPL\x1b[0m",
@@ -102,6 +84,11 @@ export function buildGlobals(deps: NamespaceDeps) {
   );
 
   const clear = withHelp(
+    /**
+     * Clear the terminal screen
+     *
+     * @example clear()
+     */
     function clear(): void {
       terminal.clear();
     },
@@ -109,6 +96,16 @@ export function buildGlobals(deps: NamespaceDeps) {
   );
 
   const debug = withHelp(
+    /**
+     * Show recent entries from the SQLite debug log store
+     *
+     * Show the most recent entries from the SQLite debug log store.
+     * Useful for diagnosing issues with audio processing or IPC.
+     *
+     * @param limit Number of entries to show (default 20).
+     * @example debug()
+     * @example debug(50)
+     */
     async function debug(limit = 20): Promise<BounceResult> {
       const logs = await window.electron.getDebugLogs(limit);
       const lines: string[] = [
@@ -137,6 +134,11 @@ export function buildGlobals(deps: NamespaceDeps) {
   );
 
   const clearDebug = withHelp(
+    /**
+     * Clear all entries from the debug log store
+     *
+     * @example clearDebug()
+     */
     async function clearDebug(): Promise<BounceResult> {
       await window.electron.clearDebugLogs();
       return new BounceResult("\x1b[32mDebug logs cleared\x1b[0m");
@@ -174,7 +176,7 @@ export function buildGlobals(deps: NamespaceDeps) {
             ? new BounceResult(`\x1b[32mDismissed error ${id}\x1b[0m`)
             : new BounceResult(`\x1b[33mNo active error with id ${id}\x1b[0m`);
         },
-        globalCommands[5],
+        errorsSupplementalCommands[1],
       ),
       dismissAll: withHelp(
         async function dismissAll(): Promise<BounceResult> {
@@ -183,9 +185,9 @@ export function buildGlobals(deps: NamespaceDeps) {
             ? new BounceResult(`\x1b[32mDismissed ${count} error${count === 1 ? "" : "s"}\x1b[0m`)
             : new BounceResult("\x1b[32mNo active errors to dismiss\x1b[0m");
         },
-        globalCommands[6],
+        errorsSupplementalCommands[2],
       ),
-      help: (): BounceResult => renderCommandHelp(globalCommands[4]),
+      help: (): BounceResult => renderCommandHelp(errorsSupplementalCommands[0]),
     },
   );
 

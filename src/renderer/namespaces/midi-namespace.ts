@@ -1,5 +1,5 @@
 import { BounceResult } from "../results/base.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import {
   MidiDevicesResult,
   MidiDeviceResult,
@@ -10,6 +10,8 @@ import {
   type MidiTargetInstrument,
 } from "../results/midi.js";
 import type { NamespaceDeps } from "./types.js";
+import { midiCommands } from "./midi-commands.generated.js";
+export { midiCommands } from "./midi-commands.generated.js";
 
 export interface MidiRecordOptions {
   duration?: number;
@@ -26,72 +28,7 @@ function channelsFromEvents(events: Array<{ channel: number }>): number[] {
   return [...new Set(events.map((e) => e.channel))].sort((a, b) => a - b);
 }
 
-export const midiCommands: CommandHelp[] = [
-  {
-    name: "devices",
-    signature: "midi.devices()",
-    summary: "List available MIDI input devices",
-    description: "Returns a list of all available MIDI input devices on the system.",
-    examples: ["midi.devices()"],
-  },
-  {
-    name: "open",
-    signature: "midi.open(index)",
-    summary: "Open a MIDI input device by index",
-    description:
-      "Open the MIDI input device at the given index (from midi.devices()).\n" +
-      "Only one device can be open at a time; call midi.close() first if needed.",
-    params: [
-      { name: "index", type: "number", description: "Device index from midi.devices()." },
-    ],
-    examples: ["midi.open(0)"],
-  },
-  {
-    name: "close",
-    signature: "midi.close()",
-    summary: "Close the active MIDI input device",
-    description: "Close the currently open MIDI input device.",
-    examples: ["midi.close()"],
-  },
-  {
-    name: "record",
-    signature: "midi.record(instrument, opts?)",
-    summary: "Start MIDI recording; returns handle or timed sequence",
-    description:
-      "Start recording MIDI events from the open input device.\n" +
-      "Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.\n" +
-      "Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.",
-    params: [
-      { name: "instrument", type: "MidiTargetInstrument", description: "Target instrument to associate with the recording." },
-      { name: "opts.duration", type: "number", description: "Auto-stop after N seconds.", optional: true },
-      { name: "opts.name", type: "string", description: "Name for the saved sequence.", optional: true },
-    ],
-    examples: [
-      "const h = midi.record(keys)\nconst seq = h.stop()\nseq.play(keys)",
-      "// Timed recording:\nconst seq = midi.record(keys, { duration: 4 })\nseq.play(keys)",
-    ],
-  },
-  {
-    name: "sequences",
-    signature: "midi.sequences()",
-    summary: "List saved sequences in the current project",
-    description: "Returns all MIDI sequences saved in the current project.",
-    examples: ["midi.sequences()"],
-  },
-  {
-    name: "load",
-    signature: "midi.load(filePath)",
-    summary: "Import a .mid file as a sequence",
-    description:
-      "Import a Standard MIDI File (.mid) and return it as a MidiSequenceResult.\n" +
-      "The imported sequence is transient — it is not auto-saved to the project.",
-    params: [
-      { name: "filePath", type: "string", description: "Absolute path to the .mid file." },
-    ],
-    examples: ["midi.load('~/beats/groove.mid')"],
-  },
-];
-
+/** @namespace midi */
 export function buildMidiNamespace(_deps: NamespaceDeps) {
   // Wire up playback-ended telemetry so seq.stop() state stays consistent.
   window.electron.onMidiPlaybackEnded?.(() => {
@@ -102,6 +39,13 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     help: () => renderNamespaceHelp("midi", "MIDI recording and playback", midiCommands),
 
     devices: withHelp(
+      /**
+       * List available MIDI input devices
+       *
+       * Returns a list of all available MIDI input devices on the system.
+       *
+       * @example midi.devices()
+       */
       async function devices(): Promise<MidiDevicesResult> {
         const devices = await window.electron.midiListInputs();
         return new MidiDevicesResult(devices);
@@ -110,6 +54,15 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     ),
 
     open: withHelp(
+      /**
+       * Open a MIDI input device by index
+       *
+       * Open the MIDI input device at the given index (from midi.devices()).
+       * Only one device can be open at a time; call midi.close() first if needed.
+       *
+       * @param index Device index from midi.devices().
+       * @example midi.open(0)
+       */
       async function open(index: number): Promise<MidiDeviceResult> {
         const result = await window.electron.midiOpenInput(index);
         return new MidiDeviceResult(result.name);
@@ -118,6 +71,13 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     ),
 
     close: withHelp(
+      /**
+       * Close the active MIDI input device
+       *
+       * Close the currently open MIDI input device.
+       *
+       * @example midi.close()
+       */
       async function close(): Promise<BounceResult> {
         await window.electron.midiCloseInput();
         return new BounceResult("\x1b[90mMIDI input closed.\x1b[0m");
@@ -126,6 +86,18 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     ),
 
     record: withHelp(
+      /**
+       * Start MIDI recording; returns handle or timed sequence
+       *
+       * Start recording MIDI events from the open input device.
+       * Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.
+       * Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.
+       *
+       * @param inst Target instrument to associate with the recording.
+       * @param opts Recording options (duration in seconds, name for the saved sequence).
+       * @example const h = midi.record(keys)\nconst seq = h.stop()\nseq.play(keys)
+       * @example // Timed recording:\nconst seq = midi.record(keys, { duration: 4 })\nseq.play(keys)
+       */
       function record(
         inst: MidiTargetInstrument,
         opts?: MidiRecordOptions,
@@ -174,6 +146,13 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     ),
 
     sequences: withHelp(
+      /**
+       * List saved sequences in the current project
+       *
+       * Returns all MIDI sequences saved in the current project.
+       *
+       * @example midi.sequences()
+       */
       async function sequences(): Promise<MidiSequencesResult> {
         const records = await window.electron.midiListSequences();
         return new MidiSequencesResult(records);
@@ -182,6 +161,15 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
     ),
 
     load: withHelp(
+      /**
+       * Import a .mid file as a sequence
+       *
+       * Import a Standard MIDI File (.mid) and return it as a MidiSequenceResult.
+       * The imported sequence is transient — it is not auto-saved to the project.
+       *
+       * @param filePath Absolute path to the .mid file.
+       * @example midi.load('~/beats/groove.mid')
+       */
       async function load(filePath: string): Promise<MidiSequenceResult> {
         const result = await window.electron.midiLoadFile(filePath);
         // Imported files are not auto-saved; user can call midi.record() pattern instead.

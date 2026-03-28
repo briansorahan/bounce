@@ -1,7 +1,9 @@
 /// <reference path="../types.d.ts" />
 import { BounceResult } from "../bounce-result.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { transportCommands } from "./transport-commands.generated.js";
+export { transportCommands } from "./transport-commands.generated.js";
 
 export interface TransportNamespace {
   bpm: ((value?: number) => BounceResult) & { help: () => BounceResult };
@@ -15,41 +17,8 @@ export interface TransportNamespaceResult {
   getCurrentBpm: () => number;
 }
 
-export const transportCommands: CommandHelp[] = [
-  {
-    name: "bpm",
-    signature: "transport.bpm(value?)",
-    summary: "Get or set BPM (1–400)",
-    description:
-      "Get the current BPM when called with no argument, or set a new BPM value.\n" +
-      "Value must be between 1 and 400.",
-    params: [
-      { name: "value", type: "number", description: "Beats per minute (1–400). Omit to read current BPM.", optional: true },
-    ],
-    examples: ["transport.bpm()", "transport.bpm(140)"],
-  },
-  {
-    name: "start",
-    signature: "transport.start()",
-    summary: "Start the global clock",
-    description:
-      "Start the transport clock. Patterns scheduled with .play() will begin\n" +
-      "firing on the next bar.",
-    examples: [
-      "transport.bpm(120)\ntransport.start()\npat.xox(`c4 = a . . . a . . . a . . . a . . .`).play(1)",
-    ],
-  },
-  {
-    name: "stop",
-    signature: "transport.stop()",
-    summary: "Stop the global clock",
-    description:
-      "Stop the transport clock. Reports the last bar, beat, and step\n" +
-      "position at the time of stopping.",
-    examples: ["transport.stop()"],
-  },
-];
 
+/** @namespace transport */
 export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespaceResult {
   let currentBpm = 120;
   let isRunning = false;
@@ -61,6 +30,16 @@ export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespac
     help: () => renderNamespaceHelp("transport", "Controls the global clock", transportCommands),
 
     bpm: withHelp(
+      /**
+       * Get or set BPM (1–400)
+       *
+       * Get the current BPM when called with no argument, or set a new BPM value.
+       * Value must be between 1 and 400.
+       *
+       * @param value Beats per minute (1–400). Omit to read current BPM.
+       * @example transport.bpm()
+       * @example transport.bpm(140)
+       */
       function bpm(value?: number): BounceResult {
         if (value === undefined) {
           return new BounceResult(`Transport  bpm: ${currentBpm}  running: ${isRunning}`);
@@ -77,6 +56,14 @@ export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespac
     ),
 
     start: withHelp(
+      /**
+       * Start the global clock
+       *
+       * Start the transport clock. Patterns scheduled with .play() will begin
+       * firing on the next bar.
+       *
+       * @example transport.bpm(120)\ntransport.start()\npat.xox(`c4 = a . . . a . . . a . . . a . . .`).play(1)
+       */
       function start(): BounceResult {
         isRunning = true;
         window.electron.transportStart();
@@ -86,6 +73,14 @@ export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespac
     ),
 
     stop: withHelp(
+      /**
+       * Stop the global clock
+       *
+       * Stop the transport clock. Reports the last bar, beat, and step
+       * position at the time of stopping.
+       *
+       * @example transport.stop()
+       */
       function stop(): BounceResult {
         isRunning = false;
         window.electron.transportStop();

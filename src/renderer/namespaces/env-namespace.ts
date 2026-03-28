@@ -14,72 +14,12 @@ import {
   getRuntimePreview,
   getRuntimeTypeLabel,
 } from "../runtime-introspection.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { envCommands } from "./env-commands.generated.js";
+export { envCommands } from "./env-commands.generated.js";
 
-export const envCommands: CommandHelp[] = [
-  {
-    name: "vars",
-    signature: "env.vars()",
-    summary: "List user-defined variables in scope",
-    description:
-      "List user-defined bindings that persist across REPL evaluations.\n" +
-      "Each entry shows a name, runtime type label, callable flag, and short preview.",
-    examples: ["env.vars()"],
-  },
-  {
-    name: "globals",
-    signature: "env.globals()",
-    summary: "List built-in Bounce globals",
-    description:
-      "List Bounce-provided globals exposed in the current REPL session.\n" +
-      "Each entry shows a name, runtime type label, callable flag, and short preview.",
-    examples: ["env.globals()"],
-  },
-  {
-    name: "inspect",
-    signature: "env.inspect(nameOrValue)",
-    summary: "Show details for one binding or value",
-    description:
-      "Inspect one runtime binding or direct value. If you pass a string that\n" +
-      "matches a user variable or Bounce global, Bounce resolves it by name first.",
-    params: [
-      {
-        name: "nameOrValue",
-        type: "string | unknown",
-        description: "Variable name string or a direct value to inspect.",
-      },
-    ],
-    examples: [
-      "env.inspect(\"sn\")",
-      "env.inspect(\"samp\")",
-      "env.inspect(sn.current())",
-    ],
-  },
-  {
-    name: "functions",
-    signature: "env.functions(value?)",
-    summary: "List callable members on a value, or all user-defined functions",
-    description:
-      "With no argument: list all user-defined functions in scope.\n" +
-      "With an argument: list callable members on that value using the same\n" +
-      "callable-property rules as tab completion.",
-    params: [
-      {
-        name: "value",
-        type: "unknown",
-        description: "Value or name to inspect. Omit to list user-defined functions.",
-        optional: true,
-      },
-    ],
-    examples: [
-      "env.functions()",
-      "env.functions(sn)",
-      "env.functions(\"samp\")",
-    ],
-  },
-];
-
+/** @namespace env */
 export function buildEnvNamespace(deps: NamespaceDeps) {
   function getApiEntries(): Array<[string, unknown]> {
     return Object.entries(deps.sharedState.api ?? {});
@@ -250,6 +190,14 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     },
 
     vars: withHelp(
+      /**
+       * List user-defined variables in scope
+       *
+       * List user-defined bindings that persist across REPL evaluations.
+       * Each entry shows a name, runtime type label, callable flag, and short preview.
+       *
+       * @example env.vars()
+       */
       function vars(): EnvScopeResult {
         const entries = (deps.runtime?.listScopeEntries() ?? [])
           .map((entry) => makeEnvEntry(entry.name, "user", entry.value))
@@ -265,6 +213,14 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ),
 
     globals: withHelp(
+      /**
+       * List built-in Bounce globals
+       *
+       * List Bounce-provided globals exposed in the current REPL session.
+       * Each entry shows a name, runtime type label, callable flag, and short preview.
+       *
+       * @example env.globals()
+       */
       function globals(): EnvScopeResult {
         const entries = getApiEntries()
           .map(([name, value]) => makeEnvEntry(name, "global", value))
@@ -280,6 +236,17 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ),
 
     inspect: withHelp(
+      /**
+       * Show details for one binding or value
+       *
+       * Inspect one runtime binding or direct value. If you pass a string that
+       * matches a user variable or Bounce global, Bounce resolves it by name first.
+       *
+       * @param nameOrValue Variable name string or a direct value to inspect.
+       * @example env.inspect("sn")
+       * @example env.inspect("samp")
+       * @example env.inspect(sn.current())
+       */
       function inspect(nameOrValue: unknown): EnvInspectionResult {
         const target = resolveEnvTarget(nameOrValue);
         return formatEnvInspection(target.name, target.scope, target.value);
@@ -288,6 +255,18 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ),
 
     functions: withHelp(
+      /**
+       * List callable members on a value, or all user-defined functions
+       *
+       * With no argument: list all user-defined functions in scope.
+       * With an argument: list callable members on that value using the same
+       * callable-property rules as tab completion.
+       *
+       * @param nameOrValue Value or name to inspect. Omit to list user-defined functions.
+       * @example env.functions()
+       * @example env.functions(sn)
+       * @example env.functions("samp")
+       */
       function functions(nameOrValue?: unknown): EnvFunctionListResult {
         if (nameOrValue === undefined) {
           const names = (deps.runtime?.listScopeEntries() ?? [])

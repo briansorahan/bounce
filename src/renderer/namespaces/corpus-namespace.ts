@@ -4,58 +4,13 @@ import {
   BounceResult,
   Sample,
 } from "../bounce-result.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
 import type { SampleBinder } from "./sample-namespace.js";
+import { corpusCommands } from "./corpus-commands.generated.js";
+export { corpusCommands } from "./corpus-commands.generated.js";
 
-export const corpusCommands: CommandHelp[] = [
-  {
-    name: "build",
-    signature: "corpus.build(source?)",
-    summary: "Build a KDTree from onset slices of an audio file",
-    description:
-      "Build a KDTree corpus from the onset slices of an audio file.\n" +
-      "Requires sample.onsets() and sample.slice() to have been run first.\n" +
-      "If source is omitted, uses the currently loaded audio.",
-    params: [
-      { name: "source", type: "string | Sample | Promise<Sample>", description: "Audio source. Omit to use current audio.", optional: true },
-    ],
-    examples: [
-      "const samp = sn.read('loop.wav')\ncorpus.build(samp)",
-      "corpus.build()",
-    ],
-  },
-  {
-    name: "query",
-    signature: "corpus.query(segmentIndex, k?)",
-    summary: "Find k nearest corpus neighbors for a segment",
-    description:
-      "Find the k nearest corpus segments to the segment at segmentIndex.\n" +
-      "Returns a ranked table of indices and distances.\n" +
-      "k defaults to 5.",
-    params: [
-      { name: "segmentIndex", type: "number", description: "Index of the query segment." },
-      { name: "k", type: "number", description: "Number of nearest neighbors to return. Defaults to 5.", optional: true },
-    ],
-    examples: ["corpus.query(0)", "corpus.query(0, 10)"],
-  },
-  {
-    name: "resynthesize",
-    signature: "corpus.resynthesize(queryIndices)",
-    summary: "Concatenate and play corpus segments by index array",
-    description:
-      "Concatenate corpus segments specified by index and play them back immediately.\n" +
-      "Useful for auditioning nearest-neighbor query results.",
-    params: [
-      { name: "queryIndices", type: "number[]", description: "Array of segment indices to concatenate and play." },
-    ],
-    examples: [
-      "corpus.resynthesize([0, 3, 7, 2])",
-      "// Full workflow:\nconst samp = sn.read('loop.wav')\nsamp.onsets()\nsamp.slice()\ncorpus.build(samp)\ncorpus.query(0, 5)\ncorpus.resynthesize([0, 3, 7])",
-    ],
-  },
-];
-
+/** @namespace corpus */
 export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBinder) {
   const { terminal, audioManager } = deps;
 
@@ -76,6 +31,18 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
     help: () => renderNamespaceHelp("corpus", "KDTree corpus for nearest-neighbor resynthesis", corpusCommands),
 
     build: withHelp(
+      /**
+       * Build a KDTree from onset slices of an audio file
+       *
+       * Build a KDTree corpus from the onset slices of an audio file.
+       * Requires sample.onsets() and sample.slice() to have been run first.
+       * If source is omitted, uses the currently loaded audio.
+       *
+       * @param source Audio source. Omit to use current audio.
+       * @param featureHashOverride Override the feature hash (advanced use).
+       * @example const samp = sn.read('loop.wav')\ncorpus.build(samp)
+       * @example corpus.build()
+       */
       async function build(
         source?: string | Sample | PromiseLike<Sample>,
         featureHashOverride?: string,
@@ -113,6 +80,18 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
     ),
 
     query: withHelp(
+      /**
+       * Find k nearest corpus neighbors for a segment
+       *
+       * Find the k nearest corpus segments to the segment at segmentIndex.
+       * Returns a ranked table of indices and distances.
+       * k defaults to 5.
+       *
+       * @param segmentIndex Index of the query segment.
+       * @param k Number of nearest neighbors to return. Defaults to 5.
+       * @example corpus.query(0)
+       * @example corpus.query(0, 10)
+       */
       async function query(segmentIndex: number, k = 5): Promise<BounceResult> {
         terminal.writeln(`\x1b[36mQuerying corpus for segment ${segmentIndex}, k=${k}…\x1b[0m`);
 
@@ -134,6 +113,16 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
     ),
 
     resynthesize: withHelp(
+      /**
+       * Concatenate and play corpus segments by index array
+       *
+       * Concatenate corpus segments specified by index and play them back immediately.
+       * Useful for auditioning nearest-neighbor query results.
+       *
+       * @param queryIndices Array of segment indices to concatenate and play.
+       * @example corpus.resynthesize([0, 3, 7, 2])
+       * @example // Full workflow:\nconst samp = sn.read('loop.wav')\nsamp.onsets()\nsamp.slice()\ncorpus.build(samp)\ncorpus.query(0, 5)\ncorpus.resynthesize([0, 3, 7])
+       */
       async function resynthesize(queryIndices: number[]): Promise<BounceResult> {
         terminal.writeln(`\x1b[36mResynthesizing ${queryIndices.length} segments…\x1b[0m`);
 

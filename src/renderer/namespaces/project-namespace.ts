@@ -2,53 +2,18 @@
 /// <reference path="../bounce-globals.d.ts" />
 import {
   BounceResult,
-  ProjectNamespace,
   ProjectResult,
   ProjectListResult,
   type ProjectSummary,
 } from "../bounce-result.js";
-import { type CommandHelp, renderNamespaceHelp, renderCommandHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { projCommands } from "./proj-commands.generated.js";
+export { projCommands } from "./proj-commands.generated.js";
 
-export const projectCommands: CommandHelp[] = [
-  {
-    name: "current",
-    signature: "proj.current()",
-    summary: "Return the active project and its stored counts",
-    examples: ["proj.current()"],
-  },
-  {
-    name: "list",
-    signature: "proj.list()",
-    summary: "List all projects with sample, feature, and command counts",
-    examples: ["proj.list()"],
-  },
-  {
-    name: "load",
-    signature: "proj.load(name)",
-    summary: "Load a project by name, creating it if needed",
-    description:
-      "Load a project by name. If it does not exist, Bounce creates it and\n" +
-      "makes it the current project.",
-    params: [
-      { name: "name", type: "string", description: "Project name to load or create." },
-    ],
-    examples: ["proj.load(\"drums\")"],
-  },
-  {
-    name: "rm",
-    signature: "proj.rm(name)",
-    summary: "Remove a project and all its scoped data",
-    description:
-      "Remove a project and all samples, features, and command history\n" +
-      "stored inside it. The current project cannot be removed.",
-    params: [
-      { name: "name", type: "string", description: "Name of the project to remove." },
-    ],
-    examples: ["proj.rm(\"drums\")"],
-  },
-];
+export const projectCommands = projCommands;
 
+/** @namespace proj */
 export function buildProjectNamespace(deps: NamespaceDeps) {
   function makeProjectDisplayText(project: ProjectSummary, heading = "Current Project"): string {
     return [
@@ -168,18 +133,36 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     }
   }
 
-  const proj = new ProjectNamespace(
-    renderNamespaceHelp("proj", "Project namespace", projectCommands).toString(),
-    {
-      help: () => renderNamespaceHelp("proj", "Project namespace", projectCommands),
-      current: async () => {
+  const proj = {
+    toString(): string {
+      return renderNamespaceHelp("proj", "Project namespace", projectCommands).toString();
+    },
+
+    help: () => renderNamespaceHelp("proj", "Project namespace", projectCommands),
+
+    current: withHelp(
+      /**
+       * Return the active project and its stored counts
+       *
+       * @example proj.current()
+       */
+      async function current(): Promise<ProjectResult> {
         const project = await window.electron.getCurrentProject();
         if (!project) {
           throw new Error("No current project is available.");
         }
         return bindProject(project);
       },
-      list: async () => {
+      projectCommands[0],
+    ),
+
+    list: withHelp(
+      /**
+       * List all projects with sample, feature, and command counts
+       *
+       * @example proj.list()
+       */
+      async function list(): Promise<ProjectListResult> {
         const projects = await window.electron.listProjects();
         const summaries: ProjectSummary[] = projects.map((project) => ({
           id: project.id,
@@ -196,7 +179,20 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
           projectListHelpText,
         );
       },
-      load: async (name: string) => {
+      projectCommands[1],
+    ),
+
+    load: withHelp(
+      /**
+       * Load a project by name, creating it if needed
+       *
+       * Load a project by name. If it does not exist, Bounce creates it and
+       * makes it the current project.
+       *
+       * @param name Project name to load or create.
+       * @example proj.load("drums")
+       */
+      async function load(name: string): Promise<ProjectResult> {
         if (deps.runtime) {
           const entries = deps.runtime.serializeScope();
           await window.electron.saveReplEnv(entries);
@@ -209,23 +205,28 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
         }
         return bindProject(project, "Loaded Project");
       },
-      rm: async (name: string) => {
+      projectCommands[2],
+    ),
+
+    rm: withHelp(
+      /**
+       * Remove a project and all its scoped data
+       *
+       * Remove a project and all samples, features, and command history
+       * stored inside it. The current project cannot be removed.
+       *
+       * @param name Name of the project to remove.
+       * @example proj.rm("drums")
+       */
+      async function rm(name: string): Promise<BounceResult> {
         const result = await window.electron.removeProject(name);
         return new BounceResult(
           `\x1b[32mRemoved project ${result.removedName}.\x1b[0m`,
         );
       },
-    },
-  );
-
-  (proj.current as typeof proj.current & { help?: () => BounceResult }).help = () =>
-    renderCommandHelp(projectCommands[0]);
-  (proj.list as typeof proj.list & { help?: () => BounceResult }).help = () =>
-    renderCommandHelp(projectCommands[1]);
-  (proj.load as typeof proj.load & { help?: () => BounceResult }).help = () =>
-    renderCommandHelp(projectCommands[2]);
-  (proj.rm as typeof proj.rm & { help?: () => BounceResult }).help = () =>
-    renderCommandHelp(projectCommands[3]);
+      projectCommands[3],
+    ),
+  };
 
   return proj;
 }

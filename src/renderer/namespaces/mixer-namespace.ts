@@ -1,25 +1,10 @@
 import { BounceResult } from "../bounce-result.js";
-import { type CommandHelp, renderNamespaceHelp, withHelp } from "../help.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { mxCommands } from "./mx-commands.generated.js";
+export { mxCommands } from "./mx-commands.generated.js";
 
-export const mixerCommands: CommandHelp[] = [
-  {
-    name: "ch",
-    signature: "mx.ch(n)",
-    summary: "Get a ChannelControl for channel n (1–8)",
-    description:
-      "Return a ChannelControl for the specified channel. All methods are chainable.\n" +
-      "Use .gain()/.pan()/.mute()/.solo()/.attach()/.detach() to configure the channel.\n\n" +
-      "Properties (not commands): mx.preview, mx.master, mx.channels",
-    params: [
-      { name: "n", type: "number", description: "Channel index, 1–8." },
-    ],
-    examples: [
-      "mx.ch(1).gain(-6).pan(-0.2)",
-      "mx.ch(2).attach(inst).solo()",
-    ],
-  },
-];
+export const mixerCommands = mxCommands;
 
 // ---------------------------------------------------------------------------
 // Internal state (mirrors what was last sent to the audio engine)
@@ -241,6 +226,7 @@ class MasterControl extends BounceResult {
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+/** @namespace mx */
 export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace } {
   const channelStates: ChannelState[] = Array.from({ length: NUM_USER_CHANNELS }, defaultChannelState);
   const previewState: ChannelState = { ...defaultChannelState(), gainDb: 0 };
@@ -292,6 +278,18 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
 
   const mx: MixerNamespace = {
     ch: withHelp(
+      /**
+       * Get a ChannelControl for channel n (1–8)
+       *
+       * Return a ChannelControl for the specified channel. All methods are chainable.
+       * Use .gain()/.pan()/.mute()/.solo()/.attach()/.detach() to configure the channel.
+       *
+       * Properties (not commands): mx.preview, mx.master, mx.channels
+       *
+       * @param n Channel index, 1–8.
+       * @example mx.ch(1).gain(-6).pan(-0.2)
+       * @example mx.ch(2).attach(inst).solo()
+       */
       function ch(n: number): ChannelControl | BounceResult {
         if (!Number.isInteger(n) || n < 1 || n > NUM_USER_CHANNELS) {
           return new BounceResult(`\x1b[31mChannel must be an integer 1–${NUM_USER_CHANNELS}\x1b[0m`);
