@@ -95,6 +95,12 @@ None.
 - Cross-checks: param count, param names, param optionality, non-empty summary
 - Replaces the current `src/help-system.test.ts` structural coverage test
 
+**Two-part completeness guarantee:**
+1. Scan `src/renderer/namespaces/*.ts` — assert every non-generated file has a `@namespace` tag. Fails if a namespace file is added without participation.
+2. Cross-reference `src/renderer/bounce-api.ts` imports — assert every `build*` function imported there comes from a file with a matching `@namespace` tag and generated file. Fails if a namespace is wired into the REPL without JSDoc coverage.
+
+This closed loop means no namespace can be added to the REPL without the validator catching it.
+
 #### Phase 3: Migrate All Namespaces
 
 For each of the 12 namespace files + globals:
