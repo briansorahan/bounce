@@ -14,7 +14,7 @@ import ts from "typescript";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import type { CommandHelp } from "./renderer/help.js";
-import { processFile, generateFile } from "../scripts/generate-help.js";
+import { processFile, generateFile, type ParamInfo } from "./help-generator.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -174,8 +174,8 @@ async function testGeneratedMatchesSignatures(sourceFiles: string[]): Promise<nu
         // 3b. Parameter names and optionality
         if (gen.params) {
           for (let i = 0; i < gen.params.length; i++) {
-            const gp = gen.params[i];
-            const sp = src.params[i];
+            const gp = gen.params[i] as NonNullable<CommandHelp["params"]>[number];
+            const sp = src.params[i] as ParamInfo;
             assert.equal(
               gp.name,
               sp.name,
