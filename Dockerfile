@@ -15,6 +15,7 @@ COPY binding.gyp \
 
 COPY native /build/native
 COPY third_party /build/third_party
+COPY scripts /build/scripts
 
 COPY src /build/src
 
