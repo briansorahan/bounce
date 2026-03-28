@@ -147,38 +147,26 @@ No REPL surface area changes. The `help()` methods and their output remain ident
 
 The generator is a Node.js script using the TypeScript compiler API. No platform-specific code. Runs as part of the build pipeline on all platforms.
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. **Where does the generated output go?** Options:
-   - (a) Generate a separate `*-commands.generated.ts` file that each namespace imports
-   - (b) Generate in-place within the namespace file (replacing a marked region)
-   - (c) Generate a single `generated-help.ts` file with all commands
-   Option (a) seems cleanest — each namespace imports its generated array.
+1. **Where does the generated output go?**
+   **Decision: Separate generated files per namespace.** Each namespace gets a `*-commands.generated.ts` file (e.g. `fs-commands.generated.ts`) that the namespace file imports. Clean separation, each namespace owns its generated array.
 
-2. **How to handle Pattern B namespaces (project, sample)?** Options:
-   - (a) Refactor to use named functions with JSDoc, then pass into class constructors
-   - (b) Support JSDoc on arrow functions in the generator (fragile, non-standard)
-   - (c) Keep those two namespaces manual for now, migrate later
-   Option (a) is preferred — aligns them with the majority pattern.
+2. **How to handle Pattern B namespaces (project, sample)?**
+   **Decision: Refactor to the unified `withHelp()` + plain object pattern.** Both `SampleNamespace` and `ProjectNamespace` classes will be eliminated. Promise wrapper return types move into function bodies. REPL display (`toString()`) is added to the plain object. This unifies all 12 namespaces to one construction pattern before the generator work begins.
 
-3. **When does the generator run?** Options:
-   - (a) As a pre-build step (npm script, e.g. `npm run generate:help`)
-   - (b) Integrated into `npm run build:electron`
-   - (c) As a test that fails if generated output is stale
-   Option (a) with (c) as enforcement seems best — generate on demand, test that output is fresh.
+3. **When does the generator run?**
+   **Decision: Integrated into `npm run build:electron`.** The generator runs automatically as part of the build pipeline. No manual step to forget.
 
-4. **How does the namespace name get associated with functions?** The generator needs to know that `ls` belongs to the `fs` namespace to produce `signature: "fs.ls(path?)"`. Options:
-   - (a) A config file or marker comment mapping namespace names to source files
-   - (b) Convention: the `build*Namespace` function name encodes it (e.g. `buildFsNamespace` → `fs`)
-   - (c) A JSDoc tag on the builder function (e.g. `@namespace fs`)
-   Option (b) or (c) both work. (c) is more explicit.
+4. **How does the namespace name get associated with functions?**
+   **Decision: `@namespace` JSDoc tag on the builder function.** E.g. `/** @namespace fs */` on `buildFsNamespace()`. Explicit and parseable.
 
 ## Research Findings
 
 1. **The TS compiler API is fully capable** of extracting JSDoc tags, function signatures, parameter metadata. Proven via working prototypes.
 2. **The validator concept works** — a prototype already caught 4 real drift issues in `fs-namespace.ts`.
-3. **10 of 12 namespaces** use the clean `withHelp()` pattern that's straightforward for the generator. The 2 class-based namespaces (project, sample) need refactoring.
-4. **No custom JSDoc tags needed** — standard `@param` and `@example` tags, plus the description block, provide everything `CommandHelp` requires.
+3. **Three namespace construction patterns exist, but can be unified.** The 2 class-based namespaces (project, sample) use classes for REPL display (`toString()` via `HelpableResult` inheritance) and Promise wrapper return types — both achievable without classes. All 12 namespaces will be unified to the `withHelp()` + plain object pattern.
+4. **No custom JSDoc tags needed** — standard `@param` and `@example` tags, plus the description block and `@namespace`, provide everything `CommandHelp` requires.
 5. **`typescript` is already a project dependency** — no new dependencies needed for the generator.
 6. **The authoring experience improves significantly**: developers document the function right where it's defined, and the help system stays in sync automatically.
 
@@ -187,6 +175,7 @@ The generator is a Node.js script using the TypeScript compiler API. No platform
 In the PLAN phase:
 1. Design the generator script architecture (input discovery, AST traversal, output format)
 2. Define the JSDoc annotation conventions for command functions
-3. Plan the migration order (Pattern A namespaces first, then Pattern B refactoring)
-4. Define the validator as a unit test
-5. Decide on open questions (output location, namespace name association, build integration)
+3. Plan the namespace pattern unification (refactor project + sample namespaces)
+4. Plan the migration order (unify patterns first, then add JSDoc, then wire generator)
+5. Define the validator as a unit test
+6. Define build integration (generator runs as part of `build:electron`)
