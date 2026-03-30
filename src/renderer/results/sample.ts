@@ -214,53 +214,17 @@ export class SampleListResult extends HelpableResult {
   }
 }
 
-export interface SampleNamespaceBindings {
-  help: HelpFactory;
-  read: (path: string) => Promise<Sample>;
-  load: (hash: string) => Promise<Sample>;
-  list: () => Promise<SampleListResult>;
-  current: () => Promise<Sample | null>;
-  stop: () => BounceResult;
-  inputs: () => Promise<InputsResult>;
-  dev: (index: number) => Promise<AudioDevice>;
-}
-
-export class SampleNamespace extends HelpableResult {
-  constructor(
-    display: string,
-    private readonly bindings: SampleNamespaceBindings,
-  ) {
-    super(display, bindings.help);
-  }
-
-  read(path: string): SamplePromise {
-    return new SamplePromise(this.bindings.read(path));
-  }
-
-  load(hash: string): SamplePromise {
-    return new SamplePromise(this.bindings.load(hash));
-  }
-
-  list(): Promise<SampleListResult> {
-    return this.bindings.list();
-  }
-
-  current(): CurrentSamplePromise {
-    return new CurrentSamplePromise(this.bindings.current());
-  }
-
-  stop(): BounceResult {
-    return this.bindings.stop();
-  }
-
-  inputs(): Promise<InputsResult> {
-    return this.bindings.inputs();
-  }
-
-  dev(index: number): Promise<AudioDevice> {
-    return this.bindings.dev(index);
-  }
-}
+export type SampleNamespace = {
+  toString(): string;
+  help(): BounceResult;
+  read: ((path: string) => SamplePromise) & { help: () => BounceResult };
+  load: ((hash: string) => SamplePromise) & { help: () => BounceResult };
+  list: (() => Promise<SampleListResult>) & { help: () => BounceResult };
+  current: (() => CurrentSamplePromise) & { help: () => BounceResult };
+  stop: (() => BounceResult) & { help: () => BounceResult };
+  inputs: (() => Promise<InputsResult>) & { help: () => BounceResult };
+  dev: ((index: number) => Promise<AudioDevice>) & { help: () => BounceResult };
+};
 
 export class SamplePromise implements PromiseLike<Sample> {
   constructor(protected readonly promise: Promise<Sample>) {}

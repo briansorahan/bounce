@@ -1,5 +1,10 @@
 import { BounceResult } from "../bounce-result.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { mxCommands, mxDescription } from "./mx-commands.generated.js";
+export { mxCommands } from "./mx-commands.generated.js";
+
+export const mixerCommands = mxCommands;
 
 // ---------------------------------------------------------------------------
 // Internal state (mirrors what was last sent to the audio engine)
@@ -221,6 +226,15 @@ class MasterControl extends BounceResult {
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
+/**
+ * 8-channel mixer
+ *
+ *   Also available as properties:
+ *   mx.preview    preview channel (sample.play / sample.loop)
+ *   mx.master     master bus
+ *   mx.channels   list all channels with current settings
+ * @namespace mx
+ */
 export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace } {
   const channelStates: ChannelState[] = Array.from({ length: NUM_USER_CHANNELS }, defaultChannelState);
   const previewState: ChannelState = { ...defaultChannelState(), gainDb: 0 };
@@ -271,12 +285,28 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
   setTimeout(restoreFromDb, 0);
 
   const mx: MixerNamespace = {
-    ch(n: number) {
-      if (!Number.isInteger(n) || n < 1 || n > NUM_USER_CHANNELS) {
-        return new BounceResult(`\x1b[31mChannel must be an integer 1–${NUM_USER_CHANNELS}\x1b[0m`) as ReturnType<MixerNamespace["ch"]>;
-      }
-      return channelControls[n - 1];
-    },
+    description: mxDescription,
+    ch: withHelp(
+      /**
+       * Get a ChannelControl for channel n (1–8)
+       *
+       * Return a ChannelControl for the specified channel. All methods are chainable.
+       * Use .gain()/.pan()/.mute()/.solo()/.attach()/.detach() to configure the channel.
+       *
+       * Properties (not commands): mx.preview, mx.master, mx.channels
+       *
+       * @param n Channel index, 1–8.
+       * @example mx.ch(1).gain(-6).pan(-0.2)
+       * @example mx.ch(2).attach(inst).solo()
+       */
+      function ch(n: number): ChannelControl | BounceResult {
+        if (!Number.isInteger(n) || n < 1 || n > NUM_USER_CHANNELS) {
+          return new BounceResult(`\x1b[31mChannel must be an integer 1–${NUM_USER_CHANNELS}\x1b[0m`);
+        }
+        return channelControls[n - 1];
+      },
+      mixerCommands[0],
+    ),
 
     get channels(): BounceResult {
       const lines = ["\x1b[1mMixer Channels\x1b[0m"];
@@ -296,28 +326,11 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
       return masterControl;
     },
 
-    help: (): BounceResult => new BounceResult([
-      "\x1b[1;36mmx\x1b[0m — 8-channel mixer",
-      "",
-      "  \x1b[1mmx.ch(n)\x1b[0m      channel control (n = 1–8)",
-      "  \x1b[1mmx.preview\x1b[0m    preview channel (sample.play / sample.loop)",
-      "  \x1b[1mmx.master\x1b[0m     master bus",
-      "  \x1b[1mmx.channels\x1b[0m   list all channels with current settings",
-      "",
-      "  Channel methods (all chainable):",
-      "    .gain(db?)     get/set gain in dB  (-96 to +6)",
-      "    .pan(val?)     get/set pan         (-1.0 L .. 0 C .. +1.0 R)",
-      "    .mute()        toggle mute",
-      "    .solo()        toggle solo-in-place",
-      "    .attach(inst)  route instrument to channel",
-      "    .detach()      remove instrument from channel",
-      "",
-      "  Examples:",
-      "    mx.ch(1).attach(inst).gain(-6).pan(-0.2)",
-      "    mx.ch(2).solo()",
-      "    mx.master.gain(-3)",
-      "    mx.preview.gain(-12)",
-    ].join("\n")),
+    help: () => renderNamespaceHelp(
+      "mx",
+      mxDescription,
+      mixerCommands,
+    ),
   };
 
   return { mx };
@@ -330,6 +343,7 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
 export type { ChannelControl, PreviewControl, MasterControl };
 
 export interface MixerNamespace {
+  description: string;
   ch(n: number): ChannelControl | BounceResult;
   readonly channels: BounceResult;
   readonly preview: PreviewControl;

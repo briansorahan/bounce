@@ -148,7 +148,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { midi } = buildMidiNamespace(namespaceDeps);
   const { transport, getCurrentBpm } = buildTransportNamespace(namespaceDeps);
   const { pat } = buildPatNamespace(namespaceDeps);
-  const globals = buildGlobals(namespaceDeps);
+  const globals = buildGlobals(namespaceDeps, { sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat });
 
   const api = {
     sn,

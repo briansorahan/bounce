@@ -1,27 +1,72 @@
 /// <reference path="../types.d.ts" />
 /// <reference path="../bounce-globals.d.ts" />
 import { BounceResult } from "../bounce-result.js";
+import { type CommandHelp, withHelp, renderCommandHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { globalCommands } from "./globals-commands.generated.js";
+export { globalCommands } from "./globals-commands.generated.js";
 
-export function buildGlobals(deps: NamespaceDeps) {
+// Supplemental command entries for errors sub-commands that the generator
+// cannot reach (they live inside Object.assign blocks).
+const errorsSupplementalCommands: CommandHelp[] = [
+  {
+    name: "errors",
+    signature: "errors()",
+    summary: "Show active background errors",
+    description:
+      "Show active background errors from main or utility processes.\n" +
+      "When the status line shows a red indicator, use this to see details.",
+    examples: ["errors()", "errors.dismiss(3)", "errors.dismissAll()"],
+  },
+  {
+    name: "errors.dismiss",
+    signature: "errors.dismiss(id)",
+    summary: "Dismiss a specific background error by its numeric id",
+    params: [
+      { name: "id", type: "number", description: "Numeric id of the error to dismiss." },
+    ],
+    examples: ["errors.dismiss(3)"],
+  },
+  {
+    name: "errors.dismissAll",
+    signature: "errors.dismissAll()",
+    summary: "Dismiss all active background errors",
+    examples: ["errors.dismissAll()"],
+  },
+];
+
+/** @namespace globals */
+export function buildGlobals(deps: NamespaceDeps, namespaces: Record<string, { description: string }>) {
   const { terminal } = deps;
 
-  const help = Object.assign(
+  const nsNames = Object.keys(namespaces);
+  const maxNsNameLen = nsNames.length > 0 ? Math.max(...nsNames.map((n) => n.length)) : 0;
+
+  const help = withHelp(
+    /**
+     * Show the organized command reference
+     *
+     * Show the organized command reference. For detailed usage of a specific
+     * command or object, call its .help() method directly.
+     *
+     * @example help()
+     * @example sn.help()
+     * @example corpus.help()
+     */
     function help(): BounceResult {
+      const nsEntries = Object.entries(namespaces).map(([name, ns]) => {
+        const descFirstLine = ns.description.split("\n")[0];
+        const pad = " ".repeat(Math.max(1, maxNsNameLen - name.length + 2));
+        return `  \x1b[33m${name}\x1b[0m${pad}${descFirstLine}`;
+      });
+
       return new BounceResult([
         "\x1b[1;36mBounce REPL\x1b[0m",
         "",
-        "  \x1b[33msn\x1b[0m                               Sample namespace: .read() .load() .list() .current() .stop() .help()",
-        "  \x1b[33minst\x1b[0m                             Instrument namespace: .sampler() .get() .list() .help()",
-        "  \x1b[33mmidi\x1b[0m                             MIDI recording and playback: .record() .sequences() .devices() .help()",
-        "  \x1b[33menv\x1b[0m                              Runtime introspection: .vars() .globals() .inspect() .functions()",
-        "  \x1b[33mproj\x1b[0m                             Project namespace: .current() .list() .load() .rm() .help()",
-        "  \x1b[33mvis\x1b[0m                              Visualization namespace: .waveform() .list() .remove() .clear()",
-        "  \x1b[33mcorpus\x1b[0m                           KDTree corpus: .build() .query() .resynthesize()",
-        "  \x1b[33mfs\x1b[0m                               Filesystem: .ls .la .cd .pwd .glob .walk",
-        "  \x1b[33mhelp()\x1b[0m                           Show this help message",
-        "  \x1b[33mclear()\x1b[0m                          Clear the terminal screen",
-        "  \x1b[33merrors()\x1b[0m                         Show background errors (status line red = errors pending)",
+        ...nsEntries,
+        "  \x1b[33mhelp()\x1b[0m      Show this help message",
+        "  \x1b[33mclear()\x1b[0m     Clear the terminal screen",
+        "  \x1b[33merrors()\x1b[0m    Show background errors",
         "",
         "\x1b[90mCompose commands:\x1b[0m",
         "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
@@ -37,36 +82,32 @@ export function buildGlobals(deps: NamespaceDeps) {
         "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), vis.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
       ].join("\n"));
     },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mhelp()\x1b[0m",
-        "",
-        "  Show the organized command reference. For detailed usage of a specific",
-        "  command or object, call its .help() method directly.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  help()",
-        "           sn.help()",
-        "           corpus.help()",
-      ].join("\n")),
-    },
+    globalCommands[0],
   );
 
-  const clear = Object.assign(
+  const clear = withHelp(
+    /**
+     * Clear the terminal screen
+     *
+     * @example clear()
+     */
     function clear(): void {
       terminal.clear();
     },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mclear()\x1b[0m",
-        "",
-        "  Clear the terminal screen.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  clear()",
-      ].join("\n")),
-    },
+    globalCommands[1],
   );
 
-  const debug = Object.assign(
+  const debug = withHelp(
+    /**
+     * Show recent entries from the SQLite debug log store
+     *
+     * Show the most recent entries from the SQLite debug log store.
+     * Useful for diagnosing issues with audio processing or IPC.
+     *
+     * @param limit Number of entries to show (default 20).
+     * @example debug()
+     * @example debug(50)
+     */
     async function debug(limit = 20): Promise<BounceResult> {
       const logs = await window.electron.getDebugLogs(limit);
       const lines: string[] = [
@@ -91,35 +132,20 @@ export function buildGlobals(deps: NamespaceDeps) {
 
       return new BounceResult(lines.join("\n"));
     },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mdebug(limit?)\x1b[0m",
-        "",
-        "  Show the most recent entries from the SQLite debug log store.",
-        "  Useful for diagnosing issues with audio processing or IPC.",
-        "",
-        "  \x1b[33mlimit\x1b[0m  Number of entries to show (default 20)",
-        "",
-        "  \x1b[90mExample:\x1b[0m  debug()",
-        "           debug(50)",
-      ].join("\n")),
-    },
+    globalCommands[2],
   );
 
-  const clearDebug = Object.assign(
+  const clearDebug = withHelp(
+    /**
+     * Clear all entries from the debug log store
+     *
+     * @example clearDebug()
+     */
     async function clearDebug(): Promise<BounceResult> {
       await window.electron.clearDebugLogs();
       return new BounceResult("\x1b[32mDebug logs cleared\x1b[0m");
     },
-    {
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36mclearDebug()\x1b[0m",
-        "",
-        "  Clear all entries from the debug log store.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  clearDebug()",
-      ].join("\n")),
-    },
+    globalCommands[3],
   );
 
   const errors = Object.assign(
@@ -145,53 +171,25 @@ export function buildGlobals(deps: NamespaceDeps) {
       return new BounceResult(lines.join("\n"));
     },
     {
-      dismiss: Object.assign(
+      dismiss: withHelp(
         async function dismiss(id: number): Promise<BounceResult> {
           const ok = await window.electron.dismissBackgroundError(id);
           return ok
             ? new BounceResult(`\x1b[32mDismissed error ${id}\x1b[0m`)
             : new BounceResult(`\x1b[33mNo active error with id ${id}\x1b[0m`);
         },
-        {
-          help: (): BounceResult => new BounceResult([
-            "\x1b[1;36merrors.dismiss(id)\x1b[0m",
-            "",
-            "  Dismiss a specific background error by its numeric id.",
-            "",
-            "  \x1b[90mExample:\x1b[0m  errors.dismiss(3)",
-          ].join("\n")),
-        },
+        errorsSupplementalCommands[1],
       ),
-      dismissAll: Object.assign(
+      dismissAll: withHelp(
         async function dismissAll(): Promise<BounceResult> {
           const count = await window.electron.dismissAllBackgroundErrors();
           return count > 0
             ? new BounceResult(`\x1b[32mDismissed ${count} error${count === 1 ? "" : "s"}\x1b[0m`)
             : new BounceResult("\x1b[32mNo active errors to dismiss\x1b[0m");
         },
-        {
-          help: (): BounceResult => new BounceResult([
-            "\x1b[1;36merrors.dismissAll()\x1b[0m",
-            "",
-            "  Dismiss all active background errors.",
-            "",
-            "  \x1b[90mExample:\x1b[0m  errors.dismissAll()",
-          ].join("\n")),
-        },
+        errorsSupplementalCommands[2],
       ),
-      help: (): BounceResult => new BounceResult([
-        "\x1b[1;36merrors()\x1b[0m",
-        "",
-        "  Show active background errors from main or utility processes.",
-        "  When the status line shows a red indicator, use this to see details.",
-        "",
-        "  \x1b[33merrors.dismiss(id)\x1b[0m   Dismiss a single error by id",
-        "  \x1b[33merrors.dismissAll()\x1b[0m  Dismiss all active errors",
-        "",
-        "  \x1b[90mExample:\x1b[0m  errors()",
-        "           errors.dismiss(3)",
-        "           errors.dismissAll()",
-      ].join("\n")),
+      help: (): BounceResult => renderCommandHelp(errorsSupplementalCommands[0]),
     },
   );
 

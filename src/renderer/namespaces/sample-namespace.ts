@@ -7,9 +7,9 @@ import {
   NmfFeature,
   NxFeature,
   MfccFeature,
-  SampleNamespace,
   SampleListResult,
   SamplePromise,
+  CurrentSamplePromise,
   SliceFeaturePromise,
   NmfFeaturePromise,
   NxFeaturePromise,
@@ -24,7 +24,12 @@ import {
   InstrumentResult,
 } from "../bounce-result.js";
 import { GrainCollection } from "../grain-collection.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { snCommands, snDescription } from "./sn-commands.generated.js";
+export { snCommands } from "./sn-commands.generated.js";
+
+export const sampleNamespaceCommands = snCommands;
 
 export interface SampleBinder {
   bindSample(
@@ -40,7 +45,11 @@ export interface SampleBinder {
   ): Sample;
 }
 
-export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace; sampleBinder: SampleBinder } {
+/**
+ * Load and play audio samples; entry point for all audio analysis
+ * @namespace sn
+ */
+export function buildSampleNamespace(deps: NamespaceDeps) {
   const { terminal, audioManager } = deps;
 
   const supportedExtensions = [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac", ".opus"];
@@ -1323,138 +1332,146 @@ export function buildSampleNamespace(deps: NamespaceDeps): { sn: SampleNamespace
     );
   }
 
-  const sn = new SampleNamespace(
-    [
-      "\x1b[1;36msn\x1b[0m — sample namespace",
-      "",
-      "  sn.read(path)         Load a sample from disk and return a Sample object",
-      "  sn.load(hash)         Load a stored sample by hash and return a Sample object",
-      "  sn.list()             List stored samples and features",
-      "  sn.current()          Return the currently loaded sample, if any",
-      "  sn.stop()             Stop all active sample playback",
-      "  sn.inputs()           List available audio input devices",
-      "  sn.dev(index)         Open an audio input device for recording",
-      "",
-      "\x1b[90mFor detailed usage:\x1b[0m sn.help(), sn.read.help(), sn.load.help()",
-    ].join("\n"),
-    {
-      help: () => new BounceResult([
-        "\x1b[1;36msn\x1b[0m — sample namespace",
-        "",
-        "  Use sn.read() to load audio files from disk. Use sn.load() to reload",
-        "  a stored sample by hash. Samples expose methods for playback, analysis,",
-        "  resynthesis, and help.",
-        "  Use sn.inputs() and sn.dev() to record from a microphone or audio interface.",
-        "",
-        "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
-        "           const stored = sn.load(\"a1b2c3d4\")",
-        "           samp.loop()",
-        "           sn.stop()",
-        "           const feature = samp.nmf()",
-        "           feature.sep()",
-        "           sn.inputs()",
-        "           const mic = sn.dev(0)",
-        "           const h = mic.record(\"take1\")",
-        "           h.stop()",
-      ].join("\n")),
-      read: (path) => display(path),
-      load: (hash) => loadByHash(hash),
-      list: () => list(),
-      current: async () => {
-        const hash = audioManager.getCurrentAudio()?.hash;
-        if (!hash) return null;
-        const current = await window.electron.getSampleByHash(hash);
-        if (!current) return null;
-        return bindSample({
-          id: current.id,
-          hash: current.hash,
-          filePath: current.display_name ?? undefined,
-          sampleRate: current.sample_rate,
-          channels: current.channels,
-          duration: current.duration,
-        });
+  const sn = {
+    description: snDescription,
+    toString(): string {
+      return renderNamespaceHelp("sn", snDescription, sampleNamespaceCommands).toString();
+    },
+
+    help(): BounceResult {
+      return renderNamespaceHelp("sn", snDescription, sampleNamespaceCommands);
+    },
+
+    read: withHelp(
+      /**
+       * Load an audio file from disk and return a Sample object
+       *
+       * Load an audio file from disk and return a Sample object.
+       * The sample is stored in the project database for future access via sn.load().
+       *
+       * @param path File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS.
+       * @example const samp = sn.read("kick.wav")
+       * @example const samp = sn.read("samples/loop.flac")
+       */
+      function read(path: string): SamplePromise {
+        return new SamplePromise(display(path));
       },
-      stop: () => stop(),
-      inputs: () => getAudioInputs().then((devs) => new InputsResult(devs)),
-      dev: async (index: number) => {
+      sampleNamespaceCommands[0],
+    ),
+
+    load: withHelp(
+      /**
+       * Load a stored sample by hash and return a Sample object
+       *
+       * Load a stored sample by its hash (or hash prefix) and return a Sample object.
+       * Use sn.list() to see available sample hashes.
+       *
+       * @param hash Full or prefix hash from sn.list().
+       * @example const samp = sn.load("a1b2c3d4")
+       */
+      function load(hash: string): SamplePromise {
+        return new SamplePromise(loadByHash(hash));
+      },
+      sampleNamespaceCommands[1],
+    ),
+
+    list: withHelp(
+      /**
+       * List stored samples and features
+       *
+       * Show all stored samples and features in the database.
+       *
+       * @example sn.list()
+       */
+      (): Promise<SampleListResult> => list(),
+      sampleNamespaceCommands[2],
+    ),
+
+    current: withHelp(
+      /**
+       * Return the currently loaded sample, or null
+       *
+       * Return the currently loaded sample or null if no sample is active.
+       *
+       * @example const current = sn.current()
+       * @example current?.help()
+       */
+      function current(): CurrentSamplePromise {
+        return new CurrentSamplePromise(
+          (async () => {
+            const hash = audioManager.getCurrentAudio()?.hash;
+            if (!hash) return null;
+            const cur = await window.electron.getSampleByHash(hash);
+            if (!cur) return null;
+            return bindSample({
+              id: cur.id,
+              hash: cur.hash,
+              filePath: cur.display_name ?? undefined,
+              sampleRate: cur.sample_rate,
+              channels: cur.channels,
+              duration: cur.duration,
+            });
+          })(),
+        );
+      },
+      sampleNamespaceCommands[3],
+    ),
+
+    stop: withHelp(
+      /**
+       * Stop all active sample playback and looping voices
+       *
+       * @example sn.stop()
+       */
+      (): BounceResult => stop(),
+      sampleNamespaceCommands[4],
+    ),
+
+    inputs: withHelp(
+      /**
+       * List available audio input devices
+       *
+       * List all available audio input devices.
+       * Triggers a microphone permission request on first call.
+       * Use the index shown to open a device with sn.dev(index).
+       *
+       * @example sn.inputs()
+       * @example sn.dev(0)
+       */
+      async function inputs(): Promise<InputsResult> {
+        return getAudioInputs().then((devs) => new InputsResult(devs));
+      },
+      sampleNamespaceCommands[5],
+    ),
+
+    dev: withHelp(
+      /**
+       * Open an audio input device by index for recording
+       *
+       * Open an audio input device by index (from sn.inputs()) and return an AudioDevice.
+       * Use AudioDevice.record() to start recording.
+       *
+       * @param index Device index from sn.inputs().
+       * @example const mic = sn.dev(0)
+       * @example const h = mic.record("take1")
+       * @example h.stop()
+       * @example mic.record("take2", { duration: 5 })
+       */
+      async function dev(index: number): Promise<AudioDevice> {
         const devs = await getAudioInputs();
         if (index < 0 || index >= devs.length) {
           throw new Error(
             `Device index ${index} out of range. Run sn.inputs() to see available devices (0–${devs.length - 1}).`,
           );
         }
-        const dev = devs[index];
-        return new AudioDevice(index, dev.deviceId, dev.label, 1, {
-          record: (sampleId, opts) => recordSample(dev.deviceId, dev.label, sampleId, opts),
+        const d = devs[index];
+        return new AudioDevice(index, d.deviceId, d.label, 1, {
+          record: (sampleId, opts) => recordSample(d.deviceId, d.label, sampleId, opts),
         });
       },
-    },
-  );
-
-  (sn.read as typeof sn.read & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.read(path)\x1b[0m",
-      "",
-      "  Load an audio file from disk and return a Sample object.",
-      "  The sample is stored in the project database for future access via sn.load().",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"kick.wav\")",
-      "           const samp = sn.read(\"samples/loop.flac\")",
-    ].join("\n"));
-
-  (sn.load as typeof sn.load & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.load(hash)\x1b[0m",
-      "",
-      "  Load a stored sample by its hash (or hash prefix) and return a Sample object.",
-      "  Use sn.list() to see available sample hashes.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const samp = sn.load(\"a1b2c3d4\")",
-    ].join("\n"));
-
-  (sn.list as typeof sn.list & { help?: () => BounceResult }).help = () => list.help();
-  (sn.current as typeof sn.current & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.current()\x1b[0m",
-      "",
-      "  Return the currently loaded sample or null if no sample is active.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const current = sn.current()",
-      "           current?.help()",
-    ].join("\n"));
-  (sn.stop as typeof sn.stop & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.stop()\x1b[0m",
-      "",
-      "  Stop all active sample playback and looping voices.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  sn.stop()",
-    ].join("\n"));
-
-  (sn.inputs as typeof sn.inputs & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.inputs()\x1b[0m",
-      "",
-      "  List all available audio input devices.",
-      "  Triggers a microphone permission request on first call.",
-      "  Use the index shown to open a device with sn.dev(index).",
-      "",
-      "  \x1b[90mExample:\x1b[0m  sn.inputs()",
-      "           sn.dev(0)",
-    ].join("\n"));
-
-  (sn.dev as typeof sn.dev & { help?: () => BounceResult }).help = () =>
-    new BounceResult([
-      "\x1b[1;36msn.dev(index)\x1b[0m",
-      "",
-      "  Open an audio input device by index (from sn.inputs()) and return an AudioDevice.",
-      "  Use AudioDevice.record() to start recording.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const mic = sn.dev(0)",
-      "           const h = mic.record(\"take1\")",
-      "           h.stop()",
-      "           mic.record(\"take2\", { duration: 5 })",
-    ].join("\n"));
+      sampleNamespaceCommands[6],
+    ),
+  };
 
   const sampleBinder: SampleBinder = { bindSample };
 

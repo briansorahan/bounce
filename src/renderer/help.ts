@@ -1,0 +1,89 @@
+import { BounceResult } from "./results/base.js";
+
+export interface CommandHelp {
+  name: string;
+  signature: string;
+  summary: string;
+  description?: string;
+  params?: Array<{
+    name: string;
+    type: string;
+    description: string;
+    optional?: boolean;
+  }>;
+  examples?: string[];
+}
+
+export function renderNamespaceHelp(
+  nsName: string,
+  nsDescription: string,
+  commands: CommandHelp[],
+): BounceResult {
+  const maxSig = commands.reduce(
+    (max, cmd) => Math.max(max, cmd.signature.length),
+    0,
+  );
+
+  const lines: string[] = [
+    `\x1b[1;36m${nsName}\x1b[0m — ${nsDescription}`,
+    "",
+  ];
+
+  for (const cmd of commands) {
+    const pad = " ".repeat(Math.max(1, maxSig - cmd.signature.length + 2));
+    lines.push(
+      `  \x1b[33m${cmd.signature}\x1b[0m${pad}${cmd.summary}`,
+    );
+  }
+
+  lines.push("");
+  lines.push(
+    `\x1b[90mFor detailed usage:\x1b[0m \x1b[33m${nsName}.<cmd>.help()\x1b[0m`,
+  );
+
+  return new BounceResult(lines.join("\n"));
+}
+
+export function renderCommandHelp(cmd: CommandHelp): BounceResult {
+  const descText = cmd.description ?? cmd.summary;
+  const lines: string[] = [
+    `\x1b[1;36m${cmd.signature}\x1b[0m`,
+    "",
+  ];
+  for (const dLine of descText.split("\n")) {
+    lines.push(dLine ? `  ${dLine}` : "");
+  }
+
+  if (cmd.params?.length) {
+    lines.push("");
+    const maxName = cmd.params.reduce(
+      (max, p) => Math.max(max, p.name.length),
+      0,
+    );
+    for (const p of cmd.params) {
+      const pad = " ".repeat(Math.max(1, maxName - p.name.length + 2));
+      const opt = p.optional ? " (optional)" : "";
+      lines.push(`  \x1b[33m${p.name}\x1b[0m${pad}${p.description}${opt}`);
+    }
+  }
+
+  if (cmd.examples?.length) {
+    lines.push("");
+    lines.push("  \x1b[90mExamples:\x1b[0m");
+    for (const ex of cmd.examples) {
+      for (const eLine of ex.split("\n")) {
+        lines.push(eLine ? `    ${eLine}` : "");
+      }
+    }
+  }
+
+  return new BounceResult(lines.join("\n"));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function withHelp<F extends (...args: any[]) => any>(
+  fn: F,
+  meta: CommandHelp,
+): F & { help: () => BounceResult } {
+  return Object.assign(fn, { help: () => renderCommandHelp(meta) });
+}

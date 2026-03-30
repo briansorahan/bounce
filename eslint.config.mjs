@@ -5,7 +5,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist/**', 'build/**', 'node_modules/**', 'third_party/**']
+    ignores: ['dist/**', 'build/**', 'node_modules/**', 'third_party/**', 'src/renderer/namespaces/*.generated.ts']
   },
   {
     rules: {

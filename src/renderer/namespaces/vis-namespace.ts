@@ -8,8 +8,15 @@ import {
   VisStack,
   VisSceneListResult,
 } from "../bounce-result.js";
+import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { visCommands, visDescription } from "./vis-commands.generated.js";
+export { visCommands } from "./vis-commands.generated.js";
 
+/**
+ * Build and manage waveform and analysis visualizations
+ * @namespace vis
+ */
 export function buildVisNamespace(deps: NamespaceDeps) {
   function sampleLabel(filePath: string | undefined, hash: string): string {
     return filePath?.split("/").pop() ?? hash.substring(0, 8);
@@ -58,48 +65,6 @@ export function buildVisNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function visListHelpText(): BounceResult {
-    return new BounceResult([
-      "\x1b[1;36mvis.list()\x1b[0m",
-      "",
-      "  List currently shown visualization scenes.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  vis.list()",
-    ].join("\n"));
-  }
-
-  function visWaveformHelpText(): BounceResult {
-    return new BounceResult([
-      "\x1b[1;36mvis.waveform(sample)\x1b[0m",
-      "",
-      "  Create a draft visualization scene rooted in a sample waveform.",
-      "  Chain overlay()/panel()/title() and call show() to render it.",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const samp = sn.read(\"loop.wav\")",
-      "           const scene = vis.waveform(samp)",
-      "           scene.show()",
-    ].join("\n"));
-  }
-
-  function visHelpText(): BounceResult {
-    return new BounceResult([
-      "\x1b[1;36mvis\x1b[0m — visualization namespace",
-      "",
-      "  Use vis.waveform(sample) to create a draft scene, then compose and show it.",
-      "  Use vis.stack() to build and show multiple scenes in one expression.",
-      "",
-      "  vis.waveform(sample)    Create a VisScene",
-      "  vis.stack()             Create a VisStack",
-      "  vis.list()              List shown scenes",
-      "  vis.remove(id)          Remove one shown scene",
-      "  vis.clear()             Remove all shown scenes",
-      "",
-      "  \x1b[90mExample:\x1b[0m  const scene = vis.waveform(samp)",
-      "           scene.overlay(onsets).panel(nmf).show()",
-      "           vis.stack().waveform(a).waveform(b).show()",
-    ].join("\n"));
-  }
-
   function bindVisScene(
     sample: Sample,
     titleText?: string,
@@ -139,11 +104,20 @@ export function buildVisNamespace(deps: NamespaceDeps) {
   }
 
   const vis = {
-    help(): BounceResult {
-      return visHelpText();
-    },
+    description: visDescription,
+    help: () => renderNamespaceHelp("vis", visDescription, visCommands),
 
-    waveform: Object.assign(
+    waveform: withHelp(
+      /**
+       * Create a draft VisScene for a sample waveform
+       *
+       * Create a draft visualization scene rooted in a sample waveform.
+       * Chain .overlay()/.panel()/.title() and call .show() to render it.
+       *
+       * @param sampleOrPromise Resolved Sample or SamplePromise to visualize.
+       * @example const samp = sn.read("loop.wav")\nconst scene = vis.waveform(samp)\nscene.show()
+       * @example vis.waveform(sn.read("kick.wav")).show()
+       */
       function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene | VisScenePromise {
         if (isPromiseLike<Sample>(sampleOrPromise)) {
           return new VisScenePromise(
@@ -154,12 +128,17 @@ export function buildVisNamespace(deps: NamespaceDeps) {
         }
         return bindVisScene(sampleOrPromise, `Waveform · ${sampleLabel(sampleOrPromise.filePath, sampleOrPromise.hash)}`);
       },
-      {
-        help: (): BounceResult => visWaveformHelpText(),
-      },
+      visCommands[0],
     ),
 
-    stack: Object.assign(
+    stack: withHelp(
+      /**
+       * Build multiple visualization scenes in one chained expression
+       *
+       * Create a VisStack and add scenes with .waveform(). Call .show() to render all.
+       *
+       * @example vis.stack().waveform(a).waveform(b).show()
+       */
       function stack(): VisStack {
         const bound = bindVisStack();
         (bound as VisStack & {
@@ -177,13 +156,16 @@ export function buildVisNamespace(deps: NamespaceDeps) {
         };
         return bound;
       },
-      {
-        help: (): BounceResult => visStackHelpText(),
-      },
+      visCommands[1],
     ),
 
-    list: Object.assign(
-      function listScenes(): VisSceneListResult {
+    list: withHelp(
+      /**
+       * List currently shown visualization scenes
+       *
+       * @example vis.list()
+       */
+      function list(): VisSceneListResult {
         const scenes = deps.getSceneManager().listScenes();
         const display = scenes.length === 0
           ? "\x1b[90mNo visualization scenes shown\x1b[0m"
@@ -194,46 +176,45 @@ export function buildVisNamespace(deps: NamespaceDeps) {
               `${scene.id.padEnd(10)} ${scene.title} \x1b[90m(${scene.overlayCount} overlays, ${scene.panelCount} panels)\x1b[0m`,
             ),
           ].join("\n");
-        return new VisSceneListResult(display, scenes, visListHelpText);
+        return new VisSceneListResult(display, scenes, () => new BounceResult([
+          "\x1b[1;36mvis.list()\x1b[0m",
+          "",
+          "  List currently shown visualization scenes.",
+          "",
+          "  \x1b[90mExample:\x1b[0m  vis.list()",
+        ].join("\n")));
       },
-      {
-        help: (): BounceResult => visListHelpText(),
-      },
+      visCommands[2],
     ),
 
-    remove: Object.assign(
-      function removeScene(id: string): BounceResult {
+    remove: withHelp(
+      /**
+       * Remove a shown visualization scene by id
+       *
+       * @param id Scene id from vis.list().
+       * @example vis.remove("scene-1")
+       */
+      function remove(id: string): BounceResult {
         const removed = deps.getSceneManager().removeScene(id);
         if (!removed) {
           throw new Error(`Scene ${id} not found.`);
         }
         return new BounceResult(`\x1b[32mRemoved scene ${id}\x1b[0m`);
       },
-      {
-        help: (): BounceResult => new BounceResult([
-          "\x1b[1;36mvis.remove(id)\x1b[0m",
-          "",
-          "  Remove a shown visualization scene by id.",
-          "",
-          "  \x1b[90mExample:\x1b[0m  vis.remove(\"scene-1\")",
-        ].join("\n")),
-      },
+      visCommands[3],
     ),
 
-    clear: Object.assign(
-      function clearScenes(): BounceResult {
+    clear: withHelp(
+      /**
+       * Remove all shown visualization scenes
+       *
+       * @example vis.clear()
+       */
+      function clear(): BounceResult {
         const removed = deps.getSceneManager().clearScenes();
         return new BounceResult(`\x1b[32mCleared ${removed} visualization scene${removed === 1 ? "" : "s"}\x1b[0m`);
       },
-      {
-        help: (): BounceResult => new BounceResult([
-          "\x1b[1;36mvis.clear()\x1b[0m",
-          "",
-          "  Remove all shown visualization scenes.",
-          "",
-          "  \x1b[90mExample:\x1b[0m  vis.clear()",
-        ].join("\n")),
-      },
+      visCommands[4],
     ),
   };
 
