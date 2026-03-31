@@ -52,6 +52,8 @@ import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
 import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
 import { buildTransportNamespace } from "./namespaces/transport-namespace.js";
 import { buildPatNamespace } from "./namespaces/pat-namespace.js";
+import { porcelainTypeHelps } from "./results/porcelain-types.generated.js";
+import { renderTypeHelp } from "./help.js";
 
 export {
   BounceResult,
@@ -150,6 +152,16 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { pat } = buildPatNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps, { sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat });
 
+  const typeHelpObjects = Object.fromEntries(
+    porcelainTypeHelps.map((th) => [
+      th.name,
+      {
+        help: () => renderTypeHelp(th),
+        toString: () => renderTypeHelp(th).toString(),
+      },
+    ]),
+  );
+
   const api = {
     sn,
     env,
@@ -163,6 +175,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     transport,
     pat,
     ...globals,
+    ...typeHelpObjects,
   };
 
   sharedState.api = api;

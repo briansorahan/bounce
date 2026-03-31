@@ -88,7 +88,7 @@ export interface TypePropertyHelp {
 }
 
 export interface TypeMethodHelp {
-  name: string;
+  name?: string;
   signature: string;
   summary: string;
   params?: Array<{

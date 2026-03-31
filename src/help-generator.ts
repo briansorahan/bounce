@@ -341,8 +341,212 @@ export function processFile(filePath: string): NamespaceInfo[] {
 }
 
 // ---------------------------------------------------------------------------
-// Code generation
+// Porcelain type doc types
 // ---------------------------------------------------------------------------
+
+export interface PorcelainPropertyInfo {
+  name: string;
+  type: string;
+  description: string;
+  readonly?: boolean;
+}
+
+export interface PorcelainMethodInfo {
+  signature: string;
+  summary: string;
+}
+
+export interface PorcelainTypeInfo {
+  name: string;
+  summary: string;
+  description?: string;
+  properties: PorcelainPropertyInfo[];
+  methods: PorcelainMethodInfo[];
+}
+
+// ---------------------------------------------------------------------------
+// Porcelain file processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse @prop {type} name desc lines from a JSDoc block.
+ */
+function parsePropTags(rawLines: string[]): PorcelainPropertyInfo[] {
+  const props: PorcelainPropertyInfo[] = [];
+  for (const line of rawLines) {
+    // @prop {type} name description  OR  @prop {type} name? description
+    const match = line.match(/^@prop\s+\{([^}]+)\}\s+(\S+?)\??\s+(.*)/);
+    if (match) {
+      props.push({ name: match[2], type: match[1].trim(), description: match[3].trim() });
+    }
+  }
+  return props;
+}
+
+/**
+ * Parse @method signature description lines from a JSDoc block.
+ */
+function parseMethodTags(rawLines: string[]): PorcelainMethodInfo[] {
+  const methods: PorcelainMethodInfo[] = [];
+  for (const line of rawLines) {
+    // @method signature(args?) summary
+    const match = line.match(/^@method\s+(\S+\([^)]*\)\??)\s+(.*)/);
+    if (match) {
+      methods.push({ signature: match[1], summary: match[2].trim() });
+    }
+  }
+  return methods;
+}
+
+/**
+ * Parse a @porcelain JSDoc block into a PorcelainTypeInfo.
+ * Returns undefined if the block has no @porcelain tag.
+ */
+function parsePorcelainJsDoc(jsdocText: string): PorcelainTypeInfo | undefined {
+  const porcelainMatch = jsdocText.match(/@porcelain\s+(\S+)/);
+  if (!porcelainMatch) return undefined;
+  const name = porcelainMatch[1];
+
+  const inner = jsdocText.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
+  const rawLines = inner
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, "").trimEnd());
+
+  // Collect lines before the first @tag as description
+  const descLines: string[] = [];
+  let i = 0;
+  while (i < rawLines.length && !rawLines[i].startsWith("@")) {
+    descLines.push(rawLines[i]);
+    i++;
+  }
+  while (descLines.length > 0 && descLines[0].trim() === "") descLines.shift();
+  while (descLines.length > 0 && descLines[descLines.length - 1].trim() === "") descLines.pop();
+
+  // Collect all @tag lines
+  const tagLines: string[] = [];
+  while (i < rawLines.length) {
+    tagLines.push(rawLines[i]);
+    i++;
+  }
+
+  // The summary is the description text that follows @porcelain TypeName on its own line
+  // or on subsequent description lines. Since @porcelain TypeName IS a tag line, we treat
+  // the first non-empty descLine as the summary if present; otherwise extract from the
+  // @porcelain line's trailing text.
+  let summary = descLines[0]?.trim() ?? "";
+  if (!summary) {
+    // No description before @porcelain — extract trailing text from the @porcelain line itself
+    const trailingMatch = jsdocText.match(/@porcelain\s+\S+\s+(.*)/);
+    summary = trailingMatch ? trailingMatch[1].trim() : name;
+  }
+  const restLines = descLines.slice(1);
+  while (restLines.length > 0 && restLines[0].trim() === "") restLines.shift();
+  const description = restLines.length > 0 ? restLines.join("\n").trimEnd() : undefined;
+
+  // But wait — in our porcelain.ts format the summary comes AFTER @porcelain on the
+  // NEXT line (not the @porcelain line). Let's re-check: description lines = lines before
+  // first @. The @porcelain line IS a tag line, so the text between /** and @porcelain
+  // goes into descLines. In porcelain.ts those lines are empty. The actual summary is the
+  // line right after @porcelain. So re-extract summary from tag lines.
+  const porcelainLineIdx = tagLines.findIndex((l) => l.startsWith("@porcelain"));
+  if (porcelainLineIdx !== -1) {
+    // Try inline text on the @porcelain line (after the type name)
+    const inlineMatch = tagLines[porcelainLineIdx].match(/@porcelain\s+\S+\s+(.*)/);
+    if (inlineMatch && inlineMatch[1].trim()) {
+      summary = inlineMatch[1].trim();
+    } else {
+      // Look for next non-empty, non-@tag line as summary
+      let j = porcelainLineIdx + 1;
+      while (j < tagLines.length && tagLines[j].trim() === "") j++;
+      if (j < tagLines.length && !tagLines[j].startsWith("@")) {
+        summary = tagLines[j].trim();
+      }
+    }
+  }
+
+  const properties = parsePropTags(tagLines);
+  const methods = parseMethodTags(tagLines);
+
+  return { name, summary, description, properties, methods };
+}
+
+/**
+ * Parse porcelain.ts and return all @porcelain type entries.
+ */
+export function processPorcelainFile(filePath: string): PorcelainTypeInfo[] {
+  const source = readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    /*setParentNodes=*/ true,
+  );
+
+  const results: PorcelainTypeInfo[] = [];
+
+  function visitTopLevel(node: ts.Node): void {
+    if (ts.isTypeAliasDeclaration(node)) {
+      const jsdocText = getLeadingJsDoc(source, node, sourceFile);
+      if (jsdocText) {
+        const info = parsePorcelainJsDoc(jsdocText);
+        if (info) results.push(info);
+      }
+    }
+    ts.forEachChild(node, visitTopLevel);
+  }
+
+  ts.forEachChild(sourceFile, visitTopLevel);
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Porcelain code generation
+// ---------------------------------------------------------------------------
+
+export function generatePorcelainFile(types: PorcelainTypeInfo[]): string {
+  const lines: string[] = [
+    "// This file is auto-generated by scripts/generate-help.ts",
+    "// Do not edit manually — edit @porcelain JSDoc in src/renderer/results/porcelain.ts",
+    "",
+    'import type { TypeHelp } from "../help.js";',
+    "",
+    "export const porcelainTypeHelps: TypeHelp[] = [",
+  ];
+
+  for (const t of types) {
+    lines.push("  {");
+    lines.push(`    name: ${JSON.stringify(t.name)},`);
+    lines.push(`    summary: ${serializeString(t.summary)},`);
+    if (t.description) {
+      lines.push(`    description: ${serializeString(t.description)},`);
+    }
+    if (t.properties.length > 0) {
+      lines.push("    properties: [");
+      for (const p of t.properties) {
+        const parts = [
+          `name: ${JSON.stringify(p.name)}`,
+          `type: ${JSON.stringify(p.type)}`,
+          `description: ${JSON.stringify(p.description)}`,
+        ];
+        if (p.readonly) parts.push("readonly: true");
+        lines.push(`      { ${parts.join(", ")} },`);
+      }
+      lines.push("    ],");
+    }
+    if (t.methods.length > 0) {
+      lines.push("    methods: [");
+      for (const m of t.methods) {
+        lines.push(`      { signature: ${JSON.stringify(m.signature)}, summary: ${JSON.stringify(m.summary)} },`);
+      }
+      lines.push("    ],");
+    }
+    lines.push("  },");
+  }
+
+  lines.push("];", "");
+  return lines.join("\n");
+}
+
 
 function buildSignature(
   namespaceName: string,

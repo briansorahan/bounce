@@ -15,9 +15,9 @@
 
 import { writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-export type { ParamInfo, CommandEntry, NamespaceInfo } from "../src/help-generator.js";
-export { processFile, generateFile } from "../src/help-generator.js";
-import { processFile, generateFile } from "../src/help-generator.js";
+export type { ParamInfo, CommandEntry, NamespaceInfo, PorcelainTypeInfo } from "../src/help-generator.js";
+export { processFile, generateFile, processPorcelainFile, generatePorcelainFile } from "../src/help-generator.js";
+import { processFile, generateFile, processPorcelainFile, generatePorcelainFile } from "../src/help-generator.js";
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -63,6 +63,21 @@ function main(): void {
   }
 
   console.log(`\nDone. ${totalGenerated} file(s) generated.`);
+
+  // ---------------------------------------------------------------------------
+  // Porcelain type docs
+  // ---------------------------------------------------------------------------
+  const porcelainSrc = join(process.cwd(), "src/renderer/results/porcelain.ts");
+  console.log("\nScanning porcelain.ts...");
+  const porcelainTypes = processPorcelainFile(porcelainSrc);
+  if (porcelainTypes.length === 0) {
+    console.warn("  [WARN] No @porcelain types found in porcelain.ts");
+  } else {
+    const porcelainOutput = generatePorcelainFile(porcelainTypes);
+    const porcelainOutPath = join(process.cwd(), "src/renderer/results/porcelain-types.generated.ts");
+    writeFileSync(porcelainOutPath, porcelainOutput, "utf8");
+    console.log(`  ✓ Generated porcelain-types.generated.ts  (${porcelainTypes.length} types)`);
+  }
 }
 
 // Only run main() when this script is invoked directly (not when imported as a module).
