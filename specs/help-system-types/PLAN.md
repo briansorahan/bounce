@@ -101,7 +101,7 @@ Exports:
 - Porcelain type aliases: `type Sample = SampleResult | SamplePromise`, etc.
 - For types with no async variant: `type MfccFeature = MfccFeatureResult`
 - Each alias is preceded by a `/** @porcelain TypeName … */` JSDoc block documenting properties and methods
-- Re-exports all renamed plumbing classes so downstream code only needs to import from `porcelain.ts`
+- Re-exports the renamed plumbing classes for use by *namespace files* (`namespaces/*.ts`, `bounce-api.ts`) that want a single import source for both the union type and its constituent classes. Result implementation files (`results/*.ts`) must NOT import from `porcelain.ts` — they should import from sibling result files to avoid circular imports.
 
 #### 3. `src/renderer/help.ts` — add `TypeHelp` interface and `renderTypeHelp()`
 
@@ -147,19 +147,25 @@ The generator runs as part of `npm run build:electron` alongside the existing co
 
 #### 5. `src/renderer/bounce-api.ts` — inject type help into REPL context
 
-For each porcelain type that has a `TypeHelp` entry, assign a callable help object to the REPL context:
+For each porcelain type that has a `TypeHelp` entry, assign a callable help object as a named property on the `api` object returned by `bounce-api.ts`. The existing pattern builds a plain object:
 
 ```typescript
-// In bounce-api.ts REPL context setup
+// In bounce-api.ts
 import { porcelainTypeHelps } from "./results/porcelain-types.generated.js";
 import { renderTypeHelp } from "./help.js";
 
-for (const typeHelp of porcelainTypeHelps) {
-  replContext[typeHelp.name] = {
-    help: () => renderTypeHelp(typeHelp),
-    toString: () => renderTypeHelp(typeHelp).toString(),
-  };
-}
+const typeHelpObjects = Object.fromEntries(
+  porcelainTypeHelps.map(th => [
+    th.name,
+    { help: () => renderTypeHelp(th), toString: () => renderTypeHelp(th).toString() },
+  ])
+);
+
+const api = {
+  sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat,
+  ...globals,
+  ...typeHelpObjects,  // injects Sample, SliceFeature, etc.
+};
 ```
 
 #### 6. Update barrel files and imports
