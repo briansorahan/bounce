@@ -15,6 +15,7 @@ From RESEARCH.md: Bounce REPL result types conflate plumbing (concrete sync/asyn
 ## Approach Summary
 
 - Rename plumbing classes (`Sample` → `SampleResult`, etc.) in a single compiler-verified pass
+- Update barrel files (`src/renderer/results/index.ts`, `src/renderer/bounce-result.ts`) to export renamed classes and add missing module re-exports (`midi.ts`, `pattern.ts`)
 - Write `porcelain.ts` exporting union aliases (`type Sample = SampleResult | SamplePromise`) with JSDoc blocks
 - Extend the help generator to also parse `porcelain.ts` and emit a `TypeHelp[]` registry
 - Add a `TypeHelp` interface + `renderTypeHelp()` to `src/renderer/help.ts`
@@ -29,6 +30,8 @@ No new processes or IPC channels required. Changes are entirely within the rende
 - New generator output: `src/renderer/results/porcelain-types.generated.ts`
 - Modified script: `scripts/generate-help.ts` (add porcelain type pass)
 - Modified file: `src/renderer/bounce-api.ts` (inject type help objects into REPL context)
+- Modified file: `src/renderer/results/index.ts` (add missing re-exports for `midi.ts` and `pattern.ts`)
+- Modified file: `src/renderer/bounce-result.ts` (barrel re-export — all 14+ import sites in renderer code go through this)
 
 ## Changes Required
 
@@ -114,7 +117,7 @@ export interface TypeMethodHelp {
   name: string;
   signature: string;
   summary: string;
-  params?: ParamHelp[];
+  params?: Array<{ name: string; type: string; description: string; optional?: boolean }>;
   returns?: string;
 }
 
@@ -159,11 +162,17 @@ for (const typeHelp of porcelainTypeHelps) {
 }
 ```
 
-#### 6. Update all imports throughout the codebase
+#### 6. Update barrel files and imports
 
-All files importing `Sample`, `SliceFeature`, etc. need to either:
-- Import from `porcelain.ts` (preferred for anything user-facing), or
-- Import the renamed `SampleResult` etc. from the result files (for implementation code)
+The primary import path for result types is `bounce-result.ts` → `results/index.ts`. These barrel files must be updated first:
+
+- `src/renderer/results/index.ts` — add missing re-exports for `midi.ts` and `pattern.ts`; all renamed class exports flow through here automatically
+- `src/renderer/bounce-result.ts` — single-line `export * from "./results/index.js"` barrel; no change needed unless porcelain re-exports are added here
+
+Import update strategy (single pass):
+- Implementation code (`results/*.ts`, `namespaces/*.ts`, `grain-collection.ts`, `visualization-scene-manager.ts`, etc.) imports the renamed plumbing classes (`SampleResult`, `SliceFeatureResult`, etc.) directly from the barrel or result files
+- Porcelain type aliases in `porcelain.ts` are consumed only by `bounce-api.ts` (for REPL injection) and by type-level annotations where the union is semantically appropriate
+- No second import migration pass is needed: implementation code stays on plumbing names, REPL surface uses porcelain names
 
 ### Terminal UI Changes
 
@@ -207,6 +216,7 @@ Sample — an audio file loaded into Bounce
 ### Configuration/Build Changes
 
 - `package.json` `generate:help` script: add the new porcelain type generation pass
+- `src/renderer/results/index.ts`: add `export * from "./midi.js"` and `export * from "./pattern.js"` (currently missing)
 - `tsconfig.renderer.json`: no changes needed (new files are under `src/renderer/`)
 - `tsconfig.json` (library): may need to include `src/renderer/results/porcelain.ts` if it becomes a public export — TBD in IMPL
 
@@ -248,21 +258,23 @@ New Playwright test block in an existing or new spec file:
 | Risk | Mitigation |
 |---|---|
 | Rename touches many files — high chance of missed imports | Use `npm run build:electron` as compiler gate; fix all errors before merging |
-| `porcelain.ts` re-exports create circular import chains | Keep `porcelain.ts` as leaf (no imports from namespace files); only import from result files |
+| `porcelain.ts` re-exports create circular import chains | Keep `porcelain.ts` as leaf (no imports from namespace files); only import from result files. No result file should ever import from `porcelain.ts`. |
 | Generated file gets stale if author adds a new type | CI build step (`generate:help`) runs before TypeScript compile; missing type → compile error if referenced |
 | Promise wrapper classes reference the renamed sync class | Update class bodies during the rename pass; compiler catches mismatches |
+| Barrel files (`results/index.ts`) missing module re-exports | Add `midi.ts` and `pattern.ts` re-exports early in implementation (step 2) so all types flow through the standard import path |
 
 ## Implementation Order
 
 1. Add `TypeHelp`, `TypePropertyHelp`, `TypeMethodHelp` interfaces and `renderTypeHelp()` to `src/renderer/help.ts`
-2. Rename plumbing classes in `src/renderer/results/` (the minimal meaningful rename set)
-3. Fix all import errors from the rename (compiler-guided)
-4. Write `src/renderer/results/porcelain.ts` with type aliases and `@porcelain` JSDoc blocks
-5. Extend `scripts/generate-help.ts` to parse `porcelain.ts` and emit `porcelain-types.generated.ts`
-6. Wire the generated type help objects into `bounce-api.ts`
-7. Write unit tests in `src/porcelain-types.test.ts`
-8. Write Playwright assertions for REPL type help output
-9. Run `npm run build:electron` + `npm run lint` + `./build.sh`
+2. Add missing re-exports to `src/renderer/results/index.ts` (`midi.ts`, `pattern.ts`)
+3. Rename plumbing classes in `src/renderer/results/` (the minimal meaningful rename set)
+4. Fix all import errors from the rename (compiler-guided; barrel files propagate automatically)
+5. Write `src/renderer/results/porcelain.ts` with type aliases and `@porcelain` JSDoc blocks
+6. Extend `scripts/generate-help.ts` to parse `porcelain.ts` and emit `porcelain-types.generated.ts`
+7. Wire the generated type help objects into `bounce-api.ts`
+8. Write unit tests in `src/porcelain-types.test.ts`
+9. Write Playwright assertions for REPL type help output
+10. Run `npm run build:electron` + `npm run lint` + `./build.sh`
 
 ## Estimated Scope
 

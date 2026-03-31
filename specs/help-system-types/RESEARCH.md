@@ -15,7 +15,7 @@ Currently the plumbing type `Sample` doubles as the porcelain label. This create
 
 The goal is to:
 1. Establish a naming convention that separates plumbing types from porcelain types
-2. Introduce porcelain type aliases that express user intent (e.g., `type Sample = SampleSync | SamplePromise`)
+2. Introduce porcelain type aliases that express user intent (e.g., `type Sample = SampleResult | SamplePromise`)
 3. Build a documentation generator for porcelain types — analogous to the existing command help generator — that attaches `help()` and terminal summaries to the porcelain type names
 4. Expose this type help in the REPL so users can introspect what a `Sample` (or any other domain object) offers
 
@@ -101,7 +101,7 @@ All result types live under `src/renderer/results/`. The full sync/async pairing
 | `Sample` | `Sample` | `SamplePromise` |
 | `SliceFeature` | `SliceFeature` | `SliceFeaturePromise` |
 | `NmfFeature` | `NmfFeature` | `NmfFeaturePromise` |
-| `MfccFeature` | `MfccFeature` | _(none)_ |
+| `MfccFeature` | `MfccFeature` | `MfccFeaturePromise` |
 | `NxFeature` | `NxFeature` | `NxFeaturePromise` |
 | `GrainCollection` | _(none — only Promise)_ | `GrainCollectionPromise` |
 | `LsResult` | `LsResult` | `LsResultPromise` |
@@ -114,7 +114,7 @@ All result types live under `src/renderer/results/`. The full sync/async pairing
 | `AudioDevice` | `AudioDevice` | _(none)_ |
 | `RecordingHandle` | `RecordingHandle` | _(none — returns SamplePromise)_ |
 
-Note: `MfccFeature`, `Pattern`, `ProjectResult`, `InstrumentResult`, `AudioDevice`, `RecordingHandle` have no async variant — their porcelain type would just alias the single plumbing class (or they might be excluded from the renaming entirely).
+Note: `Pattern`, `ProjectResult`, `InstrumentResult`, `AudioDevice`, `RecordingHandle` have no async variant — their porcelain type would just alias the single plumbing class (or they might be excluded from the renaming entirely).
 
 ### Existing Command Help Generator Pattern
 
