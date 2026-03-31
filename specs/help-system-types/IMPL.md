@@ -6,27 +6,31 @@
 
 ## Context
 
-<!-- Brief summary referencing key points from PLAN.md -->
+From PLAN.md: Three-part implementation — rename plumbing classes, introduce porcelain.ts, generate type documentation and expose in REPL.
 
 ## Implementation Log
 
 <!-- Chronological notes as implementation progresses -->
 
-### {DATE} - Started Implementation
+### 2026-03-31 - Started Implementation
 
-<!-- What was done -->
-
-### {DATE} - {Milestone}
-
-<!-- Progress updates -->
+1. Added `TypeHelp`, `TypePropertyHelp`, `TypeMethodHelp` interfaces and `renderTypeHelp()` to `src/renderer/help.ts`
+2. Added missing `midi.ts` and `pattern.ts` re-exports to `src/renderer/results/index.ts`
+3. Renamed 11 plumbing classes with `Result` suffix across all result and consumer files
+4. Created `src/renderer/results/porcelain.ts` with 12 `@porcelain` JSDoc blocks and union type aliases
+5. Extended `src/help-generator.ts` with `processPorcelainFile()` and `generatePorcelainFile()`; extended `scripts/generate-help.ts` to run the new pass
+6. Wired `porcelainTypeHelps` into `bounce-api.ts` via `Object.fromEntries` spread on the `api` object
+7. Wrote `src/porcelain-types.test.ts` — 5 unit tests, all passing
+8. Wrote `tests/porcelain-types.spec.ts` — 5 Playwright e2e tests
 
 ## Decisions Made
 
-<!-- Important decisions made during implementation that weren't in the plan -->
+- `TypeMethodHelp.name` made optional — the `signature` field already carries the method name, so requiring both was redundant
+- `@porcelain` JSDoc summary is extracted from inline text on the `@porcelain TypeName` line; the generator handles this format
 
 ## Deviations from Plan
 
-<!-- Where implementation diverged from plan and why -->
+None — implementation followed the planned order exactly.
 
 ## Flaws Discovered in Previous Phases
 
