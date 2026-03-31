@@ -9,11 +9,11 @@ export const visCommands: CommandHelp[] = [
   {
     name: "waveform",
     signature: "vis.waveform(sampleOrPromise)",
-    summary: "Create a draft VisScene for a sample waveform",
+    summary: "Create a draft VisSceneResult for a sample waveform",
     description: `Create a draft visualization scene rooted in a sample waveform.
 Chain .overlay()/.panel()/.title() and call .show() to render it.`,
     params: [
-      { name: "sampleOrPromise", type: "Sample | PromiseLike<Sample>", description: "Resolved Sample or SamplePromise to visualize." },
+      { name: "sampleOrPromise", type: "SampleResult | PromiseLike<SampleResult>", description: "Resolved SampleResult or SamplePromise to visualize." },
     ],
     examples: [
       "const samp = sn.read(\"loop.wav\")\\nconst scene = vis.waveform(samp)\\nscene.show()",
@@ -24,7 +24,7 @@ Chain .overlay()/.panel()/.title() and call .show() to render it.`,
     name: "stack",
     signature: "vis.stack()",
     summary: "Build multiple visualization scenes in one chained expression",
-    description: "Create a VisStack and add scenes with .waveform(). Call .show() to render all.",
+    description: "Create a VisStackResult and add scenes with .waveform(). Call .show() to render all.",
     examples: [
       "vis.stack().waveform(a).waveform(b).show()",
     ],

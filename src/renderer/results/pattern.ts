@@ -2,7 +2,7 @@
 import { BounceResult } from "./base.js";
 import type { CompiledPattern } from "../pattern-parser.js";
 
-export class Pattern extends BounceResult {
+export class PatternResult extends BounceResult {
   private readonly notation: string;
   private readonly compiled: CompiledPattern;
 
@@ -19,19 +19,19 @@ export class Pattern extends BounceResult {
     this.compiled.channelIndex = channel - 1; // convert to 0-indexed
     const stepsJson = JSON.stringify(this.compiled.steps);
     window.electron.transportSetPattern(channel - 1, stepsJson);
-    return new BounceResult(`Pattern playing on channel ${channel}  bar: next`);
+    return new BounceResult(`PatternResult playing on channel ${channel}  bar: next`);
   }
 
   stop(): BounceResult {
     if (this.compiled.channelIndex >= 0) {
       window.electron.transportClearPattern(this.compiled.channelIndex);
     }
-    return new BounceResult("Pattern stopped");
+    return new BounceResult("PatternResult stopped");
   }
 
   help(): BounceResult {
     return new BounceResult(
-      `Pattern — a compiled X0X step pattern\n` +
+      `PatternResult — a compiled X0X step pattern\n` +
       `  p.play(1)     start playing on mixer channel 1 (1–8)\n` +
       `  p.stop()      stop the pattern on that channel\n` +
       `  p.help()      show this message\n` +
@@ -64,7 +64,7 @@ export class Pattern extends BounceResult {
     }
 
     const noteCount = noteEvents.size;
-    let out = `Pattern  steps: 16  notes: ${noteCount}\n`;
+    let out = `PatternResult  steps: 16  notes: ${noteCount}\n`;
     for (const [note, chars] of noteEvents) {
       const name = noteNames.get(note)!.padEnd(4);
       out += `  ${name}  ${chars.join(" ")}\n`;

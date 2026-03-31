@@ -42,7 +42,7 @@ Only one device can be open at a time; call midi.close() first if needed.`,
     signature: "midi.record(inst, opts?)",
     summary: "Start MIDI recording; returns handle or timed sequence",
     description: `Start recording MIDI events from the open input device.
-Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.
+Returns a MidiRecordingHandleResult when no duration is specified — call h.stop() to finish.
 Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.`,
     params: [
       { name: "inst", type: "MidiTargetInstrument", description: "Target instrument to associate with the recording." },

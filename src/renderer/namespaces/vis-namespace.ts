@@ -2,10 +2,10 @@
 /// <reference path="../bounce-globals.d.ts" />
 import {
   BounceResult,
-  Sample,
-  VisScene,
+  SampleResult,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   VisSceneListResult,
 } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
@@ -31,7 +31,7 @@ export function buildVisNamespace(deps: NamespaceDeps) {
     );
   }
 
-  function visSceneHelpText(scene: VisScene): BounceResult {
+  function visSceneHelpText(scene: VisSceneResult): BounceResult {
     return new BounceResult([
       "\x1b[1;36mVisScene\x1b[0m",
       "",
@@ -66,10 +66,10 @@ export function buildVisNamespace(deps: NamespaceDeps) {
   }
 
   function bindVisScene(
-    sample: Sample,
+    sample: SampleResult,
     titleText?: string,
-  ): VisScene {
-    const bound = new VisScene(
+  ): VisSceneResult {
+    const bound = new VisSceneResult(
       sample,
       titleText,
       {
@@ -85,8 +85,8 @@ export function buildVisNamespace(deps: NamespaceDeps) {
     return bound;
   }
 
-  function bindVisStack(): VisStack {
-    return new VisStack({
+  function bindVisStack(): VisStackResult {
+    return new VisStackResult({
       help: (): BounceResult => visStackHelpText(),
       show: async (stack): Promise<BounceResult> => {
         if (stack.scenes.length === 0) {
@@ -109,17 +109,17 @@ export function buildVisNamespace(deps: NamespaceDeps) {
 
     waveform: withHelp(
       /**
-       * Create a draft VisScene for a sample waveform
+       * Create a draft VisSceneResult for a sample waveform
        *
        * Create a draft visualization scene rooted in a sample waveform.
        * Chain .overlay()/.panel()/.title() and call .show() to render it.
        *
-       * @param sampleOrPromise Resolved Sample or SamplePromise to visualize.
+       * @param sampleOrPromise Resolved SampleResult or SamplePromise to visualize.
        * @example const samp = sn.read("loop.wav")\nconst scene = vis.waveform(samp)\nscene.show()
        * @example vis.waveform(sn.read("kick.wav")).show()
        */
-      function waveform(sampleOrPromise: Sample | PromiseLike<Sample>): VisScene | VisScenePromise {
-        if (isPromiseLike<Sample>(sampleOrPromise)) {
+      function waveform(sampleOrPromise: SampleResult | PromiseLike<SampleResult>): VisSceneResult | VisScenePromise {
+        if (isPromiseLike<SampleResult>(sampleOrPromise)) {
           return new VisScenePromise(
             Promise.resolve(sampleOrPromise).then((sample) =>
               bindVisScene(sample, `Waveform · ${sampleLabel(sample.filePath, sample.hash)}`),
@@ -135,17 +135,17 @@ export function buildVisNamespace(deps: NamespaceDeps) {
       /**
        * Build multiple visualization scenes in one chained expression
        *
-       * Create a VisStack and add scenes with .waveform(). Call .show() to render all.
+       * Create a VisStackResult and add scenes with .waveform(). Call .show() to render all.
        *
        * @example vis.stack().waveform(a).waveform(b).show()
        */
-      function stack(): VisStack {
+      function stack(): VisStackResult {
         const bound = bindVisStack();
-        (bound as VisStack & {
-          waveform: (sampleOrPromise: Sample | PromiseLike<Sample>) => VisStack;
-        }).waveform = (sampleOrPromise: Sample | PromiseLike<Sample>) => {
-          if (isPromiseLike<Sample>(sampleOrPromise)) {
-            throw new Error("vis.stack().waveform() requires a resolved Sample. Assign sn.read(...) to a variable first.");
+        (bound as VisStackResult & {
+          waveform: (sampleOrPromise: SampleResult | PromiseLike<SampleResult>) => VisStackResult;
+        }).waveform = (sampleOrPromise: SampleResult | PromiseLike<SampleResult>) => {
+          if (isPromiseLike<SampleResult>(sampleOrPromise)) {
+            throw new Error("vis.stack().waveform() requires a resolved SampleResult. Assign sn.read(...) to a variable first.");
           }
           return bound.addScene(
             bindVisScene(

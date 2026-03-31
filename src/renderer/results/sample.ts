@@ -5,12 +5,12 @@ import {
   NmfFeaturePromise,
   MfccFeaturePromise,
   NxFeaturePromise,
-  type SliceFeature,
-  type NmfFeature,
-  type MfccFeature,
-  type NxFeature,
+  type SliceFeatureResult,
+  type NmfFeatureResult,
+  type MfccFeatureResult,
+  type NxFeatureResult,
 } from "./features.js";
-import type { InputsResult, AudioDevice } from "./recording.js";
+import type { InputsResult, AudioDeviceResult } from "./recording.js";
 
 export interface LoopOptions {
   loopStart?: number;
@@ -19,20 +19,20 @@ export interface LoopOptions {
 
 export interface SampleMethodBindings {
   help: HelpFactory;
-  play: () => Promise<Sample>;
-  loop: ((opts?: LoopOptions) => Promise<Sample>) & { help: () => BounceResult };
+  play: () => Promise<SampleResult>;
+  loop: ((opts?: LoopOptions) => Promise<SampleResult>) & { help: () => BounceResult };
   stop: () => BounceResult;
-  display: () => Promise<Sample>;
+  display: () => Promise<SampleResult>;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
   sep: (options?: SepOptions) => Promise<BounceResult>;
   granularize: (options?: GranularizeOptions) => Promise<GrainCollection>;
-  onsetSlice: (options?: AnalyzeOptions) => Promise<SliceFeature>;
-  ampSlice: (options?: AmpSliceOptions) => Promise<SliceFeature>;
-  noveltySlice: (options?: NoveltySliceOptions) => Promise<SliceFeature>;
-  transientSlice: (options?: TransientSliceOptions) => Promise<SliceFeature>;
-  nmf: (options?: NmfOptions) => Promise<NmfFeature>;
-  mfcc: (options?: MFCCOptions) => Promise<MfccFeature>;
-  nx: (other: Sample | PromiseLike<Sample>, options?: { components?: number }) => Promise<NxFeature>;
+  onsetSlice: (options?: AnalyzeOptions) => Promise<SliceFeatureResult>;
+  ampSlice: (options?: AmpSliceOptions) => Promise<SliceFeatureResult>;
+  noveltySlice: (options?: NoveltySliceOptions) => Promise<SliceFeatureResult>;
+  transientSlice: (options?: TransientSliceOptions) => Promise<SliceFeatureResult>;
+  nmf: (options?: NmfOptions) => Promise<NmfFeatureResult>;
+  mfcc: (options?: MFCCOptions) => Promise<MfccFeatureResult>;
+  nx: (other: SampleResult | PromiseLike<SampleResult>, options?: { components?: number }) => Promise<NxFeatureResult>;
 }
 
 function unavailableSampleBindings(name: string): SampleMethodBindings {
@@ -86,7 +86,7 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
 /**
  * User-facing sample object in the REPL.
  */
-export class Sample extends HelpableResult {
+export class SampleResult extends HelpableResult {
   readonly loop: ((opts?: LoopOptions) => SamplePromise) & { help: () => BounceResult };
 
   constructor(
@@ -154,7 +154,7 @@ export class Sample extends HelpableResult {
     return new MfccFeaturePromise(this.bindings.mfcc(options));
   }
 
-  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+  nx(other: SampleResult | PromiseLike<SampleResult>, options?: { components?: number }): NxFeaturePromise {
     return new NxFeaturePromise(this.bindings.nx(other, options));
   }
 }
@@ -163,7 +163,7 @@ export class Sample extends HelpableResult {
  * Compatibility wrapper retained for internal/tests that still construct
  * simple audio identity objects directly.
  */
-export class AudioResult extends Sample {
+export class AudioResult extends SampleResult {
   constructor(
     display: string,
     hash: string,
@@ -198,7 +198,7 @@ export interface SampleSummaryFeature {
 export class SampleListResult extends HelpableResult {
   constructor(
     display: string,
-    public readonly samples: Sample[],
+    public readonly samples: SampleResult[],
     public readonly features: SampleSummaryFeature[],
     helpFactory: HelpFactory,
   ) {
@@ -209,7 +209,7 @@ export class SampleListResult extends HelpableResult {
     return this.samples.length;
   }
 
-  [Symbol.iterator](): Iterator<Sample> {
+  [Symbol.iterator](): Iterator<SampleResult> {
     return this.samples[Symbol.iterator]();
   }
 }
@@ -223,14 +223,14 @@ export type SampleNamespace = {
   current: (() => CurrentSamplePromise) & { help: () => BounceResult };
   stop: (() => BounceResult) & { help: () => BounceResult };
   inputs: (() => Promise<InputsResult>) & { help: () => BounceResult };
-  dev: ((index: number) => Promise<AudioDevice>) & { help: () => BounceResult };
+  dev: ((index: number) => Promise<AudioDeviceResult>) & { help: () => BounceResult };
 };
 
-export class SamplePromise implements PromiseLike<Sample> {
-  constructor(protected readonly promise: Promise<Sample>) {}
+export class SamplePromise implements PromiseLike<SampleResult> {
+  constructor(protected readonly promise: Promise<SampleResult>) {}
 
-  then<TResult1 = Sample, TResult2 = never>(
-    onfulfilled?: ((value: Sample) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = SampleResult, TResult2 = never>(
+    onfulfilled?: ((value: SampleResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -238,7 +238,7 @@ export class SamplePromise implements PromiseLike<Sample> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<Sample | TResult> {
+  ): Promise<SampleResult | TResult> {
     return this.promise.catch(onrejected);
   }
 
@@ -298,16 +298,16 @@ export class SamplePromise implements PromiseLike<Sample> {
     return new MfccFeaturePromise(this.promise.then((sample) => sample.mfcc(options)));
   }
 
-  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+  nx(other: SampleResult | PromiseLike<SampleResult>, options?: { components?: number }): NxFeaturePromise {
     return new NxFeaturePromise(this.promise.then((sample) => sample.nx(other, options)));
   }
 }
 
-export class CurrentSamplePromise implements PromiseLike<Sample | null> {
-  constructor(private readonly promise: Promise<Sample | null>) {}
+export class CurrentSamplePromise implements PromiseLike<SampleResult | null> {
+  constructor(private readonly promise: Promise<SampleResult | null>) {}
 
-  then<TResult1 = Sample | null, TResult2 = never>(
-    onfulfilled?: ((value: Sample | null) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = SampleResult | null, TResult2 = never>(
+    onfulfilled?: ((value: SampleResult | null) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -315,11 +315,11 @@ export class CurrentSamplePromise implements PromiseLike<Sample | null> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<Sample | null | TResult> {
+  ): Promise<SampleResult | null | TResult> {
     return this.promise.catch(onrejected);
   }
 
-  private requireSample(): Promise<Sample> {
+  private requireSample(): Promise<SampleResult> {
     return this.promise.then((sample) => {
       if (!sample) {
         throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
@@ -384,7 +384,7 @@ export class CurrentSamplePromise implements PromiseLike<Sample | null> {
     return new MfccFeaturePromise(this.requireSample().then((sample) => sample.mfcc(options)));
   }
 
-  nx(other: Sample | PromiseLike<Sample>, options?: { components?: number }): NxFeaturePromise {
+  nx(other: SampleResult | PromiseLike<SampleResult>, options?: { components?: number }): NxFeaturePromise {
     return new NxFeaturePromise(this.requireSample().then((sample) => sample.nx(other, options)));
   }
 }
@@ -410,17 +410,17 @@ export class GrainCollectionPromise implements PromiseLike<GrainCollection> {
   }
 
   forEach(
-    callback: (grain: Sample, index: number) => void | Promise<void>,
+    callback: (grain: SampleResult, index: number) => void | Promise<void>,
   ): Promise<void> {
     return this.promise.then((collection) => collection.forEach(callback));
   }
 
-  map<T>(callback: (grain: Sample, index: number) => T): Promise<T[]> {
+  map<T>(callback: (grain: SampleResult, index: number) => T): Promise<T[]> {
     return this.promise.then((collection) => collection.map(callback));
   }
 
   filter(
-    predicate: (grain: Sample, index: number) => boolean,
+    predicate: (grain: SampleResult, index: number) => boolean,
   ): GrainCollectionPromise {
     return new GrainCollectionPromise(this.promise.then((collection) => collection.filter(predicate)));
   }

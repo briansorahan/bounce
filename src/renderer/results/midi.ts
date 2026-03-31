@@ -166,10 +166,10 @@ export class MidiSequencePromise implements PromiseLike<MidiSequenceResult> {
 }
 
 // ---------------------------------------------------------------------------
-// MidiRecordingHandle — returned by midi.record(inst) without a duration.
+// MidiRecordingHandleResult — returned by midi.record(inst) without a duration.
 // Not PromiseLike — stores without blocking the REPL.
 // ---------------------------------------------------------------------------
-export class MidiRecordingHandle extends BounceResult {
+export class MidiRecordingHandleResult extends BounceResult {
   constructor(
     private readonly instrumentName: string,
     private readonly stopFn: () => Promise<MidiSequenceResult>,

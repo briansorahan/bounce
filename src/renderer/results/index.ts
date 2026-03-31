@@ -1,5 +1,7 @@
 export * from "./base.js";
 export * from "./filesystem.js";
+export * from "./midi.js";
+export * from "./pattern.js";
 export * from "./project.js";
 export * from "./recording.js";
 export * from "./environment.js";

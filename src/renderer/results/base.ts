@@ -1,4 +1,4 @@
-import type { Sample } from "./sample.js";
+import type { SampleResult } from "./sample.js";
 
 export function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
   return typeof (value as PromiseLike<T>)?.then === "function";
@@ -40,12 +40,12 @@ export class HelpableResult extends BounceResult {
  * Base feature result object.
  */
 export class FeatureResult extends HelpableResult {
-  public readonly source: Sample | undefined;
+  public readonly source: SampleResult | undefined;
   public readonly sourceHash: string;
 
   constructor(
     display: string,
-    source: Sample | string,
+    source: SampleResult | string,
     public readonly featureHash: string,
     public readonly featureType: string,
     public readonly options: unknown,

@@ -3,7 +3,7 @@
 
 import type { CommandHelp } from "../help.js";
 
-export const patDescription: string = "Pattern DSL for rhythmic sequencing";
+export const patDescription: string = "PatternResult DSL for rhythmic sequencing";
 
 export const patCommands: CommandHelp[] = [
   {
@@ -11,7 +11,7 @@ export const patCommands: CommandHelp[] = [
     signature: "pat.xox(notation)",
     summary: "Compile an X0X step pattern for live-coding",
     description: `Compile an X0X step-sequencer pattern from a multi-line notation string.
-Returns a Pattern object that can be played with .play(channel).
+Returns a PatternResult object that can be played with .play(channel).
 
 X0X notation rules:
   Each line:  NOTE = STEPS   (16 non-whitespace step characters)

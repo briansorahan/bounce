@@ -3,7 +3,7 @@ import { renderNamespaceHelp, withHelp } from "../help.js";
 import {
   MidiDevicesResult,
   MidiDeviceResult,
-  MidiRecordingHandle,
+  MidiRecordingHandleResult,
   MidiSequenceResult,
   MidiSequencePromise,
   MidiSequencesResult,
@@ -94,7 +94,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
        * Start MIDI recording; returns handle or timed sequence
        *
        * Start recording MIDI events from the open input device.
-       * Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.
+       * Returns a MidiRecordingHandleResult when no duration is specified — call h.stop() to finish.
        * Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.
        *
        * @param inst Target instrument to associate with the recording.
@@ -105,7 +105,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
       function record(
         inst: MidiTargetInstrument,
         opts?: MidiRecordOptions,
-      ): MidiRecordingHandle | MidiSequencePromise {
+      ): MidiRecordingHandleResult | MidiSequencePromise {
         const instrName = inst.name ?? inst.instrumentId;
         const sequenceName = opts?.name ?? generateSequenceName();
 
@@ -144,7 +144,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
           );
         }
 
-        return new MidiRecordingHandle(instrName, stopAndSave);
+        return new MidiRecordingHandleResult(instrName, stopAndSave);
       },
       midiCommands[3],
     ),

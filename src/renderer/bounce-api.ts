@@ -5,14 +5,14 @@ import { BounceTerminal } from "./terminal.js";
 import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 import {
   BounceResult,
-  Sample,
-  SliceFeature,
-  NmfFeature,
-  NxFeature,
-  MfccFeature,
-  VisScene,
+  SampleResult,
+  SliceFeatureResult,
+  NmfFeatureResult,
+  NxFeatureResult,
+  MfccFeatureResult,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   VisSceneListResult,
   SampleNamespace,
   SampleListResult,
@@ -34,8 +34,8 @@ import {
   LsResultPromise,
   GlobResultPromise,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
 } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 import type { RuntimeScopeEntry } from "./runtime-introspection.js";
@@ -55,14 +55,14 @@ import { buildPatNamespace } from "./namespaces/pat-namespace.js";
 
 export {
   BounceResult,
-  Sample,
-  SliceFeature,
-  NmfFeature,
-  NxFeature,
-  MfccFeature,
-  VisScene,
+  SampleResult,
+  SliceFeatureResult,
+  NmfFeatureResult,
+  NxFeatureResult,
+  MfccFeatureResult,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   VisSceneListResult,
   SampleNamespace,
   SampleListResult,
@@ -85,8 +85,8 @@ export {
   GlobResultPromise,
   GrainCollection,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
 };
 
 export interface BounceApiDeps {

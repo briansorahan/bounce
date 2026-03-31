@@ -95,7 +95,7 @@ declare class BounceResult {
 
 type ReplValue<T> = T extends PromiseLike<infer U> ? U : T;
 
-declare class Sample extends BounceResult {
+declare class SampleResult extends BounceResult {
   readonly hash: string;
   readonly filePath: string | undefined;
   readonly sampleRate: number;
@@ -104,23 +104,23 @@ declare class Sample extends BounceResult {
   readonly id: number | undefined;
 
   help(): BounceResult;
-  play(): ReplValue<Promise<Sample>>;
-  readonly loop: ((opts?: { loopStart?: number; loopEnd?: number }) => ReplValue<Promise<Sample>>) & { help: () => BounceResult };
+  play(): ReplValue<Promise<SampleResult>>;
+  readonly loop: ((opts?: { loopStart?: number; loopEnd?: number }) => ReplValue<Promise<SampleResult>>) & { help: () => BounceResult };
   stop(): BounceResult;
-  display(): ReplValue<Promise<Sample>>;
+  display(): ReplValue<Promise<SampleResult>>;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
   granularize(options?: GranularizeOptions): ReplValue<Promise<GrainCollection>>;
-  onsetSlice(options?: AnalyzeOptions): ReplValue<Promise<SliceFeature>>;
-  ampSlice(options?: AmpSliceOptions): ReplValue<Promise<SliceFeature>>;
-  noveltySlice(options?: NoveltySliceOptions): ReplValue<Promise<SliceFeature>>;
-  transientSlice(options?: TransientSliceOptions): ReplValue<Promise<SliceFeature>>;
-  nmf(options?: NmfOptions): ReplValue<Promise<NmfFeature>>;
-  mfcc(options?: MFCCOptions): ReplValue<Promise<MfccFeature>>;
+  onsetSlice(options?: AnalyzeOptions): ReplValue<Promise<SliceFeatureResult>>;
+  ampSlice(options?: AmpSliceOptions): ReplValue<Promise<SliceFeatureResult>>;
+  noveltySlice(options?: NoveltySliceOptions): ReplValue<Promise<SliceFeatureResult>>;
+  transientSlice(options?: TransientSliceOptions): ReplValue<Promise<SliceFeatureResult>>;
+  nmf(options?: NmfOptions): ReplValue<Promise<NmfFeatureResult>>;
+  mfcc(options?: MFCCOptions): ReplValue<Promise<MfccFeatureResult>>;
 }
 
 declare class FeatureResult extends BounceResult {
-  readonly source: Sample | undefined;
+  readonly source: SampleResult | undefined;
   readonly sourceHash: string;
   readonly featureHash: string;
   readonly featureType: string;
@@ -128,25 +128,25 @@ declare class FeatureResult extends BounceResult {
   help(): BounceResult;
 }
 
-declare class SliceFeature extends FeatureResult {
+declare class SliceFeatureResult extends FeatureResult {
   readonly slices: number[];
   readonly count: number;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
-  playSlice(index?: number): ReplValue<Promise<Sample>>;
+  playSlice(index?: number): ReplValue<Promise<SampleResult>>;
   toSampler(opts: ToSamplerOptions): ReplValue<Promise<InstrumentResult>>;
 }
 
-declare class NmfFeature extends FeatureResult {
+declare class NmfFeatureResult extends FeatureResult {
   readonly components: number | undefined;
   readonly iterations: number | undefined;
   readonly converged: boolean | undefined;
   readonly bases: number[][] | Float32Array[] | undefined;
   readonly activations: number[][] | Float32Array[] | undefined;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
-  playComponent(index?: number): ReplValue<Promise<Sample>>;
+  playComponent(index?: number): ReplValue<Promise<SampleResult>>;
 }
 
-declare class MfccFeature extends FeatureResult {
+declare class MfccFeatureResult extends FeatureResult {
   readonly numFrames: number;
   readonly numCoeffs: number;
 }
@@ -170,11 +170,11 @@ interface SampleSummaryFeature {
 }
 
 declare class SampleListResult extends BounceResult {
-  readonly samples: Sample[];
+  readonly samples: SampleResult[];
   readonly features: SampleSummaryFeature[];
   readonly length: number;
   help(): BounceResult;
-  [Symbol.iterator](): Iterator<Sample>;
+  [Symbol.iterator](): Iterator<SampleResult>;
 }
 
 declare class ProjectResult extends BounceResult {
@@ -242,16 +242,16 @@ declare class EnvFunctionListResult extends BounceResult {
 
 declare class GrainCollection extends BounceResult {
   length(): number;
-  forEach(callback: (grain: Sample, index: number) => void | Promise<void>): Promise<void>;
-  map<T>(callback: (grain: Sample, index: number) => T): T[];
-  filter(predicate: (grain: Sample, index: number) => boolean): GrainCollection;
+  forEach(callback: (grain: SampleResult, index: number) => void | Promise<void>): Promise<void>;
+  map<T>(callback: (grain: SampleResult, index: number) => T): T[];
+  filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection;
 }
 
 interface SampleNamespace {
   help(): BounceResult;
   stop(): BounceResult;
   read: {
-    (pathOrHash: string): ReplValue<Promise<Sample>>;
+    (pathOrHash: string): ReplValue<Promise<SampleResult>>;
     help(): BounceResult;
   };
   list: {
@@ -259,7 +259,7 @@ interface SampleNamespace {
     help(): BounceResult;
   };
   current: {
-    (): ReplValue<Promise<Sample | null>>;
+    (): ReplValue<Promise<SampleResult | null>>;
     help(): BounceResult;
   };
 }
@@ -308,26 +308,26 @@ interface ProjectNamespace {
 
 declare const proj: ProjectNamespace;
 
-declare class VisScene extends BounceResult {
-  readonly sample: Sample;
-  readonly overlays: Array<SliceFeature | NmfFeature>;
-  readonly panels: NmfFeature[];
+declare class VisSceneResult extends BounceResult {
+  readonly sample: SampleResult;
+  readonly overlays: Array<SliceFeatureResult | NmfFeatureResult>;
+  readonly panels: NmfFeatureResult[];
   readonly sceneId: string | undefined;
   readonly titleText: string | undefined;
   help(): BounceResult;
-  title(text: string): VisScene;
-  overlay(feature: SliceFeature | NmfFeature): VisScene;
-  panel(feature: NmfFeature): VisScene;
+  title(text: string): VisSceneResult;
+  overlay(feature: SliceFeatureResult | NmfFeatureResult): VisSceneResult;
+  panel(feature: NmfFeatureResult): VisSceneResult;
   show(): ReplValue<Promise<BounceResult>>;
 }
 
-declare class VisStack extends BounceResult {
-  readonly scenes: VisScene[];
+declare class VisStackResult extends BounceResult {
+  readonly scenes: VisSceneResult[];
   help(): BounceResult;
-  waveform(sample: Sample): VisStack;
-  title(text: string): VisStack;
-  overlay(feature: SliceFeature | NmfFeature): VisStack;
-  panel(feature: NmfFeature): VisStack;
+  waveform(sample: SampleResult): VisStackResult;
+  title(text: string): VisStackResult;
+  overlay(feature: SliceFeatureResult | NmfFeatureResult): VisStackResult;
+  panel(feature: NmfFeatureResult): VisStackResult;
   show(): ReplValue<Promise<BounceResult>>;
 }
 
@@ -349,11 +349,11 @@ declare class VisSceneListResult extends BounceResult {
 declare const vis: {
   help(): BounceResult;
   waveform: {
-    (sample: Sample): VisScene;
+    (sample: SampleResult): VisSceneResult;
     help(): BounceResult;
   };
   stack: {
-    (): VisStack;
+    (): VisStackResult;
     help(): BounceResult;
   };
   list: {
@@ -392,7 +392,7 @@ declare const clear: {
 
 declare const corpus: {
   help(): BounceResult;
-  build(source?: string | Sample | Promise<Sample>, featureHashOverride?: string): ReplValue<Promise<BounceResult>>;
+  build(source?: string | SampleResult | Promise<SampleResult>, featureHashOverride?: string): ReplValue<Promise<BounceResult>>;
   query(segmentIndex: number, k?: number): ReplValue<Promise<BounceResult>>;
   resynthesize(queryIndices: number[]): ReplValue<Promise<BounceResult>>;
 };

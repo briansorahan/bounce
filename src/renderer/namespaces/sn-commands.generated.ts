@@ -9,8 +9,8 @@ export const snCommands: CommandHelp[] = [
   {
     name: "read",
     signature: "sn.read(path)",
-    summary: "Load an audio file from disk and return a Sample object",
-    description: `Load an audio file from disk and return a Sample object.
+    summary: "Load an audio file from disk and return a SampleResult object",
+    description: `Load an audio file from disk and return a SampleResult object.
 The sample is stored in the project database for future access via sn.load().`,
     params: [
       { name: "path", type: "string", description: "File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS." },
@@ -23,8 +23,8 @@ The sample is stored in the project database for future access via sn.load().`,
   {
     name: "load",
     signature: "sn.load(hash)",
-    summary: "Load a stored sample by hash and return a Sample object",
-    description: `Load a stored sample by its hash (or hash prefix) and return a Sample object.
+    summary: "Load a stored sample by hash and return a SampleResult object",
+    description: `Load a stored sample by its hash (or hash prefix) and return a SampleResult object.
 Use sn.list() to see available sample hashes.`,
     params: [
       { name: "hash", type: "string", description: "Full or prefix hash from sn.list()." },
@@ -76,8 +76,8 @@ Use the index shown to open a device with sn.dev(index).`,
     name: "dev",
     signature: "sn.dev(index)",
     summary: "Open an audio input device by index for recording",
-    description: `Open an audio input device by index (from sn.inputs()) and return an AudioDevice.
-Use AudioDevice.record() to start recording.`,
+    description: `Open an audio input device by index (from sn.inputs()) and return an AudioDeviceResult.
+Use AudioDeviceResult.record() to start recording.`,
     params: [
       { name: "index", type: "number", description: "Device index from sn.inputs()." },
     ],

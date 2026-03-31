@@ -2,7 +2,7 @@
 /// <reference path="../bounce-globals.d.ts" />
 import {
   BounceResult,
-  Sample,
+  SampleResult,
 } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
@@ -26,8 +26,8 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
     );
   }
 
-  async function resolveSample(source: Sample | PromiseLike<Sample>): Promise<Sample> {
-    return isPromiseLike<Sample>(source) ? await source : source;
+  async function resolveSample(source: SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
+    return isPromiseLike<SampleResult>(source) ? await source : source;
   }
 
   const corpus = {
@@ -48,7 +48,7 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
        * @example corpus.build()
        */
       async function build(
-        source?: string | Sample | PromiseLike<Sample>,
+        source?: string | SampleResult | PromiseLike<SampleResult>,
         featureHashOverride?: string,
       ): Promise<BounceResult> {
         let sourceHash: string;
@@ -59,8 +59,8 @@ export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBi
           if (!featureHashOverride) throw new Error("featureHash required when passing sourceHash as string.");
           featureHash = featureHashOverride;
         } else {
-          let resolved: Sample | undefined;
-          if (source !== undefined) resolved = await resolveSample(source as Sample | PromiseLike<Sample>);
+          let resolved: SampleResult | undefined;
+          if (source !== undefined) resolved = await resolveSample(source as SampleResult | PromiseLike<SampleResult>);
           const hash = resolved?.hash ?? audioManager.getCurrentAudio()?.hash;
           if (!hash) throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
           sourceHash = hash;
