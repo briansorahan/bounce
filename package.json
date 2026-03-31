@@ -17,7 +17,7 @@
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "lint": "eslint src/**/*.ts",
     "start:electron": "npm run build:electron && electron .",
-    "test": "tsx src/test.ts && tsx src/command-parser.test.ts && tsx src/tab-completion.test.ts && tsx src/grain-collection.test.ts && tsx src/settings-store.test.ts && tsx src/help.test.ts && tsx src/help-codegen.test.ts",
+    "test": "tsx src/test.ts && tsx src/command-parser.test.ts && tsx src/tab-completion.test.ts && tsx src/grain-collection.test.ts && tsx src/settings-store.test.ts && tsx src/help.test.ts && tsx src/help-codegen.test.ts && tsx src/porcelain-types.test.ts",
     "test:e2e": "playwright test",
     "test:workflow": "npm ci --ignore-scripts && node node_modules/electron/install.js && npm run rebuild && npm run lint && npm run build && npm test && rm -rf dist && npm run build:electron && npx playwright install --with-deps chromium && npx playwright test",
     "generate:help": "npx tsx scripts/generate-help.ts"
