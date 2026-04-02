@@ -14,10 +14,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { porcelainTypeHelps } from "./renderer/results/porcelain-types.generated.js";
 import { renderTypeHelp, type TypeHelp } from "./renderer/help.js";
-import { processPorcelainFile, generatePorcelainFile } from "./help-generator.js";
+import { processPorcelainFile, generatePorcelainFile, processOptsFile } from "./help-generator.js";
 
 const PORCELAIN_SRC = join(process.cwd(), "src/renderer/results/porcelain.ts");
 const PORCELAIN_GENERATED = join(process.cwd(), "src/renderer/results/porcelain-types.generated.ts");
+const OPTS_DOCS_PATH = join(process.cwd(), "src/renderer/opts-docs.ts");
 
 // ---------------------------------------------------------------------------
 // Test 1: Shape invariants for every generated type
@@ -148,7 +149,8 @@ const PORCELAIN_GENERATED = join(process.cwd(), "src/renderer/results/porcelain-
 {
   console.log("Test 5: Staleness check...");
   const types = processPorcelainFile(PORCELAIN_SRC);
-  const freshOutput = generatePorcelainFile(types);
+  const { methodRegistry: methodOptsRegistry } = processOptsFile(OPTS_DOCS_PATH);
+  const freshOutput = generatePorcelainFile(types, methodOptsRegistry);
   const onDisk = readFileSync(PORCELAIN_GENERATED, "utf8");
   assert.strictEqual(
     freshOutput,

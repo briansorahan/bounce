@@ -46,7 +46,16 @@ Returns a MidiRecordingHandleResult when no duration is specified — call h.sto
 Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.`,
     params: [
       { name: "inst", type: "MidiTargetInstrument", description: "Target instrument to associate with the recording." },
-      { name: "opts", type: "MidiRecordOptions", description: "Recording options (duration in seconds, name for the saved sequence).", optional: true },
+      {
+        name: "opts",
+        type: "MidiRecordOptions",
+        description: "Recording options (duration in seconds, name for the saved sequence).",
+        optional: true,
+        properties: [
+          { name: "duration", type: "number", description: "Stop recording automatically after this many seconds", optional: true },
+          { name: "name", type: "string", description: "Name to save the recorded sequence under (auto-generated if omitted)", optional: true },
+        ],
+      },
     ],
     returns: "MidiRecordingHandle",
     examples: [

@@ -1,5 +1,12 @@
 import { BounceResult } from "./results/base.js";
 
+export interface OptsPropertyHelp {
+  name: string;
+  type: string;
+  description: string;
+  optional?: boolean;
+}
+
 export interface CommandHelp {
   name: string;
   signature: string;
@@ -10,6 +17,7 @@ export interface CommandHelp {
     type: string;
     description: string;
     optional?: boolean;
+    properties?: OptsPropertyHelp[];
   }>;
   returns?: string;
   examples?: string[];
@@ -62,6 +70,19 @@ export function renderCommandHelp(cmd: CommandHelp): BounceResult {
       const pad = " ".repeat(Math.max(1, maxName - p.name.length + 2));
       const opt = p.optional ? " (optional)" : "";
       lines.push(`  \x1b[33m${p.name}\x1b[0m${pad}${p.description}${opt}`);
+      if (p.properties?.length) {
+        const maxProp = p.properties.reduce(
+          (max, pp) => Math.max(max, pp.name.length),
+          0,
+        );
+        for (const pp of p.properties) {
+          const ppPad = " ".repeat(Math.max(1, maxProp - pp.name.length + 2));
+          const ppOpt = pp.optional !== false ? "" : " (required)";
+          lines.push(
+            `    \x1b[32m${pp.name}\x1b[0m${ppPad}\x1b[90m${pp.type}\x1b[0m  ${pp.description}${ppOpt}`,
+          );
+        }
+      }
     }
   }
 
@@ -99,6 +120,7 @@ export interface TypeMethodHelp {
     type: string;
     description: string;
     optional?: boolean;
+    properties?: OptsPropertyHelp[];
   }>;
   returns?: string;
 }
@@ -173,6 +195,33 @@ export function renderMethodHelp(
     "",
     `  ${method.summary}`,
   ];
+
+  if (method.params?.length) {
+    lines.push("");
+    const maxName = method.params.reduce(
+      (max, p) => Math.max(max, p.name.length),
+      0,
+    );
+    for (const p of method.params) {
+      const pad = " ".repeat(Math.max(1, maxName - p.name.length + 2));
+      const opt = p.optional !== false ? " (optional)" : "";
+      lines.push(`  \x1b[33m${p.name}\x1b[0m${pad}${p.description}${opt}`);
+      if (p.properties?.length) {
+        const maxProp = p.properties.reduce(
+          (max, pp) => Math.max(max, pp.name.length),
+          0,
+        );
+        for (const pp of p.properties) {
+          const ppPad = " ".repeat(Math.max(1, maxProp - pp.name.length + 2));
+          const ppOpt = pp.optional !== false ? "" : " (required)";
+          lines.push(
+            `    \x1b[32m${pp.name}\x1b[0m${ppPad}\x1b[90m${pp.type}\x1b[0m  ${pp.description}${ppOpt}`,
+          );
+        }
+      }
+    }
+  }
+
   return new BounceResult(lines.join("\n"));
 }
 

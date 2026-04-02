@@ -19,14 +19,156 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { signature: "loop(opts?)", summary: "Loop the sample, optionally with loop points → Sample" },
       { signature: "stop()", summary: "Stop playback" },
       { signature: "display()", summary: "Render the waveform visualization → Sample" },
-      { signature: "onsetSlice(opts?)", summary: "Onset-based slice analysis → SliceFeature" },
-      { signature: "ampSlice(opts?)", summary: "Amplitude-based slice analysis → SliceFeature" },
-      { signature: "noveltySlice(opts?)", summary: "Novelty-based slice analysis → SliceFeature" },
-      { signature: "transientSlice(opts?)", summary: "Transient-based slice analysis → SliceFeature" },
-      { signature: "nmf(opts?)", summary: "NMF decomposition → NmfFeature" },
-      { signature: "mfcc(opts?)", summary: "MFCC analysis → MfccFeature" },
+      {
+        signature: "onsetSlice(opts?)",
+        summary: "Onset-based slice analysis → SliceFeature",
+        params: [
+          {
+            name: "opts",
+            type: "AnalyzeOptions",
+            description: "Options for onset-based (amplitude-envelope) slice analysis.",
+            optional: true,
+          properties: [
+            { name: "threshold", type: "number", description: "Onset detection threshold 0–1 (default: 0.5)", optional: true },
+            { name: "minSliceLength", type: "number", description: "Minimum slice duration in frames (default: 2)", optional: true },
+            { name: "filterSize", type: "number", description: "Smoothing filter size in frames (default: 1)", optional: true },
+            { name: "frameDelta", type: "number", description: "Minimum inter-onset delta in frames (default: 0)", optional: true },
+            { name: "metric", type: "number", description: "Analysis metric: 0=energy, 1=HFC, 2=spectral (default: 0)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "ampSlice(opts?)",
+        summary: "Amplitude-based slice analysis → SliceFeature",
+        params: [
+          {
+            name: "opts",
+            type: "AmpSliceOptions",
+            description: "Options for amplitude-envelope-based slice analysis.",
+            optional: true,
+          properties: [
+            { name: "fastRampUp", type: "number", description: "Fast attack time in ms (default: 10)", optional: true },
+            { name: "fastRampDown", type: "number", description: "Fast release time in ms (default: 10)", optional: true },
+            { name: "slowRampUp", type: "number", description: "Slow attack time in ms (default: 100)", optional: true },
+            { name: "slowRampDown", type: "number", description: "Slow release time in ms (default: 100)", optional: true },
+            { name: "onThreshold", type: "number", description: "Level above which a slice onset is detected 0–1 (default: 0.9)", optional: true },
+            { name: "offThreshold", type: "number", description: "Level below which a slice end is detected 0–1 (default: 0.1)", optional: true },
+            { name: "floor", type: "number", description: "Noise floor threshold 0–1 (default: 0.001)", optional: true },
+            { name: "minSliceLength", type: "number", description: "Minimum slice duration in samples (default: 2)", optional: true },
+            { name: "highPassFreq", type: "number", description: "High-pass filter frequency before analysis in Hz (default: 85)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "noveltySlice(opts?)",
+        summary: "Novelty-based slice analysis → SliceFeature",
+        params: [
+          {
+            name: "opts",
+            type: "NoveltySliceOptions",
+            description: "Options for novelty-function-based slice analysis.",
+            optional: true,
+          properties: [
+            { name: "kernelSize", type: "number", description: "Novelty kernel size in frames (default: 3)", optional: true },
+            { name: "threshold", type: "number", description: "Novelty detection threshold (default: 0.5)", optional: true },
+            { name: "filterSize", type: "number", description: "Smoothing filter size in frames (default: 1)", optional: true },
+            { name: "minSliceLength", type: "number", description: "Minimum slice duration in frames (default: 2)", optional: true },
+            { name: "windowSize", type: "number", description: "Analysis window size in samples (default: 1024)", optional: true },
+            { name: "fftSize", type: "number", description: "FFT size in samples (default: 1024)", optional: true },
+            { name: "hopSize", type: "number", description: "Analysis hop size in samples (default: 512)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "transientSlice(opts?)",
+        summary: "Transient-based slice analysis → SliceFeature",
+        params: [
+          {
+            name: "opts",
+            type: "TransientSliceOptions",
+            description: "Options for transient-based slice analysis.",
+            optional: true,
+          properties: [
+            { name: "order", type: "number", description: "AR model order for transient prediction (default: 20)", optional: true },
+            { name: "blockSize", type: "number", description: "Block size for AR model analysis in samples (default: 256)", optional: true },
+            { name: "padSize", type: "number", description: "Padding added around blocks in samples (default: 128)", optional: true },
+            { name: "skew", type: "number", description: "Tilt of the analysis window 0–1 (default: 0)", optional: true },
+            { name: "threshFwd", type: "number", description: "Forward detection threshold (default: 3)", optional: true },
+            { name: "threshBack", type: "number", description: "Backward detection threshold (default: 1.5)", optional: true },
+            { name: "windowSize", type: "number", description: "Analysis window size in samples (default: 14)", optional: true },
+            { name: "clumpLength", type: "number", description: "Clump adjacent transients within this many samples (default: 25)", optional: true },
+            { name: "minSliceLength", type: "number", description: "Minimum slice duration in samples (default: 1000)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "nmf(opts?)",
+        summary: "NMF decomposition → NmfFeature",
+        params: [
+          {
+            name: "opts",
+            type: "NmfOptions",
+            description: "Options for NMF (Non-negative Matrix Factorization) decomposition.",
+            optional: true,
+          properties: [
+            { name: "components", type: "number", description: "Number of NMF components to extract (default: 2)", optional: true },
+            { name: "iterations", type: "number", description: "Maximum number of optimization iterations (default: 100)", optional: true },
+            { name: "fftSize", type: "number", description: "FFT size in samples (default: 1024)", optional: true },
+            { name: "hopSize", type: "number", description: "Analysis hop size in samples (default: 512)", optional: true },
+            { name: "windowSize", type: "number", description: "Analysis window size in samples (default: 1024)", optional: true },
+            { name: "seed", type: "number", description: "Random seed for reproducibility (default: 0)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "mfcc(opts?)",
+        summary: "MFCC analysis → MfccFeature",
+        params: [
+          {
+            name: "opts",
+            type: "MFCCOptions",
+            description: "Options for MFCC (Mel-Frequency Cepstral Coefficients) analysis.",
+            optional: true,
+          properties: [
+            { name: "numCoeffs", type: "number", description: "Number of MFCC coefficients per frame (default: 13)", optional: true },
+            { name: "numBands", type: "number", description: "Number of mel bands (default: 40)", optional: true },
+            { name: "minFreq", type: "number", description: "Minimum frequency in Hz (default: 20)", optional: true },
+            { name: "maxFreq", type: "number", description: "Maximum frequency in Hz (default: 20000)", optional: true },
+            { name: "windowSize", type: "number", description: "Analysis window size in samples (default: 1024)", optional: true },
+            { name: "fftSize", type: "number", description: "FFT size in samples (default: 1024)", optional: true },
+            { name: "hopSize", type: "number", description: "Analysis hop size in samples (default: 512)", optional: true },
+            { name: "sampleRate", type: "number", description: "Override sample rate in Hz (default: from file)", optional: true },
+          ],
+          },
+        ],
+      },
       { signature: "nx(other, opts?)", summary: "NMF cross-synthesis with another sample → NxFeature" },
-      { signature: "granularize(opts?)", summary: "Decompose into a grain collection → GrainCollection" },
+      {
+        signature: "granularize(opts?)",
+        summary: "Decompose into a grain collection → GrainCollection",
+        params: [
+          {
+            name: "opts",
+            type: "GranularizeOptions",
+            description: "Options for grain decomposition.",
+            optional: true,
+          properties: [
+            { name: "grainSize", type: "number", description: "Grain duration in seconds (default: 0.1)", optional: true },
+            { name: "hopSize", type: "number", description: "Hop between grain onsets in seconds (default: 0.05)", optional: true },
+            { name: "jitter", type: "number", description: "Random timing jitter 0–1 (default: 0)", optional: true },
+            { name: "startTime", type: "number", description: "Start offset into the source in seconds (default: 0)", optional: true },
+            { name: "endTime", type: "number", description: "End offset into the source in seconds (default: full duration)", optional: true },
+            { name: "normalize", type: "boolean", description: "Normalize each grain amplitude (default: false)", optional: true },
+            { name: "silenceThreshold", type: "number", description: "Skip grains below this RMS level 0–1 (default: 0)", optional: true },
+          ],
+          },
+        ],
+      },
     ],
   },
   {
@@ -38,8 +180,38 @@ export const porcelainTypeHelps: TypeHelp[] = [
     ],
     methods: [
       { signature: "playSlice(index?)", summary: "Play a specific slice by index → Sample" },
-      { signature: "slice(opts?)", summary: "Re-run slicing with new options → BounceResult" },
-      { signature: "toSampler(opts)", summary: "Load slices into a sampler instrument → InstrumentResult" },
+      {
+        signature: "slice(opts?)",
+        summary: "Re-run slicing with new options → BounceResult",
+        params: [
+          {
+            name: "opts",
+            type: "SliceOptions",
+            description: "Options for re-slicing an existing SliceFeature.",
+            optional: true,
+          properties: [
+            { name: "featureHash", type: "string", description: "Hash of the SliceFeature to re-use; defaults to most recent", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "toSampler(opts)",
+        summary: "Load slices into a sampler instrument → InstrumentResult",
+        params: [
+          {
+            name: "opts",
+            type: "ToSamplerOptions",
+            description: "Options for loading slices into a sampler instrument.",
+            optional: true,
+          properties: [
+            { name: "name", type: "string", description: "Instrument name (required)", optional: true },
+            { name: "startNote", type: "number", description: "MIDI note number for the first slice (default: 60)", optional: true },
+            { name: "polyphony", type: "number", description: "Maximum simultaneous voices (default: 8)", optional: true },
+          ],
+          },
+        ],
+      },
     ],
   },
   {
@@ -53,7 +225,22 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "activations", type: "number[][]", description: "Temporal activations matrix" },
     ],
     methods: [
-      { signature: "sep(opts?)", summary: "Separate audio into component files → BounceResult" },
+      {
+        signature: "sep(opts?)",
+        summary: "Separate audio into component files → BounceResult",
+        params: [
+          {
+            name: "opts",
+            type: "SepOptions",
+            description: "Options for NMF source separation.",
+            optional: true,
+          properties: [
+            { name: "components", type: "number", description: "Number of NMF components to separate (default: 2)", optional: true },
+            { name: "iterations", type: "number", description: "Maximum number of optimization iterations (default: 100)", optional: true },
+          ],
+          },
+        ],
+      },
       { signature: "playComponent(index?)", summary: "Play a specific NMF component → Sample" },
     ],
   },
@@ -124,7 +311,22 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "channels", type: "number", description: "Number of input channels" },
     ],
     methods: [
-      { signature: "record(sampleId, opts?)", summary: "Start recording audio → RecordingHandle or Sample" },
+      {
+        signature: "record(sampleId, opts?)",
+        summary: "Start recording audio → RecordingHandle or Sample",
+        params: [
+          {
+            name: "opts",
+            type: "RecordOptions",
+            description: "Options for audio recording via an input device.",
+            optional: true,
+          properties: [
+            { name: "duration", type: "number", description: "Stop recording automatically after this many seconds", optional: true },
+            { name: "overwrite", type: "boolean", description: "Replace an existing sample with the same name (default: false)", optional: true },
+          ],
+          },
+        ],
+      },
     ],
   },
   {

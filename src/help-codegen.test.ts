@@ -14,7 +14,7 @@ import ts from "typescript";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import type { CommandHelp } from "./renderer/help.js";
-import { processFile, generateFile, type ParamInfo } from "./help-generator.js";
+import { processFile, generateFile, processPorcelainFile, generatePorcelainFile, processOptsFile, type ParamInfo } from "./help-generator.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,6 +24,9 @@ import { processFile, generateFile, type ParamInfo } from "./help-generator.js";
 // Tests must be run from the repository root.
 const NAMESPACES_DIR = join(process.cwd(), "src/renderer/namespaces");
 const BOUNCE_API_PATH = join(process.cwd(), "src/renderer/bounce-api.ts");
+const OPTS_DOCS_PATH = join(process.cwd(), "src/renderer/opts-docs.ts");
+const PORCELAIN_SRC_PATH = join(process.cwd(), "src/renderer/results/porcelain.ts");
+const PORCELAIN_GEN_PATH = join(process.cwd(), "src/renderer/results/porcelain-types.generated.ts");
 
 // Files that live in the namespaces directory but are not namespace builders.
 const EXCLUDED_FILES = new Set(["types.ts", "index.ts"]);
@@ -256,6 +259,8 @@ function testBounceApiCompleteness(): number {
 function testGeneratedFilesNotStale(sourceFiles: string[]): number {
   let checks = 0;
 
+  const { typeRegistry: optsTypeRegistry } = processOptsFile(OPTS_DOCS_PATH);
+
   for (const filePath of sourceFiles) {
     const namespaceInfos = processFile(filePath);
 
@@ -264,7 +269,7 @@ function testGeneratedFilesNotStale(sourceFiles: string[]): number {
       const genPath = join(NAMESPACES_DIR, `${namespaceName}-commands.generated.ts`);
       if (!existsSync(genPath)) continue;
 
-      const expected = generateFile(info);
+      const expected = generateFile(info, optsTypeRegistry);
       const actual = readFileSync(genPath, "utf8");
 
       assert.equal(
@@ -279,6 +284,28 @@ function testGeneratedFilesNotStale(sourceFiles: string[]): number {
   }
 
   return checks;
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: porcelain-types.generated.ts is not stale
+// ---------------------------------------------------------------------------
+
+function testPorcelainFileNotStale(): number {
+  if (!existsSync(PORCELAIN_GEN_PATH)) return 0;
+
+  const { methodRegistry: methodOptsRegistry } = processOptsFile(OPTS_DOCS_PATH);
+  const porcelainTypes = processPorcelainFile(PORCELAIN_SRC_PATH);
+  const expected = generatePorcelainFile(porcelainTypes, methodOptsRegistry);
+  const actual = readFileSync(PORCELAIN_GEN_PATH, "utf8");
+
+  assert.equal(
+    actual,
+    expected,
+    `Test 6 FAIL: porcelain-types.generated.ts is stale — its content does not match ` +
+    `what \`npx tsx scripts/generate-help.ts\` would generate. Re-run the generator.`,
+  );
+
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +339,10 @@ async function main(): Promise<void> {
   t = testGeneratedFilesNotStale(sourceFiles);
   total += t;
   console.log(`  Test 5 passed — all ${t} generated files are up-to-date`);
+
+  t = testPorcelainFileNotStale();
+  total += t;
+  console.log(`  Test 6 passed — porcelain-types.generated.ts is up-to-date`);
 
   console.log(`help-codegen.test.ts: all ${total} checks passed`);
 }
