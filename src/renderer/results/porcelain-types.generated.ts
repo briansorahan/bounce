@@ -15,13 +15,42 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "duration", type: "number", description: "Duration in seconds" },
     ],
     methods: [
-      { signature: "play()", summary: "Play the sample from the beginning → Sample" },
-      { signature: "loop(opts?)", summary: "Loop the sample, optionally with loop points → Sample" },
-      { signature: "stop()", summary: "Stop playback" },
-      { signature: "display()", summary: "Render the waveform visualization → Sample" },
+      {
+        signature: "play()",
+        summary: "Play the sample from the beginning",
+        returns: "Sample",
+      },
+      {
+        signature: "loop(opts?)",
+        summary: "Loop the sample, optionally with loop points",
+        returns: "Sample",
+        params: [
+          {
+            name: "opts",
+            type: "LoopOptions",
+            description: "Options for looping a sample.",
+            optional: true,
+          properties: [
+            { name: "loopStart", type: "number", description: "Loop start time in seconds (default: 0)", optional: true },
+            { name: "loopEnd", type: "number", description: "Loop end time in seconds (default: full duration)", optional: true },
+          ],
+          },
+        ],
+      },
+      {
+        signature: "stop()",
+        summary: "Stop playback",
+        returns: "BounceResult",
+      },
+      {
+        signature: "display()",
+        summary: "Render the waveform visualization",
+        returns: "Sample",
+      },
       {
         signature: "onsetSlice(opts?)",
-        summary: "Onset-based slice analysis → SliceFeature",
+        summary: "Onset-based slice analysis",
+        returns: "SliceFeature",
         params: [
           {
             name: "opts",
@@ -40,7 +69,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "ampSlice(opts?)",
-        summary: "Amplitude-based slice analysis → SliceFeature",
+        summary: "Amplitude-based slice analysis",
+        returns: "SliceFeature",
         params: [
           {
             name: "opts",
@@ -63,7 +93,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "noveltySlice(opts?)",
-        summary: "Novelty-based slice analysis → SliceFeature",
+        summary: "Novelty-based slice analysis",
+        returns: "SliceFeature",
         params: [
           {
             name: "opts",
@@ -84,7 +115,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "transientSlice(opts?)",
-        summary: "Transient-based slice analysis → SliceFeature",
+        summary: "Transient-based slice analysis",
+        returns: "SliceFeature",
         params: [
           {
             name: "opts",
@@ -107,7 +139,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "nmf(opts?)",
-        summary: "NMF decomposition → NmfFeature",
+        summary: "NMF decomposition",
+        returns: "NmfFeature",
         params: [
           {
             name: "opts",
@@ -127,7 +160,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "mfcc(opts?)",
-        summary: "MFCC analysis → MfccFeature",
+        summary: "MFCC analysis",
+        returns: "MfccFeature",
         params: [
           {
             name: "opts",
@@ -147,10 +181,27 @@ export const porcelainTypeHelps: TypeHelp[] = [
           },
         ],
       },
-      { signature: "nx(other, opts?)", summary: "NMF cross-synthesis with another sample → NxFeature" },
+      {
+        signature: "nx(other, opts?)",
+        summary: "NMF cross-synthesis with another sample",
+        returns: "NxFeature",
+        params: [
+          { name: "other", type: "unknown", description: "The sample whose spectral bases to borrow" },
+          {
+            name: "opts",
+            type: "NxOptions",
+            description: "Options for NMF cross-synthesis.",
+            optional: true,
+          properties: [
+            { name: "components", type: "number", description: "Number of NMF components to use (default: 2)", optional: true },
+          ],
+          },
+        ],
+      },
       {
         signature: "granularize(opts?)",
-        summary: "Decompose into a grain collection → GrainCollection",
+        summary: "Decompose into a grain collection",
+        returns: "GrainCollection",
         params: [
           {
             name: "opts",
@@ -179,10 +230,18 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "count", type: "number", description: "Number of slices" },
     ],
     methods: [
-      { signature: "playSlice(index?)", summary: "Play a specific slice by index → Sample" },
+      {
+        signature: "playSlice(index?)",
+        summary: "Play a specific slice by index",
+        returns: "Sample",
+        params: [
+          { name: "index", type: "unknown", description: "0-based slice index to play (default: 0)" },
+        ],
+      },
       {
         signature: "slice(opts?)",
-        summary: "Re-run slicing with new options → BounceResult",
+        summary: "Re-run slicing with new options",
+        returns: "BounceResult",
         params: [
           {
             name: "opts",
@@ -197,7 +256,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
       },
       {
         signature: "toSampler(opts)",
-        summary: "Load slices into a sampler instrument → InstrumentResult",
+        summary: "Load slices into a sampler instrument",
+        returns: "InstrumentResult",
         params: [
           {
             name: "opts",
@@ -227,7 +287,8 @@ export const porcelainTypeHelps: TypeHelp[] = [
     methods: [
       {
         signature: "sep(opts?)",
-        summary: "Separate audio into component files → BounceResult",
+        summary: "Separate audio into component files",
+        returns: "BounceResult",
         params: [
           {
             name: "opts",
@@ -241,7 +302,14 @@ export const porcelainTypeHelps: TypeHelp[] = [
           },
         ],
       },
-      { signature: "playComponent(index?)", summary: "Play a specific NMF component → Sample" },
+      {
+        signature: "playComponent(index?)",
+        summary: "Play a specific NMF component",
+        returns: "Sample",
+        params: [
+          { name: "index", type: "unknown", description: "0-based component index to play (default: 0)" },
+        ],
+      },
     ],
   },
   {
@@ -263,7 +331,14 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "activations", type: "number[][]", description: "Temporal activations from the target" },
     ],
     methods: [
-      { signature: "playComponent(index?)", summary: "Play a specific cross-synthesis component → Sample" },
+      {
+        signature: "playComponent(index?)",
+        summary: "Play a specific cross-synthesis component",
+        returns: "Sample",
+        params: [
+          { name: "index", type: "unknown", description: "0-based component index to play (default: 0)" },
+        ],
+      },
     ],
   },
   {
@@ -275,19 +350,62 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "panels", type: "NmfFeatureResult[]", description: "Additional panel visualizations" },
     ],
     methods: [
-      { signature: "title(text)", summary: "Set the scene title → VisScene" },
-      { signature: "overlay(feature)", summary: "Add a feature overlay → VisScene" },
-      { signature: "panel(feature)", summary: "Add an NMF panel → VisScene" },
-      { signature: "show()", summary: "Render the scene in the terminal → BounceResult" },
+      {
+        signature: "title(text)",
+        summary: "Set the scene title",
+        returns: "VisScene",
+        params: [
+          { name: "text", type: "unknown", description: "Title string to display above the waveform" },
+        ],
+      },
+      {
+        signature: "overlay(feature)",
+        summary: "Add a feature overlay",
+        returns: "VisScene",
+        params: [
+          { name: "feature", type: "unknown", description: "SliceFeature or NmfFeature to draw on the waveform" },
+        ],
+      },
+      {
+        signature: "panel(feature)",
+        summary: "Add an NMF panel",
+        returns: "VisScene",
+        params: [
+          { name: "feature", type: "unknown", description: "NmfFeature to render as a separate panel" },
+        ],
+      },
+      {
+        signature: "show()",
+        summary: "Render the scene in the terminal",
+        returns: "BounceResult",
+      },
     ],
   },
   {
     name: "VisStack",
     summary: "A stack of visualization scenes displayed together.",
     methods: [
-      { signature: "addScene(scene)", summary: "Add a scene to the stack → VisStack" },
-      { signature: "title(text)", summary: "Set the stack title → VisStack" },
-      { signature: "show()", summary: "Render the stack in the terminal → BounceResult" },
+      {
+        signature: "addScene(scene)",
+        summary: "Add a scene to the stack",
+        returns: "VisStack",
+        params: [
+          { name: "scene", type: "unknown", description: "VisScene to append to this stack" },
+        ],
+      },
+      {
+        signature: "title(text)",
+        summary: "Set the stack title",
+        returns: "VisStack",
+        params: [
+          { name: "text", type: "unknown", description: "Title string displayed above the stack" },
+        ],
+      },
+      {
+        signature: "show()",
+        summary: "Render the stack in the terminal",
+        returns: "BounceResult",
+      },
     ],
   },
   {
@@ -297,8 +415,19 @@ export const porcelainTypeHelps: TypeHelp[] = [
       { name: "notation", type: "string", description: "The original pattern notation string" },
     ],
     methods: [
-      { signature: "play(channel)", summary: "Start playing on mixer channel 1–8 → BounceResult" },
-      { signature: "stop()", summary: "Stop the pattern on its current channel → BounceResult" },
+      {
+        signature: "play(channel)",
+        summary: "Start playing on mixer channel 1–8",
+        returns: "BounceResult",
+        params: [
+          { name: "channel", type: "unknown", description: "Mixer channel number (1–8)" },
+        ],
+      },
+      {
+        signature: "stop()",
+        summary: "Stop the pattern on its current channel",
+        returns: "BounceResult",
+      },
     ],
   },
   {
@@ -313,8 +442,10 @@ export const porcelainTypeHelps: TypeHelp[] = [
     methods: [
       {
         signature: "record(sampleId, opts?)",
-        summary: "Start recording audio → RecordingHandle or Sample",
+        summary: "Start recording audio",
+        returns: "RecordingHandle",
         params: [
+          { name: "sampleId", type: "unknown", description: "Name to save the recording under" },
           {
             name: "opts",
             type: "RecordOptions",
@@ -333,22 +464,41 @@ export const porcelainTypeHelps: TypeHelp[] = [
     name: "RecordingHandle",
     summary: "An active audio recording session. Not a Promise — assignment is immediate.",
     methods: [
-      { signature: "stop()", summary: "Stop recording and return the captured audio → Sample" },
+      {
+        signature: "stop()",
+        summary: "Stop recording and return the captured audio",
+        returns: "Sample",
+      },
     ],
   },
   {
     name: "MidiRecordingHandle",
     summary: "An active MIDI recording session. Not a Promise — assignment is immediate.",
     methods: [
-      { signature: "stop()", summary: "Stop recording and return the captured MIDI sequence → MidiSequence" },
+      {
+        signature: "stop()",
+        summary: "Stop recording and return the captured MIDI sequence",
+        returns: "MidiSequence",
+      },
     ],
   },
   {
     name: "MidiSequence",
     summary: "A recorded MIDI sequence.",
     methods: [
-      { signature: "play(instrument)", summary: "Play the sequence through an instrument → BounceResult" },
-      { signature: "stop()", summary: "Stop playback → BounceResult" },
+      {
+        signature: "play(instrument)",
+        summary: "Play the sequence through an instrument",
+        returns: "BounceResult",
+        params: [
+          { name: "instrument", type: "unknown", description: "The InstrumentResult to play through" },
+        ],
+      },
+      {
+        signature: "stop()",
+        summary: "Stop playback",
+        returns: "BounceResult",
+      },
     ],
   },
 ];

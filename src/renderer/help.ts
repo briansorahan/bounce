@@ -222,6 +222,11 @@ export function renderMethodHelp(
     }
   }
 
+  if (method.returns) {
+    lines.push("");
+    lines.push(`  \x1b[90mReturns:\x1b[0m \x1b[33m${method.returns}\x1b[0m`);
+  }
+
   return new BounceResult(lines.join("\n"));
 }
 

@@ -13,6 +13,23 @@
  */
 
 /**
+ * @opts LoopOptions
+ * Options for looping a sample.
+ * @usedby loop
+ * @prop {number} loopStart Loop start time in seconds (default: 0)
+ * @prop {number} loopEnd Loop end time in seconds (default: full duration)
+ */
+export type _LoopOptions = Record<string, never>;
+
+/**
+ * @opts NxOptions
+ * Options for NMF cross-synthesis.
+ * @usedby nx
+ * @prop {number} components Number of NMF components to use (default: 2)
+ */
+export type _NxOptions = Record<string, never>;
+
+/**
  * @opts AnalyzeOptions
  * Options for onset-based (amplitude-envelope) slice analysis.
  * @usedby onsetSlice

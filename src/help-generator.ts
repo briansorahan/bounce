@@ -364,6 +364,8 @@ export interface PorcelainPropertyInfo {
 export interface PorcelainMethodInfo {
   signature: string;
   summary: string;
+  returns?: string;
+  params: Array<{ name: string; description: string }>;
 }
 
 export interface PorcelainTypeInfo {
@@ -379,8 +381,38 @@ export interface PorcelainTypeInfo {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse @prop {type} name desc lines from a JSDoc block.
+ * Parse @method and @methodparam tags from a JSDoc block.
+ *
+ * Format:
+ *   @method signature(args?) Summary text → ReturnType
+ *   @methodparam name Description of the parameter
+ *
+ * The `→ ReturnType` suffix is extracted as `returns` and stripped from `summary`.
+ * `@methodparam` lines attach to the immediately preceding `@method`.
  */
+function parseMethodTags(rawLines: string[]): PorcelainMethodInfo[] {
+  const methods: PorcelainMethodInfo[] = [];
+  for (const line of rawLines) {
+    const methodMatch = line.match(/^@method\s+(\S+\([^)]*\)\??)\s+(.*)/);
+    if (methodMatch) {
+      const fullSummary = methodMatch[2].trim();
+      const returnsMatch = fullSummary.match(/^(.*?)\s*→\s*(\S+)\s*$/);
+      const summary = returnsMatch ? returnsMatch[1].trim() : fullSummary;
+      const returns = returnsMatch ? returnsMatch[2] : undefined;
+      methods.push({ signature: methodMatch[1], summary, returns, params: [] });
+      continue;
+    }
+    // @methodparam name? description — attaches to the last @method
+    const paramMatch = line.match(/^@methodparam\s+(\S+?)\??\s+(.*)/);
+    if (paramMatch && methods.length > 0) {
+      methods[methods.length - 1].params.push({
+        name: paramMatch[1],
+        description: paramMatch[2].trim(),
+      });
+    }
+  }
+  return methods;
+}
 function parsePropTags(rawLines: string[]): PorcelainPropertyInfo[] {
   const props: PorcelainPropertyInfo[] = [];
   for (const line of rawLines) {
@@ -391,21 +423,6 @@ function parsePropTags(rawLines: string[]): PorcelainPropertyInfo[] {
     }
   }
   return props;
-}
-
-/**
- * Parse @method signature description lines from a JSDoc block.
- */
-function parseMethodTags(rawLines: string[]): PorcelainMethodInfo[] {
-  const methods: PorcelainMethodInfo[] = [];
-  for (const line of rawLines) {
-    // @method signature(args?) summary
-    const match = line.match(/^@method\s+(\S+\([^)]*\)\??)\s+(.*)/);
-    if (match) {
-      methods.push({ signature: match[1], summary: match[2].trim() });
-    }
-  }
-  return methods;
 }
 
 /**
@@ -548,19 +565,37 @@ export function generatePorcelainFile(types: PorcelainTypeInfo[], methodOptsRegi
       for (const m of t.methods) {
         const methodName = m.signature.split("(")[0];
         const optsInfo = methodOptsRegistry?.get(methodName);
-        if (optsInfo) {
+
+        // Collect all params: scalar @methodparam entries + opts param (if in registry)
+        const hasScalarParams = m.params.length > 0;
+        const hasOptsParam = !!optsInfo;
+        const needsParams = hasScalarParams || hasOptsParam;
+
+        if (m.returns || needsParams) {
           lines.push("      {");
           lines.push(`        signature: ${JSON.stringify(m.signature)},`);
           lines.push(`        summary: ${JSON.stringify(m.summary)},`);
-          lines.push("        params: [");
-          lines.push("          {");
-          lines.push(`            name: "opts",`);
-          lines.push(`            type: ${JSON.stringify(optsInfo.name)},`);
-          lines.push(`            description: ${JSON.stringify(optsInfo.summary)},`);
-          lines.push("            optional: true,");
-          lines.push(...serializeOptsProperties(optsInfo.properties).map((l) => "  " + l));
-          lines.push("          },");
-          lines.push("        ],");
+          if (m.returns) {
+            lines.push(`        returns: ${JSON.stringify(m.returns)},`);
+          }
+          if (needsParams) {
+            lines.push("        params: [");
+            // Scalar params first
+            for (const sp of m.params) {
+              lines.push(`          { name: ${JSON.stringify(sp.name)}, type: "unknown", description: ${JSON.stringify(sp.description)} },`);
+            }
+            // Opts param last
+            if (optsInfo) {
+              lines.push("          {");
+              lines.push(`            name: "opts",`);
+              lines.push(`            type: ${JSON.stringify(optsInfo.name)},`);
+              lines.push(`            description: ${JSON.stringify(optsInfo.summary)},`);
+              lines.push("            optional: true,");
+              lines.push(...serializeOptsProperties(optsInfo.properties).map((l) => "  " + l));
+              lines.push("          },");
+            }
+            lines.push("        ],");
+          }
           lines.push("      },");
         } else {
           lines.push(`      { signature: ${JSON.stringify(m.signature)}, summary: ${JSON.stringify(m.summary)} },`);

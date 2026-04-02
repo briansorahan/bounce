@@ -39,7 +39,7 @@ import type { MidiRecordingHandleResult, MidiSequenceResult, MidiSequencePromise
  * @prop {number} duration Duration in seconds
  * @method play() Play the sample from the beginning → Sample
  * @method loop(opts?) Loop the sample, optionally with loop points → Sample
- * @method stop() Stop playback
+ * @method stop() Stop playback → BounceResult
  * @method display() Render the waveform visualization → Sample
  * @method onsetSlice(opts?) Onset-based slice analysis → SliceFeature
  * @method ampSlice(opts?) Amplitude-based slice analysis → SliceFeature
@@ -48,6 +48,7 @@ import type { MidiRecordingHandleResult, MidiSequenceResult, MidiSequencePromise
  * @method nmf(opts?) NMF decomposition → NmfFeature
  * @method mfcc(opts?) MFCC analysis → MfccFeature
  * @method nx(other, opts?) NMF cross-synthesis with another sample → NxFeature
+ * @methodparam other The sample whose spectral bases to borrow
  * @method granularize(opts?) Decompose into a grain collection → GrainCollection
  */
 export type Sample = SampleResult | SamplePromise;
@@ -58,6 +59,7 @@ export type Sample = SampleResult | SamplePromise;
  * @prop {number[]} slices Onset/slice times in seconds
  * @prop {number} count Number of slices
  * @method playSlice(index?) Play a specific slice by index → Sample
+ * @methodparam index 0-based slice index to play (default: 0)
  * @method slice(opts?) Re-run slicing with new options → BounceResult
  * @method toSampler(opts) Load slices into a sampler instrument → InstrumentResult
  */
@@ -73,6 +75,7 @@ export type SliceFeature = SliceFeatureResult | SliceFeaturePromise;
  * @prop {number[][]} activations Temporal activations matrix
  * @method sep(opts?) Separate audio into component files → BounceResult
  * @method playComponent(index?) Play a specific NMF component → Sample
+ * @methodparam index 0-based component index to play (default: 0)
  */
 export type NmfFeature = NmfFeatureResult | NmfFeaturePromise;
 
@@ -93,6 +96,7 @@ export type MfccFeature = MfccFeatureResult | MfccFeaturePromise;
  * @prop {number[][]} bases Spectral bases from the source
  * @prop {number[][]} activations Temporal activations from the target
  * @method playComponent(index?) Play a specific cross-synthesis component → Sample
+ * @methodparam index 0-based component index to play (default: 0)
  */
 export type NxFeature = NxFeatureResult | NxFeaturePromise;
 
@@ -103,8 +107,11 @@ export type NxFeature = NxFeatureResult | NxFeaturePromise;
  * @prop {SliceFeatureResult[]} overlays Feature overlays drawn on the waveform
  * @prop {NmfFeatureResult[]} panels Additional panel visualizations
  * @method title(text) Set the scene title → VisScene
+ * @methodparam text Title string to display above the waveform
  * @method overlay(feature) Add a feature overlay → VisScene
+ * @methodparam feature SliceFeature or NmfFeature to draw on the waveform
  * @method panel(feature) Add an NMF panel → VisScene
+ * @methodparam feature NmfFeature to render as a separate panel
  * @method show() Render the scene in the terminal → BounceResult
  */
 export type VisScene = VisSceneResult | VisScenePromise;
@@ -113,7 +120,9 @@ export type VisScene = VisSceneResult | VisScenePromise;
  * @porcelain VisStack
  * A stack of visualization scenes displayed together.
  * @method addScene(scene) Add a scene to the stack → VisStack
+ * @methodparam scene VisScene to append to this stack
  * @method title(text) Set the stack title → VisStack
+ * @methodparam text Title string displayed above the stack
  * @method show() Render the stack in the terminal → BounceResult
  */
 export type VisStack = VisStackResult;
@@ -123,6 +132,7 @@ export type VisStack = VisStackResult;
  * A compiled X0X step sequencer pattern.
  * @prop {string} notation The original pattern notation string
  * @method play(channel) Start playing on mixer channel 1–8 → BounceResult
+ * @methodparam channel Mixer channel number (1–8)
  * @method stop() Stop the pattern on its current channel → BounceResult
  */
 export type Pattern = PatternResult;
@@ -134,7 +144,8 @@ export type Pattern = PatternResult;
  * @prop {string} deviceId Browser/system device identifier
  * @prop {string} label Human-readable device name
  * @prop {number} channels Number of input channels
- * @method record(sampleId, opts?) Start recording audio → RecordingHandle or Sample
+ * @method record(sampleId, opts?) Start recording audio → RecordingHandle
+ * @methodparam sampleId Name to save the recording under
  */
 export type AudioDevice = AudioDeviceResult;
 
@@ -156,6 +167,7 @@ export type MidiRecordingHandle = MidiRecordingHandleResult;
  * @porcelain MidiSequence
  * A recorded MIDI sequence.
  * @method play(instrument) Play the sequence through an instrument → BounceResult
+ * @methodparam instrument The InstrumentResult to play through
  * @method stop() Stop playback → BounceResult
  */
 export type MidiSequence = MidiSequenceResult | MidiSequencePromise;
