@@ -1350,6 +1350,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
        * The sample is stored in the project database for future access via sn.load().
        *
        * @param path File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS.
+       * @returns {Sample}
        * @example const samp = sn.read("kick.wav")
        * @example const samp = sn.read("samples/loop.flac")
        */
@@ -1367,6 +1368,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
        * Use sn.list() to see available sample hashes.
        *
        * @param hash Full or prefix hash from sn.list().
+       * @returns {Sample}
        * @example const samp = sn.load("a1b2c3d4")
        */
       function load(hash: string): SamplePromise {
@@ -1393,6 +1395,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
        *
        * Return the currently loaded sample or null if no sample is active.
        *
+       * @returns {Sample}
        * @example const current = sn.current()
        * @example current?.help()
        */
@@ -1452,6 +1455,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
        * Use AudioDeviceResult.record() to start recording.
        *
        * @param index Device index from sn.inputs().
+       * @returns {AudioDevice}
        * @example const mic = sn.dev(0)
        * @example const h = mic.record("take1")
        * @example h.stop()

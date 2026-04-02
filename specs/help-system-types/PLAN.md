@@ -180,6 +180,37 @@ Import update strategy (single pass):
 - Porcelain type aliases in `porcelain.ts` are consumed only by `bounce-api.ts` (for REPL injection) and by type-level annotations where the union is semantically appropriate
 - No second import migration pass is needed: implementation code stays on plumbing names, REPL surface uses porcelain names
 
+#### 7. Command return type documentation
+
+Add `returns?: string` to `CommandHelp` so per-command help shows the porcelain return type.
+
+**`src/renderer/help.ts`:**
+- Add `returns?: string` to the `CommandHelp` interface
+- Update `renderCommandHelp()` to append `Returns: TypeName` when `cmd.returns` is set
+
+**`src/help-generator.ts`:**
+- Extend `parseJsDocText()` to parse `@returns {TypeName}` tags (same pattern as `@param`)
+- Add `returns?: string` to `JsDocInfo`
+- Emit the `returns` field in `generateFile()` when present
+
+**Namespace source files** (`src/renderer/namespaces/*.ts`):
+- Add `@returns {TypeName}` JSDoc annotations to all functions that return porcelain types
+- Only use porcelain type names (e.g. `Sample`, not `SampleResult | SamplePromise`)
+
+**Display format** — only in per-command help (`sn.read.help()`), not namespace summaries:
+```
+sn.read(path)
+
+  Load an audio file from disk and return a SampleResult object.
+
+  path  File path (absolute, relative, or ~). Supports WAV, MP3, ...
+
+  Returns: Sample
+
+  Examples:
+    const samp = sn.read("kick.wav")
+```
+
 ### Terminal UI Changes
 
 - `Sample.help()` in the REPL prints a formatted type summary
@@ -280,7 +311,14 @@ New Playwright test block in an existing or new spec file:
 7. Wire the generated type help objects into `bounce-api.ts`
 8. Write unit tests in `src/porcelain-types.test.ts`
 9. Write Playwright assertions for REPL type help output
-10. Run `npm run build:electron` + `npm run lint` + `./build.sh`
+10. Add `returns?: string` field to `CommandHelp` interface in `src/renderer/help.ts`
+11. Teach `parseJsDocText()` in `src/help-generator.ts` to extract `@returns {TypeName}` tags and populate `JsDocInfo.returns`
+12. Emit the `returns` field in `generateFile()` when present
+13. Update `renderCommandHelp()` in `src/renderer/help.ts` to display a `Returns: TypeName` line
+14. Add `@returns {TypeName}` JSDoc annotations to all namespace functions that return porcelain types
+15. Regenerate all `*-commands.generated.ts` files
+16. Add unit test coverage for the new `returns` field in `src/help.test.ts`
+17. Run `npm run build:electron` + `npm run lint` + `./build.sh`
 
 ## Estimated Scope
 

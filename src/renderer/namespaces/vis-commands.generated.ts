@@ -15,6 +15,7 @@ Chain .overlay()/.panel()/.title() and call .show() to render it.`,
     params: [
       { name: "sampleOrPromise", type: "SampleResult | PromiseLike<SampleResult>", description: "Resolved SampleResult or SamplePromise to visualize." },
     ],
+    returns: "VisScene",
     examples: [
       "const samp = sn.read(\"loop.wav\")\\nconst scene = vis.waveform(samp)\\nscene.show()",
       "vis.waveform(sn.read(\"kick.wav\")).show()",
@@ -25,6 +26,7 @@ Chain .overlay()/.panel()/.title() and call .show() to render it.`,
     signature: "vis.stack()",
     summary: "Build multiple visualization scenes in one chained expression",
     description: "Create a VisStackResult and add scenes with .waveform(). Call .show() to render all.",
+    returns: "VisStack",
     examples: [
       "vis.stack().waveform(a).waveform(b).show()",
     ],

@@ -20,6 +20,7 @@ X0X notation rules:
     params: [
       { name: "notation", type: "string", description: "Multi-line X0X notation string." },
     ],
+    returns: "Pattern",
     examples: [
       "pat.xox(`\\n  c4 = a . . . a . . . a . . . a . . .\\n  e4 = . a . . . a . . . a . . . a . .\\n`).play(1)",
     ],

@@ -99,6 +99,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
        *
        * @param inst Target instrument to associate with the recording.
        * @param opts Recording options (duration in seconds, name for the saved sequence).
+       * @returns {MidiRecordingHandle}
        * @example const h = midi.record(keys)\nconst seq = h.stop()\nseq.play(keys)
        * @example // Timed recording:\nconst seq = midi.record(keys, { duration: 4 })\nseq.play(keys)
        */
@@ -172,6 +173,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
        * The imported sequence is transient — it is not auto-saved to the project.
        *
        * @param filePath Absolute path to the .mid file.
+       * @returns {MidiSequence}
        * @example midi.load('~/beats/groove.mid')
        */
       async function load(filePath: string): Promise<MidiSequenceResult> {

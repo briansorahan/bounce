@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import {
   type CommandHelp,
+  type TypeMethodHelp,
   renderNamespaceHelp,
   renderCommandHelp,
+  renderMethodHelp,
+  attachMethodHelp,
   withHelp,
 } from "./renderer/help.js";
 
@@ -22,7 +25,7 @@ import {
   assert.ok(text.includes("Do foo things"), "foo summary appears");
   assert.ok(text.includes("ns.bar()"), "bar signature appears");
   assert.ok(text.includes("Do bar things"), "bar summary appears");
-  assert.ok(text.includes("ns.<cmd>.help()"), "footer mentions per-command help");
+  assert.ok(!text.includes("ns.<cmd>.help()"), "footer no longer mentions per-command help");
 }
 
 // --- renderCommandHelp ---
@@ -79,6 +82,36 @@ import {
   assert.ok(text.includes("(optional)"), "optional param is marked");
 }
 
+// --- renderCommandHelp with returns field ---
+
+{
+  const cmd: CommandHelp = {
+    name: "read",
+    signature: "sn.read(path)",
+    summary: "Load an audio file",
+    params: [
+      { name: "path", type: "string", description: "File path", optional: false },
+    ],
+    returns: "Sample",
+    examples: ['sn.read("kick.wav")'],
+  };
+  const text = renderCommandHelp(cmd).toString();
+  assert.ok(text.includes("Returns:"), "returns label appears");
+  assert.ok(text.includes("Sample"), "return type name appears");
+}
+
+// --- renderCommandHelp omits returns when not set ---
+
+{
+  const cmd: CommandHelp = {
+    name: "stop",
+    signature: "sn.stop()",
+    summary: "Stop playback",
+  };
+  const text = renderCommandHelp(cmd).toString();
+  assert.ok(!text.includes("Returns:"), "no returns section when field is absent");
+}
+
 // --- withHelp ---
 
 {
@@ -95,6 +128,49 @@ import {
   const helpText = enhanced.help().toString();
   assert.ok(helpText.includes("double(x)"), "help contains signature");
   assert.ok(helpText.includes("Double a number"), "help contains summary");
+}
+
+// --- renderMethodHelp ---
+
+{
+  const method: TypeMethodHelp = {
+    signature: "play()",
+    summary: "Play the sample from the beginning → Sample",
+  };
+  const text = renderMethodHelp("Sample", method).toString();
+  assert.ok(text.includes("Sample.play()"), "method help shows TypeName.signature");
+  assert.ok(text.includes("Play the sample"), "method help shows summary");
+}
+
+// --- attachMethodHelp ---
+
+{
+  const obj = {
+    play: () => "played",
+    stop: () => "stopped",
+    alreadyHelped: Object.assign(() => "x", { help: () => "existing" }),
+  };
+  const methods: TypeMethodHelp[] = [
+    { signature: "play()", summary: "Play something" },
+    { signature: "stop()", summary: "Stop something" },
+    { signature: "alreadyHelped()", summary: "Should not overwrite" },
+  ];
+  attachMethodHelp(obj, "Test", methods);
+
+  // Wrapped methods still work
+  assert.equal(obj.play(), "played", "play still returns original value");
+  assert.equal(obj.stop(), "stopped", "stop still returns original value");
+
+  // Wrapped methods have .help()
+  assert.equal(typeof (obj.play as unknown as { help: () => unknown }).help, "function", "play has .help()");
+  assert.equal(typeof (obj.stop as unknown as { help: () => unknown }).help, "function", "stop has .help()");
+
+  // Methods that already had .help() are not overwritten
+  assert.equal(
+    (obj.alreadyHelped as unknown as { help: () => string }).help(),
+    "existing",
+    "pre-existing .help() is preserved",
+  );
 }
 
 console.log("help.test.ts: all tests passed");

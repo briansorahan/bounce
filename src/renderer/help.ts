@@ -11,6 +11,7 @@ export interface CommandHelp {
     description: string;
     optional?: boolean;
   }>;
+  returns?: string;
   examples?: string[];
 }
 
@@ -36,10 +37,7 @@ export function renderNamespaceHelp(
     );
   }
 
-  lines.push("");
-  lines.push(
-    `\x1b[90mFor detailed usage:\x1b[0m \x1b[33m${nsName}.<cmd>.help()\x1b[0m`,
-  );
+
 
   return new BounceResult(lines.join("\n"));
 }
@@ -65,6 +63,11 @@ export function renderCommandHelp(cmd: CommandHelp): BounceResult {
       const opt = p.optional ? " (optional)" : "";
       lines.push(`  \x1b[33m${p.name}\x1b[0m${pad}${p.description}${opt}`);
     }
+  }
+
+  if (cmd.returns) {
+    lines.push("");
+    lines.push(`  \x1b[90mReturns:\x1b[0m \x1b[33m${cmd.returns}\x1b[0m`);
   }
 
   if (cmd.examples?.length) {
@@ -131,7 +134,7 @@ export function renderTypeHelp(typeHelp: TypeHelp): BounceResult {
       const pad = " ".repeat(Math.max(1, maxName - p.name.length + 2));
       const ro = p.readonly ? " \x1b[90m(readonly)\x1b[0m" : "";
       lines.push(
-        `    \x1b[33m${p.name}\x1b[0m${pad}\x1b[90m${p.type}\x1b[0m  ${p.description}${ro}`,
+        `    \x1b[32m${p.name}\x1b[0m${pad}\x1b[90m${p.type}\x1b[0m  ${p.description}${ro}`,
       );
     }
   }
@@ -159,4 +162,38 @@ export function withHelp<F extends (...args: any[]) => any>(
   meta: CommandHelp,
 ): F & { help: () => BounceResult } {
   return Object.assign(fn, { help: () => renderCommandHelp(meta) });
+}
+
+export function renderMethodHelp(
+  typeName: string,
+  method: TypeMethodHelp,
+): BounceResult {
+  const lines: string[] = [
+    `\x1b[1;36m${typeName}.${method.signature}\x1b[0m`,
+    "",
+    `  ${method.summary}`,
+  ];
+  return new BounceResult(lines.join("\n"));
+}
+
+/**
+ * Attach .help() to each documented method on an instance.
+ * Skips methods that already have .help() (e.g. manually wrapped ones).
+ */
+export function attachMethodHelp(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  instance: any,
+  typeName: string,
+  methods: TypeMethodHelp[],
+): void {
+  for (const m of methods) {
+    const methodName = m.signature.split("(")[0];
+    const original = instance[methodName];
+    if (typeof original !== "function") continue;
+    if (typeof original.help === "function") continue;
+    const bound = original.bind(instance);
+    instance[methodName] = Object.assign(bound, {
+      help: () => renderMethodHelp(typeName, m),
+    });
+  }
 }

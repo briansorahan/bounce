@@ -48,6 +48,7 @@ Returns a MidiSequencePromise when opts.duration is set, which resolves automati
       { name: "inst", type: "MidiTargetInstrument", description: "Target instrument to associate with the recording." },
       { name: "opts", type: "MidiRecordOptions", description: "Recording options (duration in seconds, name for the saved sequence).", optional: true },
     ],
+    returns: "MidiRecordingHandle",
     examples: [
       "const h = midi.record(keys)\\nconst seq = h.stop()\\nseq.play(keys)",
       "// Timed recording:\\nconst seq = midi.record(keys, { duration: 4 })\\nseq.play(keys)",
@@ -71,6 +72,7 @@ The imported sequence is transient — it is not auto-saved to the project.`,
     params: [
       { name: "filePath", type: "string", description: "Absolute path to the .mid file." },
     ],
+    returns: "MidiSequence",
     examples: [
       "midi.load('~/beats/groove.mid')",
     ],

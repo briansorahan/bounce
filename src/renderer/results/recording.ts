@@ -1,5 +1,10 @@
+import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
+import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+
+const audioDeviceMethodHelps = porcelainTypeHelps.find(t => t.name === "AudioDevice")?.methods ?? [];
+const recordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "RecordingHandle")?.methods ?? [];
 
 /** A single audio input device as seen by the REPL. */
 export interface AudioInputDevice {
@@ -40,6 +45,7 @@ export class AudioDeviceResult extends BounceResult {
         `  \x1b[90mrecord(sampleId, {duration: N})  — record for N seconds\x1b[0m`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "AudioDevice", audioDeviceMethodHelps);
   }
 
   record(sampleId: string, opts?: RecordOptions): Promise<RecordingHandleResult> | SamplePromise {
@@ -87,6 +93,7 @@ export class RecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m to finish recording and get a SampleResult`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "RecordingHandle", recordingHandleMethodHelps);
   }
 
   stop(): SamplePromise {

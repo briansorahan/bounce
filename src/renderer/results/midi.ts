@@ -1,5 +1,10 @@
+import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { MidiInputDevice as MidiInputDeviceRecord } from "../../shared/ipc-contract.js";
+import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+
+const midiSequenceMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiSequence")?.methods ?? [];
+const midiRecordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiRecordingHandle")?.methods ?? [];
 
 // Re-export for convenience
 export type { MidiInputDeviceRecord };
@@ -98,6 +103,7 @@ export class MidiSequenceResult extends BounceResult {
         `  \x1b[90mseq.stop()\x1b[0m             stop playback`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "MidiSequence", midiSequenceMethodHelps);
   }
 
   play(inst: MidiTargetInstrument): MidiSequencePromise {
@@ -181,6 +187,7 @@ export class MidiRecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m  finish recording and get a MidiSequence`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "MidiRecordingHandle", midiRecordingHandleMethodHelps);
   }
 
   stop(): MidiSequencePromise {

@@ -1,6 +1,10 @@
 /// <reference path="../types.d.ts" />
+import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { CompiledPattern } from "../pattern-parser.js";
+import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+
+const patternMethodHelps = porcelainTypeHelps.find(t => t.name === "Pattern")?.methods ?? [];
 
 export class PatternResult extends BounceResult {
   private readonly notation: string;
@@ -10,6 +14,7 @@ export class PatternResult extends BounceResult {
     super(""); // overridden by toString()
     this.notation = notation;
     this.compiled = compiled;
+    attachMethodHelp(this, "Pattern", patternMethodHelps);
   }
 
   play(channel: number): BounceResult {

@@ -23,6 +23,20 @@ From PLAN.md: Three-part implementation — rename plumbing classes, introduce p
 7. Wrote `src/porcelain-types.test.ts` — 5 unit tests, all passing
 8. Wrote `tests/porcelain-types.spec.ts` — 5 Playwright e2e tests
 
+### 2026-04-01 - Added command return type documentation
+
+10. Added `returns?: string` field to `CommandHelp` interface in `src/renderer/help.ts`
+11. Extended `parseJsDocText()` in `src/help-generator.ts` to parse `@returns {TypeName}` (and `@return {TypeName}`) tags
+12. Updated `generateFile()` to emit the `returns` field in generated `CommandHelp` objects
+13. Updated `renderCommandHelp()` to display `Returns: TypeName` line when present
+14. Added `@returns {TypeName}` JSDoc annotations to 9 namespace functions:
+    - `sn.read` → Sample, `sn.load` → Sample, `sn.current` → Sample, `sn.dev` → AudioDevice
+    - `vis.waveform` → VisScene, `vis.stack` → VisStack
+    - `pat.xox` → Pattern
+    - `midi.record` → MidiRecordingHandle, `midi.load` → MidiSequence
+15. Regenerated all `*-commands.generated.ts` files (9 commands now have `returns` field)
+16. Added unit test coverage for `returns` field in `src/help.test.ts` (presence + absence cases)
+
 ## Decisions Made
 
 - `TypeMethodHelp.name` made optional — the `signature` field already carries the method name, so requiring both was redundant

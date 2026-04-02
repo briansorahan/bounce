@@ -115,6 +115,7 @@ export function buildVisNamespace(deps: NamespaceDeps) {
        * Chain .overlay()/.panel()/.title() and call .show() to render it.
        *
        * @param sampleOrPromise Resolved SampleResult or SamplePromise to visualize.
+       * @returns {VisScene}
        * @example const samp = sn.read("loop.wav")\nconst scene = vis.waveform(samp)\nscene.show()
        * @example vis.waveform(sn.read("kick.wav")).show()
        */
@@ -137,6 +138,7 @@ export function buildVisNamespace(deps: NamespaceDeps) {
        *
        * Create a VisStackResult and add scenes with .waveform(). Call .show() to render all.
        *
+       * @returns {VisStack}
        * @example vis.stack().waveform(a).waveform(b).show()
        */
       function stack(): VisStackResult {

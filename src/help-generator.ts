@@ -23,6 +23,7 @@ interface JsDocInfo {
   summary: string;
   description?: string;
   params: Array<{ name: string; type?: string; description: string }>;
+  returns?: string;
   examples: string[];
 }
 
@@ -136,9 +137,10 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
     descLines.pop();
   }
 
-  // Parse @param and @example tags
+  // Parse @param, @returns, and @example tags
   const params: Array<{ name: string; type?: string; description: string }> = [];
   const examples: string[] = [];
+  let returns: string | undefined;
 
   while (i < rawLines.length) {
     const line = rawLines[i];
@@ -152,6 +154,13 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
           name: match[2],
           description: match[3].trim(),
         });
+      }
+      i++;
+    } else if (line.startsWith("@returns") || line.startsWith("@return ")) {
+      // Supports: @returns {TypeName}  OR  @returns {TypeName} description
+      const match = line.match(/^@returns?\s+\{([^}]+)\}/);
+      if (match) {
+        returns = match[1].trim();
       }
       i++;
     } else if (line.startsWith("@example")) {
@@ -187,6 +196,7 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
     summary,
     description,
     params,
+    returns,
     examples,
   };
 }
@@ -626,6 +636,10 @@ export function generateFile(info: NamespaceInfo): string {
         lines.push(`      { ${parts.join(", ")} },`);
       }
       lines.push("    ],");
+    }
+
+    if (cmd.jsdoc?.returns) {
+      lines.push(`    returns: ${JSON.stringify(cmd.jsdoc.returns)},`);
     }
 
     if (cmd.jsdoc?.examples && cmd.jsdoc.examples.length > 0) {

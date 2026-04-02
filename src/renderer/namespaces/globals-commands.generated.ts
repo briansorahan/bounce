@@ -10,8 +10,7 @@ export const globalCommands: CommandHelp[] = [
     name: "help",
     signature: "help()",
     summary: "Show the organized command reference",
-    description: `Show the organized command reference. For detailed usage of a specific
-command or object, call its .help() method directly.`,
+    description: "Show the organized command reference.",
     examples: [
       "help()",
       "sn.help()",

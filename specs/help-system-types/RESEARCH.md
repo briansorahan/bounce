@@ -146,6 +146,17 @@ The new `TypeHelp` interface would parallel `CommandHelp`:
 - `{ name, summary, description?, properties?, methods? }`
 - A `renderTypeHelp(typeHelp)` function analogous to `renderNamespaceHelp`
 
+### Command Return Type Documentation
+
+The `CommandHelp` interface currently has no `returns` field. Users who run `sn.read.help()` see params and examples but not what type of object is returned. Since porcelain types like `Sample` are now documented and introspectable via `Sample.help()`, linking commands to their return types closes the discoverability loop.
+
+**Approach:** Add a `returns?: string` field to `CommandHelp`, populated from `@returns {TypeName}` JSDoc tags on namespace functions. The help generator already parses `@param` tags; parsing `@returns` follows the same pattern. The return type is displayed only in per-command help (`sn.read.help()`), not in namespace summaries (`sn.help()`).
+
+**Example flow:**
+1. Author writes `@returns {Sample}` in JSDoc on the `read()` function in `sample-namespace.ts`
+2. Generator extracts it into `returns: "Sample"` in the generated `CommandHelp` object
+3. `renderCommandHelp()` appends a `Returns: Sample` line to the output
+
 ## Next Steps
 
 1. Resolve Open Questions 1–5 with the user (naming, scope, location, source, exposure)

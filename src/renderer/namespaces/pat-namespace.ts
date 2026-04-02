@@ -34,6 +34,7 @@ export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
        *   STEPS:      . = rest,  a-z = soft velocity,  A-Z = loud velocity
        *
        * @param notation Multi-line X0X notation string.
+       * @returns {Pattern}
        * @example pat.xox(`\n  c4 = a . . . a . . . a . . . a . . .\n  e4 = . a . . . a . . . a . . . a . .\n`).play(1)
        */
       function xox(notation: string): PatternResult {

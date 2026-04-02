@@ -15,6 +15,7 @@ The sample is stored in the project database for future access via sn.load().`,
     params: [
       { name: "path", type: "string", description: "File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS." },
     ],
+    returns: "Sample",
     examples: [
       "const samp = sn.read(\"kick.wav\")",
       "const samp = sn.read(\"samples/loop.flac\")",
@@ -29,6 +30,7 @@ Use sn.list() to see available sample hashes.`,
     params: [
       { name: "hash", type: "string", description: "Full or prefix hash from sn.list()." },
     ],
+    returns: "Sample",
     examples: [
       "const samp = sn.load(\"a1b2c3d4\")",
     ],
@@ -47,6 +49,7 @@ Use sn.list() to see available sample hashes.`,
     signature: "sn.current()",
     summary: "Return the currently loaded sample, or null",
     description: "Return the currently loaded sample or null if no sample is active.",
+    returns: "Sample",
     examples: [
       "const current = sn.current()",
       "current?.help()",
@@ -81,6 +84,7 @@ Use AudioDeviceResult.record() to start recording.`,
     params: [
       { name: "index", type: "number", description: "Device index from sn.inputs()." },
     ],
+    returns: "AudioDevice",
     examples: [
       "const mic = sn.dev(0)",
       "const h = mic.record(\"take1\")",
