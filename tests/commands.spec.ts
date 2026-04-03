@@ -1,7 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.2) {
   const sampleRate = 44100;
@@ -49,119 +48,80 @@ test.describe("Audio Commands", () => {
     }
   });
 
-  test("sn.read should load a WAV file without auto-visualizing it", async () => {
+  test("sn.read should load a WAV file without auto-visualizing it", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "read-no-viz.wav");
     createTestWavFile(testFile);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `sn.read("${testFile}")`);
+    await sendCommand(`sn.read("${testFile}")`);
 
     await expect(window.locator(".xterm-rows")).toContainText("Loaded:", {
       timeout: 5000,
     });
     await expect(window.locator("#waveform-container")).toBeHidden();
 
-    await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("sn.read should reject non-audio files", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, 'sn.read("file.txt")');
+  test("sn.read should reject non-audio files", async ({ window, sendCommand }) => {
+    await sendCommand('sn.read("file.txt")');
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "Unsupported file format",
       { timeout: 5000 },
     );
-
-    await electronApp.close();
   });
 
-  test("sample.play should play without auto-showing the waveform panel", async () => {
+  test("sample.play should play without auto-showing the waveform panel", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "play-no-viz.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.play()");
+    await sendCommand(`const samp = sn.read("${testFile}")`);
+    await sendCommand("samp.play()");
 
     await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
       timeout: 5000,
     });
     await expect(window.locator("#waveform-container")).toBeHidden();
 
-    await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("sample.stop should stop playback", async () => {
+  test("sample.stop should stop playback", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "stop.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.play()");
-    await sendCommand(window, "samp.stop()");
+    await sendCommand(`const samp = sn.read("${testFile}")`);
+    await sendCommand("samp.play()");
+    await sendCommand("samp.stop()");
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "Playback stopped",
       { timeout: 5000 },
     );
 
-    await electronApp.close();
     fs.unlinkSync(testFile);
   });
 
-  test("help command should show available commands", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, "help()");
+  test("help command should show available commands", async ({ window, sendCommand }) => {
+    await sendCommand("help()");
 
     await expect(window.locator(".xterm-rows")).toContainText("sn", {
       timeout: 5000,
     });
-
-    await electronApp.close();
   });
 
-  test("clear command should clear terminal", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, "help()");
+  test("clear command should clear terminal", async ({ window, sendCommand }) => {
+    await sendCommand("help()");
     await expect(window.locator(".xterm-rows")).toContainText(
       "Show this help message",
       { timeout: 5000 },
     );
 
-    await sendCommand(window, "clear()");
+    await sendCommand("clear()");
 
     await expect(window.locator(".xterm-rows")).not.toContainText(
       "Show this help message",
       { timeout: 5000 },
     );
-
-    await electronApp.close();
   });
 });

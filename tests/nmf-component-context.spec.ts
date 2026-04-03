@@ -6,7 +6,7 @@ import {
   Page,
 } from "@playwright/test";
 import path from "path";
-import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady } from "./helpers";
+import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady, closeApp } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -28,7 +28,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (electronApp) {
-    await electronApp.close();
+    await closeApp(electronApp);
   }
 });
 

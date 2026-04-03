@@ -1,8 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
-import * as os from "os";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 0.2) {
   const sampleRate = 44100;
@@ -56,76 +54,58 @@ test.describe("Project workflows", () => {
     fs.mkdirSync(testDir, { recursive: true });
   });
 
-  test("proj.current() starts in default and omits redundant current label", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-projects-userdata-"));
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, "proj.current()");
+  test("proj.current() starts in default and omits redundant current label", async ({ window, sendCommand }) => {
+    await sendCommand("proj.current()");
 
     await expect(window.locator(".xterm-rows")).toContainText("Current Project", {
       timeout: 5000,
     });
     await expect(window.locator(".xterm-rows")).toContainText("name:      default");
     await expect(window.locator(".xterm-rows")).not.toContainText("current:   yes");
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
-  test("proj.list() and proj.load() show project creation and scoped sample counts", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-projects-userdata-"));
+  test("proj.list() and proj.load() show project creation and scoped sample counts", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, `project-sample-${Date.now()}.wav`);
     createTestWavFile(testFile, 0.25);
 
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+    try {
+      await sendCommand('proj.load("drums")');
+      await expect(window.locator(".xterm-rows")).toContainText("Loaded Project", {
+        timeout: 5000,
+      });
+      await expect(window.locator(".xterm-rows")).toContainText("name:      drums");
 
-    await sendCommand(window, 'proj.load("drums")');
-    await expect(window.locator(".xterm-rows")).toContainText("Loaded Project", {
-      timeout: 5000,
-    });
-    await expect(window.locator(".xterm-rows")).toContainText("name:      drums");
+      await sendCommand(`sn.read("${testFile}")`);
+      await sendCommand("proj.list()");
 
-    await sendCommand(window, `sn.read("${testFile}")`);
-    await sendCommand(window, "proj.list()");
+      await expect(window.locator(".xterm-rows")).toContainText("Projects", {
+        timeout: 5000,
+      });
+      await expect(window.locator(".xterm-rows")).toContainText("drums");
+      await expect(window.locator(".xterm-rows")).toContainText("default");
 
-    await expect(window.locator(".xterm-rows")).toContainText("Projects", {
-      timeout: 5000,
-    });
-    await expect(window.locator(".xterm-rows")).toContainText("drums");
-    await expect(window.locator(".xterm-rows")).toContainText("default");
-
-    const projects = await callIpc<
-      Array<{ name: string; sample_count: number; current: boolean }>
-    >(window, "listProjects");
-    const drums = projects.find((project) => project.name === "drums");
-    expect(drums?.sample_count).toBe(1);
-    expect(drums?.current).toBe(true);
-
-    await electronApp.close();
-    fs.unlinkSync(testFile);
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+      const projects = await callIpc<
+        Array<{ name: string; sample_count: number; current: boolean }>
+      >(window, "listProjects");
+      const drums = projects.find((project) => project.name === "drums");
+      expect(drums?.sample_count).toBe(1);
+      expect(drums?.current).toBe(true);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
   });
 
-  test("proj.rm() blocks removing the current project and removes non-current projects", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-projects-userdata-"));
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, 'proj.load("drums")');
-    await sendCommand(window, 'proj.rm("drums")');
+  test("proj.rm() blocks removing the current project and removes non-current projects", async ({ window, sendCommand }) => {
+    await sendCommand('proj.load("drums")');
+    await sendCommand('proj.rm("drums")');
 
     await expect(window.locator(".xterm-rows")).toContainText(
       'Cannot remove the current project "drums". Load a different project first.',
       { timeout: 5000 },
     );
 
-    await sendCommand(window, 'proj.load("default")');
-    await sendCommand(window, 'proj.rm("drums")');
+    await sendCommand('proj.load("default")');
+    await sendCommand('proj.rm("drums")');
     await expect(window.locator(".xterm-rows")).toContainText("Removed project drums.", {
       timeout: 5000,
     });
@@ -133,8 +113,5 @@ test.describe("Project workflows", () => {
     const projects = await callIpc<Array<{ name: string }>>(window, "listProjects");
     expect(projects.some((project) => project.name === "default")).toBe(true);
     expect(projects.some((project) => project.name === "drums")).toBe(false);
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 });

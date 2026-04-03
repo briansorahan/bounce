@@ -1,8 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 1.0) {
   const sampleRate = 44100;
@@ -38,85 +37,66 @@ function createTestWavFile(filePath: string, durationSeconds = 1.0) {
 }
 
 test.describe("Granularize", () => {
-  test("granularize returns GrainCollection with correct length", async () => {
+  test("granularize returns GrainCollection with correct length", async ({ window, sendCommand }) => {
     test.setTimeout(60000);
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
     const testFile = path.join(tmpDir, "test-granularize.wav");
     createTestWavFile(testFile, 1.0);
 
-    const electronApp = await launchApp();
+    await sendCommand(`const samp = sn.read("${testFile}")`);
 
-    try {
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
+    // 1s sample / 100ms grains = 10 grains; disable silence filtering so sine wave grains aren't skipped
+    // Call without assignment so the return value is printed to the terminal
+    await sendCommand(
+      `samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
+    );
 
-      await sendCommand(window, `const samp = sn.read("${testFile}")`);
+    await expect(window.locator(".xterm-rows")).toContainText("Granularized", {
+      timeout: 10000,
+    });
+    await expect(window.locator(".xterm-rows")).toContainText("grains", {
+      timeout: 5000,
+    });
 
-      // 1s sample ÷ 100ms grains = 10 grains; disable silence filtering so sine wave grains aren't skipped
-      // Call without assignment so the return value is printed to the terminal
-      await sendCommand(
-        window,
-        `samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
-      );
+    // Assign to gc for method tests (result not printed since it's a declaration)
+    await sendCommand(
+      `const gc = samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
+    );
 
-      await expect(window.locator(".xterm-rows")).toContainText("Granularized", {
-        timeout: 10000,
-      });
-      await expect(window.locator(".xterm-rows")).toContainText("grains", {
-        timeout: 5000,
-      });
+    // Verify length() via REPL
+    await sendCommand(`gc.length()`);
+    await expect(window.locator(".xterm-rows")).toContainText("10", {
+      timeout: 5000,
+    });
 
-      // Assign to gc for method tests (result not printed since it's a declaration)
-      await sendCommand(
-        window,
-        `const gc = samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
-      );
+    // Verify forEach iterates
+    await sendCommand(
+      `let count = 0; gc.forEach(() => { count++; }); count`,
+    );
+    await expect(window.locator(".xterm-rows")).toContainText("10", {
+      timeout: 5000,
+    });
 
-      // Verify length() via REPL
-      await sendCommand(window, `gc.length()`);
-      await expect(window.locator(".xterm-rows")).toContainText("10", {
-        timeout: 5000,
-      });
+    // Verify filter returns a smaller GrainCollection
+    await sendCommand(`gc.filter((_, i) => i < 3).length()`);
+    await expect(window.locator(".xterm-rows")).toContainText("3", {
+      timeout: 5000,
+    });
 
-      // Verify forEach iterates
-      await sendCommand(
-        window,
-        `let count = 0; gc.forEach(() => { count++; }); count`,
-      );
-      await expect(window.locator(".xterm-rows")).toContainText("10", {
-        timeout: 5000,
-      });
-
-      // Verify filter returns a smaller GrainCollection
-      await sendCommand(window, `gc.filter((_, i) => i < 3).length()`);
-      await expect(window.locator(".xterm-rows")).toContainText("3", {
-        timeout: 5000,
-      });
-    } finally {
-      await electronApp.close();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("granularize rejects samples longer than 20 seconds", async () => {
+  test("granularize rejects samples longer than 20 seconds", async ({ window, sendCommand }) => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
     const testFile = path.join(tmpDir, "test-granularize-long.wav");
     createTestWavFile(testFile, 0.5); // short file; we fake the check via a hash manipulation test
 
-    const electronApp = await launchApp();
+    // Pass a non-existent hash -- should surface a clear error in the terminal
+    await sendCommand(`sn.read("nonexistenthash00")`);
+    await expect(window.locator(".xterm-rows")).toContainText("Error", {
+      timeout: 5000,
+    });
 
-    try {
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
-      // Pass a non-existent hash — should surface a clear error in the terminal
-      await sendCommand(window, `sn.read("nonexistenthash00")`);
-      await expect(window.locator(".xterm-rows")).toContainText("Error", {
-        timeout: 5000,
-      });
-    } finally {
-      await electronApp.close();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

@@ -1,8 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
-import { launchApp, waitForReady, sendCommand, createTestWavFile } from "./helpers";
+import { createTestWavFile } from "./helpers";
 import * as fs from "fs";
-import * as os from "os";
 
 test.describe("Audio Format Support", () => {
   const testDir = path.join(__dirname, "../test-results/audio-files");
@@ -13,75 +12,43 @@ test.describe("Audio Format Support", () => {
     }
   });
 
-  test("should load and display WAV file", async () => {
+  test("should load and display WAV file", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "test.wav");
     createTestWavFile(testFile);
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
 
     try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
-      await sendCommand(window, `const samp = sn.read("${testFile}")`);
-      await sendCommand(window, "vis.waveform(samp).show()");
+      await sendCommand(`const samp = sn.read("${testFile}")`);
+      await sendCommand("vis.waveform(samp).show()");
 
       await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
         timeout: 5000,
       });
-
-      await electronApp.close();
     } finally {
       fs.unlinkSync(testFile);
-      fs.rmSync(userDataDir, { recursive: true, force: true });
     }
   });
 
-  test("should handle missing file gracefully", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
+  test("should handle missing file gracefully", async ({ window, sendCommand }) => {
+    const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
+    await sendCommand(`sn.read("${nonexistentPath}")`);
 
-    try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
-      const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
-      await sendCommand(window, `sn.read("${nonexistentPath}")`);
-
-      await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
-        timeout: 5000,
-      });
-
-      await electronApp.close();
-    } finally {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
+      timeout: 5000,
+    });
   });
 
-  test("should validate file extensions", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
+  test("should validate file extensions", async ({ window, sendCommand }) => {
+    const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
 
-    try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
+    for (const file of unsupportedFormats) {
+      await sendCommand(`sn.read("${file}")`);
 
-      const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
+      await expect(window.locator(".xterm-rows")).toContainText(
+        "Unsupported file format",
+        { timeout: 5000 },
+      );
 
-      for (const file of unsupportedFormats) {
-        await sendCommand(window, `sn.read("${file}")`);
-
-        await expect(window.locator(".xterm-rows")).toContainText(
-          "Unsupported file format",
-          { timeout: 5000 },
-        );
-
-        await sendCommand(window, "clear()");
-      }
-
-      await electronApp.close();
-    } finally {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
+      await sendCommand("clear()");
     }
   });
 

@@ -1,7 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
-import { launchApp, waitForReady, sendCommand, createTestWavFile } from "./helpers";
+import { createTestWavFile } from "./helpers";
 
 test.describe("sn.list()", () => {
   const testDir = path.join(__dirname, "../test-results/list-samples-test");
@@ -10,35 +10,25 @@ test.describe("sn.list()", () => {
     fs.mkdirSync(testDir, { recursive: true });
   });
 
-  test("sn.list() on empty database shows no-samples message", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, "sn.list()");
+  test("sn.list() on empty database shows no-samples message", async ({ window, sendCommand }) => {
+    await sendCommand("sn.list()");
 
     await expect(window.locator(".xterm-rows")).toContainText(
       "No samples in database",
       { timeout: 5000 },
     );
-
-    await electronApp.close();
   });
 
-  test("sn.list() after sn.read() shows the loaded sample", async () => {
+  test("sn.list() after sn.read() shows the loaded sample", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "list-test.wav");
     createTestWavFile(testFile);
 
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `sn.read("${testFile}")`);
+    await sendCommand(`sn.read("${testFile}")`);
     await expect(window.locator(".xterm-rows")).toContainText("Loaded:", {
       timeout: 5000,
     });
 
-    await sendCommand(window, "sn.list()");
+    await sendCommand("sn.list()");
 
     await expect(window.locator(".xterm-rows")).toContainText("Stored Samples:", {
       timeout: 5000,
@@ -50,7 +40,6 @@ test.describe("sn.list()", () => {
       timeout: 5000,
     });
 
-    await electronApp.close();
     fs.unlinkSync(testFile);
   });
 });
