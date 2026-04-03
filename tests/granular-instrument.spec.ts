@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 1.0) {
@@ -52,7 +53,8 @@ test.describe("GranularInstrument", () => {
 
   test("g.load(sn.read(...)) shows Loaded source sample", async () => {
     test.setTimeout(60000);
-    const testFile = path.join(__dirname, "test-granular-inst.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granular-inst-"));
+    const testFile = path.join(tmpDir, "test-granular-inst.wav");
     createTestWavFile(testFile, 1.0);
     const electronApp = await launchApp();
     try {
@@ -65,7 +67,7 @@ test.describe("GranularInstrument", () => {
       await expect(window.locator(".xterm-rows")).toContainText("Loaded source sample", { timeout: 10000 });
     } finally {
       await electronApp.close();
-      if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 

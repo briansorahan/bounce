@@ -6,6 +6,7 @@ import {
   Page,
 } from "@playwright/test";
 import path from "path";
+import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -25,11 +26,7 @@ async function sendCommand(command: string) {
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",

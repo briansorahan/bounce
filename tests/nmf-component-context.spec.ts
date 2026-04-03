@@ -6,6 +6,7 @@ import {
   Page,
 } from "@playwright/test";
 import path from "path";
+import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -15,11 +16,7 @@ let window: Page;
 test.beforeAll(async () => {
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -52,7 +49,8 @@ test.describe("NMF Component Context", () => {
       return await window.electron.listSamples();
     });
 
-    const sampleHash = samples[0].hash;
+    expect(samples.length).toBeGreaterThan(0);
+    const sampleHash = samples.find((s: { display_name: string | null }) => s.display_name?.includes("test-multi-viz"))!.hash;
 
     // Run analyze-nmf
     await window.evaluate(async (hash) => {
@@ -81,7 +79,13 @@ test.describe("NMF Component Context", () => {
       return await window.electron.visualizeNMF(hash);
     }, sampleHash);
 
-    await window.waitForTimeout(1000);
+    // Poll until waveform canvas has rendered content
+    await window.waitForFunction(() => {
+      const canvas = document.getElementById("waveform-canvas") as HTMLCanvasElement;
+      if (!canvas) return false;
+      const data = canvas.toDataURL();
+      return data && data !== "data:,";
+    }, { timeout: 5000 });
 
     // Verify waveform shows original audio, not component
     const waveformAfterVisualize = await window.evaluate(() => {

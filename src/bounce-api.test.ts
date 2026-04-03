@@ -406,7 +406,7 @@ async function main() {
   const scene2 = vis.waveform(sample) as VisSceneResult;
   scene2.overlay(resolvedOnsetPromise);
   scene2.panel(resolvedNmfPromise);
-  await Promise.resolve(); // drain one microtask tick so the .then() handlers fire
+  await Promise.resolve(); // drain one microtask tick so .then() handlers on already-resolved promises fire
   assert.equal(scene2.overlays.length, 1, "VisSceneResult.overlay(promise) populates overlays once resolved");
   assert.equal(scene2.panels.length, 1, "VisSceneResult.panel(promise) populates panels once resolved");
 
@@ -426,7 +426,7 @@ async function main() {
   stack3.waveform(sample);
   stack3.overlay(resolvedOnsetPromise);
   stack3.panel(resolvedNmfPromise);
-  await Promise.resolve();
+  await Promise.resolve(); // drain one microtask tick so .then() handlers on already-resolved promises fire
   assert.equal(stack3.scenes[0].overlays.length, 1, "VisStackResult.overlay(promise) populates latest scene overlays once resolved");
   assert.equal(stack3.scenes[0].panels.length, 1, "VisStackResult.panel(promise) populates latest scene panels once resolved");
 
@@ -553,7 +553,9 @@ async function main() {
   assert.ok(snObj.dev.help!().toString().includes("stop()"), "sn.dev.help mentions stop()");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => { delete (globalThis as Record<string, unknown>).window; })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

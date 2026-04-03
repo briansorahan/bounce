@@ -53,15 +53,14 @@ test.describe("Audio Recording", () => {
       await waitForReady(window);
 
       await sendCommand(window, "const mic = sn.dev(0)");
-      await window.waitForTimeout(500);
+      await expect(window.locator(".xterm-rows")).toContainText("AudioDevice", { timeout: 5000 });
 
       await sendCommand(window, 'const h = mic.record("test-take")');
       await expect(window.locator(".xterm-rows")).toContainText("Recording", {
         timeout: 10000,
       });
 
-      // Record for a moment then stop
-      await window.waitForTimeout(300);
+      await window.waitForTimeout(300); // flaky-ok: MediaRecorder needs time to buffer at least one audio chunk before stop() or decodeAudioData fails on an empty blob
       await sendCommand(window, "h.stop()");
 
       await expect(window.locator(".xterm-rows")).toContainText("Sample", {
@@ -85,7 +84,7 @@ test.describe("Audio Recording", () => {
       await waitForReady(window);
 
       await sendCommand(window, "const mic = sn.dev(0)");
-      await window.waitForTimeout(500);
+      await expect(window.locator(".xterm-rows")).toContainText("AudioDevice", { timeout: 5000 });
 
       // This resolves to Sample after 0.3s
       await sendCommand(window, 'mic.record("timed-take", { duration: 0.3 })');
@@ -111,7 +110,7 @@ test.describe("Audio Recording", () => {
       await waitForReady(window);
 
       await sendCommand(window, "const mic = sn.dev(0)");
-      await window.waitForTimeout(500);
+      await expect(window.locator(".xterm-rows")).toContainText("AudioDevice", { timeout: 5000 });
       await sendCommand(window, 'mic.record("retrieval-take", { duration: 0.3 })');
       await expect(window.locator(".xterm-rows")).toContainText("Sample", { timeout: 10000 });
 
@@ -134,7 +133,7 @@ test.describe("Audio Recording", () => {
       await waitForReady(window);
 
       await sendCommand(window, "const mic = sn.dev(0)");
-      await window.waitForTimeout(500);
+      await expect(window.locator(".xterm-rows")).toContainText("AudioDevice", { timeout: 5000 });
       await sendCommand(window, 'mic.record("dup-take", { duration: 0.3 })');
       await expect(window.locator(".xterm-rows")).toContainText("Sample", { timeout: 10000 });
 
@@ -158,7 +157,7 @@ test.describe("Audio Recording", () => {
       await waitForReady(window);
 
       await sendCommand(window, "const mic = sn.dev(0)");
-      await window.waitForTimeout(500);
+      await expect(window.locator(".xterm-rows")).toContainText("AudioDevice", { timeout: 5000 });
       await sendCommand(window, 'mic.record("overwrite-take", { duration: 0.3 })');
       await expect(window.locator(".xterm-rows")).toContainText("Sample", { timeout: 10000 });
 

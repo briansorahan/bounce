@@ -4,6 +4,28 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 
+/**
+ * Standard Electron launch args for all Playwright tests.
+ * --no-sandbox / --disable-setuid-sandbox: required when running as root in Docker.
+ * --use-fake-device-for-media-stream: synthetic audio input for CI.
+ * --disable-dev-shm-usage: prevents /dev/shm exhaustion when running many
+ *   sequential Electron instances (Docker defaults to 64 MB for /dev/shm).
+ * --disable-gpu: avoids GPU process crashes that accumulate across many
+ *   Electron launches in Docker and eventually block new instances from starting.
+ * --no-first-run / --disable-extensions: suppress one-time setup and background
+ *   network activity that slow down or destabilize headless launches.
+ */
+export const ELECTRON_MAIN = path.join(__dirname, "../dist/electron/main.js");
+export const ELECTRON_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--use-fake-device-for-media-stream",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--no-first-run",
+  "--disable-extensions",
+];
+
 export async function launchApp(userDataDir?: string) {
   const ownsUserDataDir = !userDataDir;
   const effectiveUserDataDir =
@@ -12,14 +34,7 @@ export async function launchApp(userDataDir?: string) {
 
   const electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      // Provide a synthetic audio input so getUserMedia / MediaRecorder work in
-      // headless CI environments that have no real audio hardware.
-      "--use-fake-device-for-media-stream",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",

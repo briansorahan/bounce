@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
@@ -52,7 +53,8 @@ function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
 
 test.describe("Onset Slice Analysis", () => {
   test("should analyze onset slices and display only when explicitly shown", async () => {
-    const testFile = path.join(__dirname, "test-onset-audio.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const testFile = path.join(tmpDir, "test-onset-audio.wav");
     createTestWavFile(testFile, 0.5);
 
     const electronApp = await launchApp();
@@ -83,11 +85,12 @@ test.describe("Onset Slice Analysis", () => {
     });
 
     await electronApp.close();
-    fs.unlinkSync(testFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test("should append a new scene when shown again", async () => {
-    const testFile = path.join(__dirname, "test-multi-analysis.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const testFile = path.join(tmpDir, "test-multi-analysis.wav");
     createTestWavFile(testFile, 0.3);
 
     const electronApp = await launchApp();
@@ -146,12 +149,13 @@ test.describe("Onset Slice Analysis", () => {
     expect(afterResize.scrollHeight).toBeLessThanOrEqual(afterResize.clientHeight + 2);
 
     await electronApp.close();
-    fs.unlinkSync(testFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test("should show multiple waveform scenes from one vis.stack command", async () => {
-    const firstFile = path.join(__dirname, "test-stack-a.wav");
-    const secondFile = path.join(__dirname, "test-stack-b.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const firstFile = path.join(tmpDir, "test-stack-a.wav");
+    const secondFile = path.join(tmpDir, "test-stack-b.wav");
     createTestWavFile(firstFile, 0.25);
     createTestWavFile(secondFile, 0.35);
 
@@ -170,7 +174,6 @@ test.describe("Onset Slice Analysis", () => {
     });
 
     await electronApp.close();
-    fs.unlinkSync(firstFile);
-    fs.unlinkSync(secondFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

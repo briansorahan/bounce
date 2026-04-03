@@ -105,8 +105,6 @@ test.describe("Transport and Pattern DSL", () => {
     await sendCommand(window, "transport.start()");
     await expect(rows).toContainText("started", { timeout: 5000 });
 
-    await window.waitForTimeout(500);
-
     await sendCommand(window, "transport.stop()");
     await expect(rows).toContainText("stopped", { timeout: 5000 });
 
@@ -177,8 +175,10 @@ test.describe("Transport and Pattern DSL", () => {
     await sendCommand(window, "transport.start()");
     await expect(rows).toContainText("started", { timeout: 5000 });
 
-    // At 240 BPM, 16th-note ticks fire at ~16/s; wait 1s → expect ~16 ticks
-    await window.waitForTimeout(1000);
+    // At 240 BPM, 16th-note ticks fire at ~16/s; poll until enough arrive
+    await window.waitForFunction(() => {
+      return ((window as any).__tickCount ?? 0) > 5;
+    }, { timeout: 5000 });
 
     await sendCommand(window, "transport.stop()");
     await expect(rows).toContainText("stopped", { timeout: 5000 });

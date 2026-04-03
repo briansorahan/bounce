@@ -420,6 +420,9 @@ async function main() {
     }
   }
 
+  // Clean up global mock
+  delete (globalThis as Record<string, unknown>).window;
+
   if (failed > 0) {
     console.error(`\n${failed} test(s) failed, ${passed} passed`);
     process.exit(1);

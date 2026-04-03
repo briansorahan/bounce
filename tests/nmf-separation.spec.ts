@@ -8,6 +8,7 @@ import {
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -19,11 +20,7 @@ test.beforeAll(async () => {
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-nmf-sep-"));
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -63,7 +60,7 @@ test.describe("NMF Separation", () => {
     });
 
     expect(samples.length).toBeGreaterThan(0);
-    const sampleHash = samples[0].hash;
+    const sampleHash = samples.find((s: { display_name: string | null }) => s.display_name?.includes("test-multi-viz"))!.hash;
 
     // Run analyze-nmf
     const analyzeResult = await window.evaluate(async (hash) => {

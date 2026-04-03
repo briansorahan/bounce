@@ -9,9 +9,9 @@ test.describe("Tab completion", () => {
 
     // Type a partial method name that has exactly one match: sn.read
     await window.keyboard.type("sn.rea");
-    await window.waitForTimeout(300);
 
     // The inline ghost text suffix "d()" should be visible in the terminal row
+    // toContainText polls automatically, no explicit delay needed
     await expect(window.locator(".xterm-rows")).toContainText("d()", {
       timeout: 5000,
     });
@@ -25,10 +25,9 @@ test.describe("Tab completion", () => {
     await waitForReady(window);
 
     await window.keyboard.type("sn.rea");
-    await window.waitForTimeout(300);
+    await expect(window.locator(".xterm-rows")).toContainText("d()", { timeout: 5000 });
 
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200);
 
     // After acceptance the prompt should show the completed text
     await expect(window.locator(".xterm-rows")).toContainText("sn.read()", {
@@ -43,12 +42,11 @@ test.describe("Tab completion", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    // "sn." matches multiple methods
+    // "sn." matches multiple methods — wait for ghost text to appear before Tab
     await window.keyboard.type("sn.");
-    await window.waitForTimeout(300);
+    await expect(window.locator(".xterm-rows")).toContainText("read()", { timeout: 5000 });
 
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200);
 
     // At least two method names should be visible in the ghost-text list
     const rows = window.locator(".xterm-rows");
@@ -64,17 +62,17 @@ test.describe("Tab completion", () => {
     await waitForReady(window);
 
     await window.keyboard.type("sn.");
-    await window.waitForTimeout(300);
+    await expect(window.locator(".xterm-rows")).toContainText("read()", { timeout: 5000 });
 
     // First Tab shows the list with the first candidate selected
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200);
+    await window.waitForTimeout(200); // flaky-ok: need stable snapshot before capturing text for comparison
 
     const rowsAfterFirst = await window.locator(".xterm-rows").textContent();
 
     // Second Tab cycles to the next candidate
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200);
+    await window.waitForTimeout(200); // flaky-ok: need stable snapshot before capturing text for comparison
 
     const rowsAfterSecond = await window.locator(".xterm-rows").textContent();
 
@@ -91,11 +89,11 @@ test.describe("Tab completion", () => {
 
     // Type partial input to trigger ghost text
     await window.keyboard.type("sn.rea");
-    await window.waitForTimeout(300);
+    await expect(window.locator(".xterm-rows")).toContainText("d()", { timeout: 5000 });
 
     // Accept the completion
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200);
+    await expect(window.locator(".xterm-rows")).toContainText("sn.read()", { timeout: 5000 });
 
     // Submit the completed command
     await window.keyboard.press("Enter");

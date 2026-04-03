@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 function createTestWavFile(filePath: string, durationSeconds = 1.0) {
@@ -39,7 +40,8 @@ function createTestWavFile(filePath: string, durationSeconds = 1.0) {
 test.describe("Granularize", () => {
   test("granularize returns GrainCollection with correct length", async () => {
     test.setTimeout(60000);
-    const testFile = path.join(__dirname, "test-granularize.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
+    const testFile = path.join(tmpDir, "test-granularize.wav");
     createTestWavFile(testFile, 1.0);
 
     const electronApp = await launchApp();
@@ -92,12 +94,13 @@ test.describe("Granularize", () => {
       });
     } finally {
       await electronApp.close();
-      if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
   test("granularize rejects samples longer than 20 seconds", async () => {
-    const testFile = path.join(__dirname, "test-granularize-long.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
+    const testFile = path.join(tmpDir, "test-granularize-long.wav");
     createTestWavFile(testFile, 0.5); // short file; we fake the check via a hash manipulation test
 
     const electronApp = await launchApp();
@@ -113,7 +116,7 @@ test.describe("Granularize", () => {
       });
     } finally {
       await electronApp.close();
-      if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

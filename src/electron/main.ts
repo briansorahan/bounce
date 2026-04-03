@@ -23,8 +23,15 @@ function shutdownRuntimeResources(): void {
   audioEnginePort = null;
 
   if (audioEngineProcess) {
+    const pid = audioEngineProcess.pid;
     audioEngineProcess.kill();
     audioEngineProcess = null;
+    // SIGTERM alone may not interrupt blocking C++ audio threads (miniaudio).
+    // Force-kill with SIGKILL so zombie utility processes don't accumulate
+    // across sequential test runs and block subsequent audio device opens.
+    if (pid !== undefined) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
+    }
   }
 
   if (dbManager) {
@@ -75,6 +82,7 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   // Listen for telemetry on port2
   port2.on("message", (event) => {
+    if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
     const data = event.data as {
       type: string;
       sampleHash?: string;
@@ -193,13 +201,12 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("before-quit", () => {
-  shutdownRuntimeResources();
-});
-
 app.on("window-all-closed", () => {
   shutdownRuntimeResources();
   if (process.platform !== "darwin") {
-    app.quit();
+    // Use app.exit() rather than app.quit() so the process terminates
+    // unconditionally without waiting for active libuv handles (timers, IPC
+    // channels, etc.) that can cause 30 s hangs in sequential test runs.
+    app.exit(0);
   }
 });

@@ -8,6 +8,7 @@ import {
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -19,11 +20,7 @@ test.beforeAll(async () => {
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-nx-basic-"));
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",

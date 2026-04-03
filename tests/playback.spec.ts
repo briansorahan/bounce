@@ -122,15 +122,21 @@ test.describe("Playback and Visualization", () => {
       timeout: 5000,
     });
 
-    await window.waitForTimeout(150);
+    // Poll until playback position is non-zero
+    await window.waitForFunction(() => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length === 1 && states[0].position > 0;
+    }, { timeout: 5000 });
     const playbackA = await getPlaybackStates(window);
-    expect(playbackA).toHaveLength(1);
-    expect(playbackA[0].position).toBeGreaterThan(0);
 
-    await window.waitForTimeout(150);
+    // Poll until position has advanced further
+    const posA = playbackA[0].position;
+    await window.waitForFunction((prevPos: number) => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length === 1 && states[0].position > prevPos;
+    }, posA, { timeout: 5000 });
     const playbackB = await getPlaybackStates(window);
-    expect(playbackB).toHaveLength(1);
-    expect(playbackB[0].position).toBeGreaterThan(playbackA[0].position);
+    expect(playbackB[0].position).toBeGreaterThan(posA);
 
     await sendCommand(window, "samp.stop()");
 
@@ -216,19 +222,23 @@ test.describe("Playback and Visualization", () => {
     await sendCommand(window, `const samp2 = sn.read("${secondFile}")`);
     await sendCommand(window, "samp1.loop()");
     await sendCommand(window, "samp2.loop()");
-    await window.waitForTimeout(150);
 
-    const beforeStop = await getPlaybackStates(window);
-    expect(beforeStop.length).toBeGreaterThanOrEqual(2);
+    // Poll until both loops are active
+    await window.waitForFunction(() => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length >= 2;
+    }, { timeout: 5000 });
 
     await sendCommand(window, "sn.stop()");
     await expect(window.locator(".xterm-rows")).toContainText("Playback stopped", {
       timeout: 5000,
     });
 
-    await window.waitForTimeout(100);
-    const afterStop = await getPlaybackStates(window);
-    expect(afterStop).toHaveLength(0);
+    // Poll until all playback states are cleared
+    await window.waitForFunction(() => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length === 0;
+    }, { timeout: 5000 });
 
     await electronApp.close();
     fs.unlinkSync(firstFile);
@@ -252,9 +262,20 @@ test.describe("Playback and Visualization", () => {
     await expect(window.locator(".visualization-scene")).toHaveCount(2);
 
     await sendCommand(window, "samp1.loop()");
-    await window.waitForTimeout(200);
+
+    // Poll until first loop is active before starting second
+    await window.waitForFunction(() => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length >= 1 && states[0].position > 0;
+    }, { timeout: 5000 });
+
     await sendCommand(window, "samp2.play()");
-    await window.waitForTimeout(120);
+
+    // Poll until both playbacks are active
+    await window.waitForFunction(() => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      return states?.length === 2;
+    }, { timeout: 5000 });
 
     const firstStateA = await getPlaybackStates(window);
     expect(firstStateA).toHaveLength(2);
@@ -263,7 +284,13 @@ test.describe("Playback and Visualization", () => {
     expect(firstPlaybackA).toBeTruthy();
     expect(secondPlaybackA).toBeTruthy();
 
-    await window.waitForTimeout(220);
+    // Poll until the first playback has advanced from its captured position
+    const pos1A = firstPlaybackA!.position;
+    await window.waitForFunction((prevPos: number) => {
+      const states = (window as any).__bounceGetPlaybackStates?.();
+      const s = states?.find((st: any) => st.totalSamples === 52920);
+      return s && s.position !== prevPos;
+    }, pos1A, { timeout: 5000 });
 
     const firstStateB = await getPlaybackStates(window);
     expect(firstStateB).toHaveLength(2);
