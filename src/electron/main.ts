@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
+import { app, BrowserWindow, ipcMain, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { DatabaseManager } from "./database";
@@ -162,6 +162,15 @@ registerAllHandlers({
   corpusManager,
   getAudioEnginePort: () => audioEnginePort,
   getMainWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+});
+
+// ---------------------------------------------------------------------------
+// Force-shutdown IPC — allows tests to trigger a clean teardown of the audio
+// engine utility process + database before the Electron app exits.
+// ---------------------------------------------------------------------------
+ipcMain.on("force-shutdown", () => {
+  shutdownRuntimeResources();
+  app.exit(0);
 });
 
 // ---------------------------------------------------------------------------

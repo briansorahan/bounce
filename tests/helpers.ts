@@ -45,6 +45,12 @@ export async function launchApp(userDataDir?: string) {
   const originalClose = electronApp.close.bind(electronApp);
   electronApp.close = async () => {
     try {
+      const win = electronApp.windows()[0];
+      if (win) {
+        await win.evaluate(() => (window as any).electron.forceShutdown());
+      }
+    } catch { /* app may already be gone */ }
+    try {
       await forceClose(electronApp, originalClose);
     } finally {
       if (ownsUserDataDir) {
@@ -62,9 +68,16 @@ export async function launchApp(userDataDir?: string) {
  * Playwright's close() waits for the entire Electron process tree to exit.
  * In Docker on GitHub runners this routinely exceeds 30-60 s due to IPC
  * channel drainage and process tree cleanup, causing "Worker teardown
- * timeout" failures.  We give it a short grace period then SIGKILL.
+ * timeout" failures.  We tell the app to kill its audio engine utility
+ * process first, then give it a short grace period before SIGKILL.
  */
 export async function closeApp(app: ElectronApplication): Promise<void> {
+  try {
+    const win = app.windows()[0];
+    if (win) {
+      await win.evaluate(() => (window as any).electron.forceShutdown());
+    }
+  } catch { /* app may already be gone */ }
   await forceClose(app, app.close.bind(app));
 }
 

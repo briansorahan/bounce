@@ -30,7 +30,14 @@ export const test = base.extend<BounceFixtures>({
 
     await use(electronApp);
 
-    // Teardown: guaranteed to run even if test fails/times out
+    // Teardown: tell the app to kill the audio engine and exit, then close.
+    try {
+      const win = electronApp.windows()[0];
+      if (win) {
+        await win.evaluate(() => (window as any).electron.forceShutdown());
+      }
+    } catch { /* app may already be gone */ }
+
     const pid = electronApp.process().pid;
     const kill = () => {
       try {
