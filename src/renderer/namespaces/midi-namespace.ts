@@ -3,7 +3,7 @@ import { renderNamespaceHelp, withHelp } from "../help.js";
 import {
   MidiDevicesResult,
   MidiDeviceResult,
-  MidiRecordingHandle,
+  MidiRecordingHandleResult,
   MidiSequenceResult,
   MidiSequencePromise,
   MidiSequencesResult,
@@ -94,18 +94,19 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
        * Start MIDI recording; returns handle or timed sequence
        *
        * Start recording MIDI events from the open input device.
-       * Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.
+       * Returns a MidiRecordingHandleResult when no duration is specified — call h.stop() to finish.
        * Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.
        *
        * @param inst Target instrument to associate with the recording.
        * @param opts Recording options (duration in seconds, name for the saved sequence).
+       * @returns {MidiRecordingHandle}
        * @example const h = midi.record(keys)\nconst seq = h.stop()\nseq.play(keys)
        * @example // Timed recording:\nconst seq = midi.record(keys, { duration: 4 })\nseq.play(keys)
        */
       function record(
         inst: MidiTargetInstrument,
         opts?: MidiRecordOptions,
-      ): MidiRecordingHandle | MidiSequencePromise {
+      ): MidiRecordingHandleResult | MidiSequencePromise {
         const instrName = inst.name ?? inst.instrumentId;
         const sequenceName = opts?.name ?? generateSequenceName();
 
@@ -144,7 +145,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
           );
         }
 
-        return new MidiRecordingHandle(instrName, stopAndSave);
+        return new MidiRecordingHandleResult(instrName, stopAndSave);
       },
       midiCommands[3],
     ),
@@ -172,6 +173,7 @@ export function buildMidiNamespace(_deps: NamespaceDeps) {
        * The imported sequence is transient — it is not auto-saved to the project.
        *
        * @param filePath Absolute path to the .mid file.
+       * @returns {MidiSequence}
        * @example midi.load('~/beats/groove.mid')
        */
       async function load(filePath: string): Promise<MidiSequenceResult> {

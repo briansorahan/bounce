@@ -1,5 +1,10 @@
+import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
-import { SamplePromise, type Sample } from "./sample.js";
+import { SamplePromise, type SampleResult } from "./sample.js";
+import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+
+const audioDeviceMethodHelps = porcelainTypeHelps.find(t => t.name === "AudioDevice")?.methods ?? [];
+const recordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "RecordingHandle")?.methods ?? [];
 
 /** A single audio input device as seen by the REPL. */
 export interface AudioInputDevice {
@@ -14,15 +19,15 @@ export interface RecordOptions {
   overwrite?: boolean;
 }
 
-/** Bindings injected into AudioDevice from bounce-api. */
+/** Bindings injected into AudioDeviceResult from bounce-api. */
 export interface AudioDeviceBindings {
-  record: (sampleId: string, opts?: RecordOptions) => Promise<RecordingHandle> | SamplePromise;
+  record: (sampleId: string, opts?: RecordOptions) => Promise<RecordingHandleResult> | SamplePromise;
 }
 
 /**
  * REPL object returned by sn.dev(index). Represents an audio input device.
  */
-export class AudioDevice extends BounceResult {
+export class AudioDeviceResult extends BounceResult {
   constructor(
     public readonly index: number,
     public readonly deviceId: string,
@@ -40,9 +45,10 @@ export class AudioDevice extends BounceResult {
         `  \x1b[90mrecord(sampleId, {duration: N})  — record for N seconds\x1b[0m`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "AudioDevice", audioDeviceMethodHelps);
   }
 
-  record(sampleId: string, opts?: RecordOptions): Promise<RecordingHandle> | SamplePromise {
+  record(sampleId: string, opts?: RecordOptions): Promise<RecordingHandleResult> | SamplePromise {
     return this.bindings.record(sampleId, opts);
   }
 
@@ -54,15 +60,15 @@ export class AudioDevice extends BounceResult {
         "  Start recording audio from this device:",
         "",
         `  \x1b[90mconst h = mic.record("my-take")\x1b[0m   — start recording`,
-        `  \x1b[90mh.stop()\x1b[0m                           — stop recording, returns Sample`,
+        `  \x1b[90mh.stop()\x1b[0m                           — stop recording, returns SampleResult`,
         "",
-        `  \x1b[90mmic.record("my-take", { duration: 5 })\x1b[0m  — record 5 seconds, returns Sample`,
+        `  \x1b[90mmic.record("my-take", { duration: 5 })\x1b[0m  — record 5 seconds, returns SampleResult`,
         "",
         "  Options:",
         `    \x1b[33mduration\x1b[0m   Number of seconds to record before auto-stopping.`,
         `    \x1b[33moverwrite\x1b[0m  If true, replace an existing sample with the same name.`,
         "",
-        "  The Sample returned is identical to sn.read() — all analysis methods apply.",
+        "  The SampleResult returned is identical to sn.read() — all analysis methods apply.",
       ].join("\n"),
     );
   }
@@ -74,19 +80,20 @@ export class AudioDevice extends BounceResult {
  * and get back a SamplePromise.
  * Not PromiseLike — assignment stores the handle without blocking.
  */
-export class RecordingHandle extends BounceResult {
+export class RecordingHandleResult extends BounceResult {
   constructor(
     private readonly deviceLabel: string,
     private readonly stopFn: () => void,
-    private readonly promise: Promise<Sample>,
+    private readonly promise: Promise<SampleResult>,
   ) {
     super(
       [
         `\x1b[31m⏺ Recording\x1b[0m · \x1b[1m${deviceLabel}\x1b[0m · in progress`,
         "",
-        `  \x1b[90mh.stop()\x1b[0m to finish recording and get a Sample`,
+        `  \x1b[90mh.stop()\x1b[0m to finish recording and get a SampleResult`,
       ].join("\n"),
     );
+    attachMethodHelp(this, "RecordingHandle", recordingHandleMethodHelps);
   }
 
   stop(): SamplePromise {
@@ -102,9 +109,9 @@ export class RecordingHandle extends BounceResult {
         "  A handle to an active recording session.",
         "  The recording continues until you call stop() or the device is released.",
         "",
-        `  \x1b[90mh.stop()\x1b[0m — stop recording and return a SamplePromise that resolves to Sample`,
+        `  \x1b[90mh.stop()\x1b[0m — stop recording and return a SamplePromise that resolves to SampleResult`,
         "",
-        "  To record for a fixed duration (returns Sample directly, no handle needed):",
+        "  To record for a fixed duration (returns SampleResult directly, no handle needed):",
         `  \x1b[90mmic.record("take", { duration: 5 })\x1b[0m`,
       ].join("\n"),
     );

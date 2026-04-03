@@ -8,6 +8,7 @@ import {
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady, closeApp } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -31,11 +32,7 @@ test.beforeAll(async () => {
   );
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -43,13 +40,12 @@ test.beforeAll(async () => {
     },
   });
   window = await electronApp.firstWindow();
-  await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
+  await waitForReady(window);
 });
 
 test.afterAll(async () => {
   if (electronApp) {
-    await electronApp.close();
+    await closeApp(electronApp);
   }
   if (userDataDir) {
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -86,16 +82,16 @@ test.describe("NMF Analysis", () => {
     // Clear any existing visualizations
     await window.keyboard.type("clear()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
+    await window.waitForTimeout(500); // flaky-ok: skipped test
 
     // Load sample
     await window.keyboard.type(`const samp = sn.read("${testFile}")`);
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(1000);
+    await window.waitForTimeout(1000); // flaky-ok: skipped test
 
     await window.keyboard.type("samp.play()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(1000);
+    await window.waitForTimeout(1000); // flaky-ok: skipped test
 
     // Wait for hash to appear in terminal
     await window.waitForFunction(
@@ -114,22 +110,22 @@ test.describe("NMF Analysis", () => {
 
     await window.keyboard.type("sn.stop()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
+    await window.waitForTimeout(500); // flaky-ok: skipped test
 
     // Ensure sample has NMF data (may already exist from previous test)
     await window.keyboard.type("await analyzeNmf()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(5000);
+    await window.waitForTimeout(5000); // flaky-ok: skipped test
 
     // Clear the waveform
     await window.keyboard.type("clear()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(500);
+    await window.waitForTimeout(500); // flaky-ok: skipped test
 
     // Try to visualize NMF without waveform displayed
     await window.keyboard.type("await visualizeNmf()");
     await window.keyboard.press("Enter");
-    await window.waitForTimeout(1500); // Give IPC time to complete
+    await window.waitForTimeout(1500); // flaky-ok: skipped test
 
     const output = await window.locator(".xterm-screen").textContent();
     // Should indicate no waveform is displayed

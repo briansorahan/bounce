@@ -1,8 +1,30 @@
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, ElectronApplication } from "@playwright/test";
 import electronPath from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+
+/**
+ * Standard Electron launch args for all Playwright tests.
+ * --no-sandbox / --disable-setuid-sandbox: required when running as root in Docker.
+ * --use-fake-device-for-media-stream: synthetic audio input for CI.
+ * --disable-dev-shm-usage: prevents /dev/shm exhaustion when running many
+ *   sequential Electron instances (Docker defaults to 64 MB for /dev/shm).
+ * --disable-gpu: avoids GPU process crashes that accumulate across many
+ *   Electron launches in Docker and eventually block new instances from starting.
+ * --no-first-run / --disable-extensions: suppress one-time setup and background
+ *   network activity that slow down or destabilize headless launches.
+ */
+export const ELECTRON_MAIN = path.join(__dirname, "../dist/electron/main.js");
+export const ELECTRON_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--use-fake-device-for-media-stream",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--no-first-run",
+  "--disable-extensions",
+];
 
 export async function launchApp(userDataDir?: string) {
   const ownsUserDataDir = !userDataDir;
@@ -12,14 +34,7 @@ export async function launchApp(userDataDir?: string) {
 
   const electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      // Provide a synthetic audio input so getUserMedia / MediaRecorder work in
-      // headless CI environments that have no real audio hardware.
-      "--use-fake-device-for-media-stream",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -27,23 +42,66 @@ export async function launchApp(userDataDir?: string) {
     },
   });
 
-  if (ownsUserDataDir) {
-    const originalClose = electronApp.close.bind(electronApp);
-    electronApp.close = async () => {
-      try {
-        await originalClose();
-      } finally {
+  const originalClose = electronApp.close.bind(electronApp);
+  electronApp.close = async () => {
+    try {
+      const win = electronApp.windows()[0];
+      if (win) {
+        await win.evaluate(() => (window as any).electron.forceShutdown());
+      }
+    } catch { /* app may already be gone */ }
+    try {
+      await forceClose(electronApp, originalClose);
+    } finally {
+      if (ownsUserDataDir) {
         fs.rmSync(effectiveUserDataDir, { recursive: true, force: true });
       }
-    };
-  }
+    }
+  };
 
   return electronApp;
 }
 
+/**
+ * Close an Electron app with a hard kill fallback.
+ *
+ * Playwright's close() waits for the entire Electron process tree to exit.
+ * In Docker on GitHub runners this routinely exceeds 30-60 s due to IPC
+ * channel drainage and process tree cleanup, causing "Worker teardown
+ * timeout" failures.  We tell the app to kill its audio engine utility
+ * process first, then give it a short grace period before SIGKILL.
+ */
+export async function closeApp(app: ElectronApplication): Promise<void> {
+  try {
+    const win = app.windows()[0];
+    if (win) {
+      await win.evaluate(() => (window as any).electron.forceShutdown());
+    }
+  } catch { /* app may already be gone */ }
+  await forceClose(app, app.close.bind(app));
+}
+
+async function forceClose(
+  app: ElectronApplication,
+  graceful: () => Promise<void>,
+  timeoutMs = 5000,
+): Promise<void> {
+  const pid = app.process().pid;
+  const kill = () => {
+    try { if (pid) process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
+  };
+  const timer = setTimeout(kill, timeoutMs);
+  try {
+    await graceful();
+  } catch { /* ignore errors after force-kill */ } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function waitForReady(window: any) {
   await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
+  const timeout = process.env.CI ? 30000 : 10000;
+  await window.waitForSelector(".xterm-screen", { timeout });
 }
 
 export async function sendCommand(window: any, command: string): Promise<void> {

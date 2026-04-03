@@ -2,18 +2,18 @@ import { BounceResult } from "../bounce-result.js";
 import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
 import { parsePattern } from "../pattern-parser.js";
-import { Pattern } from "../results/pattern.js";
+import { PatternResult } from "../results/pattern.js";
 import { patCommands, patDescription } from "./pat-commands.generated.js";
 export { patCommands } from "./pat-commands.generated.js";
 
 export interface PatNamespace {
   description: string;
-  xox: ((notation: string) => Pattern) & { help: () => BounceResult };
+  xox: ((notation: string) => PatternResult) & { help: () => BounceResult };
   help(): BounceResult;
 }
 
 /**
- * Pattern DSL for rhythmic sequencing
+ * PatternResult DSL for rhythmic sequencing
  * @namespace pat
  */
 export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
@@ -26,7 +26,7 @@ export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
        * Compile an X0X step pattern for live-coding
        *
        * Compile an X0X step-sequencer pattern from a multi-line notation string.
-       * Returns a Pattern object that can be played with .play(channel).
+       * Returns a PatternResult object that can be played with .play(channel).
        *
        * X0X notation rules:
        *   Each line:  NOTE = STEPS   (16 non-whitespace step characters)
@@ -34,11 +34,12 @@ export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
        *   STEPS:      . = rest,  a-z = soft velocity,  A-Z = loud velocity
        *
        * @param notation Multi-line X0X notation string.
+       * @returns {Pattern}
        * @example pat.xox(`\n  c4 = a . . . a . . . a . . . a . . .\n  e4 = . a . . . a . . . a . . . a . .\n`).play(1)
        */
-      function xox(notation: string): Pattern {
+      function xox(notation: string): PatternResult {
         const compiled = parsePattern(notation);
-        return new Pattern(notation, compiled);
+        return new PatternResult(notation, compiled);
       },
       patCommands[0],
     ),

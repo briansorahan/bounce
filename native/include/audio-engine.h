@@ -79,7 +79,7 @@ public:
     AudioEngine(const AudioEngine&)            = delete;
     AudioEngine& operator=(const AudioEngine&) = delete;
 
-    bool start();
+    bool start(bool useNullBackend = false);
     void stop();
 
     // Legacy playback API (backward compat — routes through preview channel)

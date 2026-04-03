@@ -478,6 +478,9 @@ export const IpcChannel = {
   MidiInputEvent: "midi-input-event",
   MidiPlaybackEnded: "midi-playback-ended",
 
+  // App lifecycle (renderer → main, one-way)
+  ForceShutdown:         "force-shutdown",
+
   // Transport (renderer → main, one-way)
   TransportStart:        "transport-start",
   TransportStop:         "transport-stop",
@@ -839,6 +842,10 @@ export interface IpcSendContract {
   "mixer-set-master-mute": {
     data: { mute: boolean };
   };
+  // App lifecycle (renderer → main, one-way)
+  "force-shutdown": {
+    data: void;
+  };
   // Transport (renderer → main, one-way)
   "transport-start": {
     data: void;
@@ -1041,6 +1048,9 @@ export interface ElectronAPI {
   midiStopPlayback: () => Promise<void>;
   onMidiInputEvent: (callback: (event: MidiEvent) => void) => void;
   onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
+
+  // App lifecycle
+  forceShutdown: () => void;
 
   // Transport
   transportStart: () => void;

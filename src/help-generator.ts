@@ -23,6 +23,7 @@ interface JsDocInfo {
   summary: string;
   description?: string;
   params: Array<{ name: string; type?: string; description: string }>;
+  returns?: string;
   examples: string[];
 }
 
@@ -136,9 +137,10 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
     descLines.pop();
   }
 
-  // Parse @param and @example tags
+  // Parse @param, @returns, and @example tags
   const params: Array<{ name: string; type?: string; description: string }> = [];
   const examples: string[] = [];
+  let returns: string | undefined;
 
   while (i < rawLines.length) {
     const line = rawLines[i];
@@ -152,6 +154,13 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
           name: match[2],
           description: match[3].trim(),
         });
+      }
+      i++;
+    } else if (line.startsWith("@returns") || line.startsWith("@return ")) {
+      // Supports: @returns {TypeName}  OR  @returns {TypeName} description
+      const match = line.match(/^@returns?\s+\{([^}]+)\}/);
+      if (match) {
+        returns = match[1].trim();
       }
       i++;
     } else if (line.startsWith("@example")) {
@@ -187,6 +196,7 @@ function parseJsDocText(jsdocText: string): JsDocInfo {
     summary,
     description,
     params,
+    returns,
     examples,
   };
 }
@@ -341,8 +351,265 @@ export function processFile(filePath: string): NamespaceInfo[] {
 }
 
 // ---------------------------------------------------------------------------
-// Code generation
+// Porcelain type doc types
 // ---------------------------------------------------------------------------
+
+export interface PorcelainPropertyInfo {
+  name: string;
+  type: string;
+  description: string;
+  readonly?: boolean;
+}
+
+export interface PorcelainMethodInfo {
+  signature: string;
+  summary: string;
+  returns?: string;
+  params: Array<{ name: string; description: string }>;
+}
+
+export interface PorcelainTypeInfo {
+  name: string;
+  summary: string;
+  description?: string;
+  properties: PorcelainPropertyInfo[];
+  methods: PorcelainMethodInfo[];
+}
+
+// ---------------------------------------------------------------------------
+// Porcelain file processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse @method and @methodparam tags from a JSDoc block.
+ *
+ * Format:
+ *   @method signature(args?) Summary text → ReturnType
+ *   @methodparam name Description of the parameter
+ *
+ * The `→ ReturnType` suffix is extracted as `returns` and stripped from `summary`.
+ * `@methodparam` lines attach to the immediately preceding `@method`.
+ */
+function parseMethodTags(rawLines: string[]): PorcelainMethodInfo[] {
+  const methods: PorcelainMethodInfo[] = [];
+  for (const line of rawLines) {
+    const methodMatch = line.match(/^@method\s+(\S+\([^)]*\)\??)\s+(.*)/);
+    if (methodMatch) {
+      const fullSummary = methodMatch[2].trim();
+      const returnsMatch = fullSummary.match(/^(.*?)\s*→\s*(\S+)\s*$/);
+      const summary = returnsMatch ? returnsMatch[1].trim() : fullSummary;
+      const returns = returnsMatch ? returnsMatch[2] : undefined;
+      methods.push({ signature: methodMatch[1], summary, returns, params: [] });
+      continue;
+    }
+    // @methodparam name? description — attaches to the last @method
+    const paramMatch = line.match(/^@methodparam\s+(\S+?)\??\s+(.*)/);
+    if (paramMatch && methods.length > 0) {
+      methods[methods.length - 1].params.push({
+        name: paramMatch[1],
+        description: paramMatch[2].trim(),
+      });
+    }
+  }
+  return methods;
+}
+function parsePropTags(rawLines: string[]): PorcelainPropertyInfo[] {
+  const props: PorcelainPropertyInfo[] = [];
+  for (const line of rawLines) {
+    // @prop {type} name description  OR  @prop {type} name? description
+    const match = line.match(/^@prop\s+\{([^}]+)\}\s+(\S+?)\??\s+(.*)/);
+    if (match) {
+      props.push({ name: match[2], type: match[1].trim(), description: match[3].trim() });
+    }
+  }
+  return props;
+}
+
+/**
+ * Parse a @porcelain JSDoc block into a PorcelainTypeInfo.
+ * Returns undefined if the block has no @porcelain tag.
+ */
+function parsePorcelainJsDoc(jsdocText: string): PorcelainTypeInfo | undefined {
+  const porcelainMatch = jsdocText.match(/@porcelain\s+(\S+)/);
+  if (!porcelainMatch) return undefined;
+  const name = porcelainMatch[1];
+
+  const inner = jsdocText.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
+  const rawLines = inner
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, "").trimEnd());
+
+  // Collect lines before the first @tag as description
+  const descLines: string[] = [];
+  let i = 0;
+  while (i < rawLines.length && !rawLines[i].startsWith("@")) {
+    descLines.push(rawLines[i]);
+    i++;
+  }
+  while (descLines.length > 0 && descLines[0].trim() === "") descLines.shift();
+  while (descLines.length > 0 && descLines[descLines.length - 1].trim() === "") descLines.pop();
+
+  // Collect all @tag lines
+  const tagLines: string[] = [];
+  while (i < rawLines.length) {
+    tagLines.push(rawLines[i]);
+    i++;
+  }
+
+  // The summary is the description text that follows @porcelain TypeName on its own line
+  // or on subsequent description lines. Since @porcelain TypeName IS a tag line, we treat
+  // the first non-empty descLine as the summary if present; otherwise extract from the
+  // @porcelain line's trailing text.
+  let summary = descLines[0]?.trim() ?? "";
+  if (!summary) {
+    // No description before @porcelain — extract trailing text from the @porcelain line itself
+    const trailingMatch = jsdocText.match(/@porcelain\s+\S+\s+(.*)/);
+    summary = trailingMatch ? trailingMatch[1].trim() : name;
+  }
+  const restLines = descLines.slice(1);
+  while (restLines.length > 0 && restLines[0].trim() === "") restLines.shift();
+  const description = restLines.length > 0 ? restLines.join("\n").trimEnd() : undefined;
+
+  // But wait — in our porcelain.ts format the summary comes AFTER @porcelain on the
+  // NEXT line (not the @porcelain line). Let's re-check: description lines = lines before
+  // first @. The @porcelain line IS a tag line, so the text between /** and @porcelain
+  // goes into descLines. In porcelain.ts those lines are empty. The actual summary is the
+  // line right after @porcelain. So re-extract summary from tag lines.
+  const porcelainLineIdx = tagLines.findIndex((l) => l.startsWith("@porcelain"));
+  if (porcelainLineIdx !== -1) {
+    // Try inline text on the @porcelain line (after the type name)
+    const inlineMatch = tagLines[porcelainLineIdx].match(/@porcelain\s+\S+\s+(.*)/);
+    if (inlineMatch && inlineMatch[1].trim()) {
+      summary = inlineMatch[1].trim();
+    } else {
+      // Look for next non-empty, non-@tag line as summary
+      let j = porcelainLineIdx + 1;
+      while (j < tagLines.length && tagLines[j].trim() === "") j++;
+      if (j < tagLines.length && !tagLines[j].startsWith("@")) {
+        summary = tagLines[j].trim();
+      }
+    }
+  }
+
+  const properties = parsePropTags(tagLines);
+  const methods = parseMethodTags(tagLines);
+
+  return { name, summary, description, properties, methods };
+}
+
+/**
+ * Parse porcelain.ts and return all @porcelain type entries.
+ */
+export function processPorcelainFile(filePath: string): PorcelainTypeInfo[] {
+  const source = readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    /*setParentNodes=*/ true,
+  );
+
+  const results: PorcelainTypeInfo[] = [];
+
+  function visitTopLevel(node: ts.Node): void {
+    if (ts.isTypeAliasDeclaration(node)) {
+      const jsdocText = getLeadingJsDoc(source, node, sourceFile);
+      if (jsdocText) {
+        const info = parsePorcelainJsDoc(jsdocText);
+        if (info) results.push(info);
+      }
+    }
+    ts.forEachChild(node, visitTopLevel);
+  }
+
+  ts.forEachChild(sourceFile, visitTopLevel);
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Porcelain code generation
+// ---------------------------------------------------------------------------
+
+export function generatePorcelainFile(types: PorcelainTypeInfo[], methodOptsRegistry?: MethodOptsRegistry): string {
+  const lines: string[] = [
+    "// This file is auto-generated by scripts/generate-help.ts",
+    "// Do not edit manually — edit @porcelain JSDoc in src/renderer/results/porcelain.ts",
+    "",
+    'import type { TypeHelp } from "../help.js";',
+    "",
+    "export const porcelainTypeHelps: TypeHelp[] = [",
+  ];
+
+  for (const t of types) {
+    lines.push("  {");
+    lines.push(`    name: ${JSON.stringify(t.name)},`);
+    lines.push(`    summary: ${serializeString(t.summary)},`);
+    if (t.description) {
+      lines.push(`    description: ${serializeString(t.description)},`);
+    }
+    if (t.properties.length > 0) {
+      lines.push("    properties: [");
+      for (const p of t.properties) {
+        const parts = [
+          `name: ${JSON.stringify(p.name)}`,
+          `type: ${JSON.stringify(p.type)}`,
+          `description: ${JSON.stringify(p.description)}`,
+        ];
+        if (p.readonly) parts.push("readonly: true");
+        lines.push(`      { ${parts.join(", ")} },`);
+      }
+      lines.push("    ],");
+    }
+    if (t.methods.length > 0) {
+      lines.push("    methods: [");
+      for (const m of t.methods) {
+        const methodName = m.signature.split("(")[0];
+        const optsInfo = methodOptsRegistry?.get(methodName);
+
+        // Collect all params: scalar @methodparam entries + opts param (if in registry)
+        const hasScalarParams = m.params.length > 0;
+        const hasOptsParam = !!optsInfo;
+        const needsParams = hasScalarParams || hasOptsParam;
+
+        if (m.returns || needsParams) {
+          lines.push("      {");
+          lines.push(`        signature: ${JSON.stringify(m.signature)},`);
+          lines.push(`        summary: ${JSON.stringify(m.summary)},`);
+          if (m.returns) {
+            lines.push(`        returns: ${JSON.stringify(m.returns)},`);
+          }
+          if (needsParams) {
+            lines.push("        params: [");
+            // Scalar params first
+            for (const sp of m.params) {
+              lines.push(`          { name: ${JSON.stringify(sp.name)}, type: "unknown", description: ${JSON.stringify(sp.description)} },`);
+            }
+            // Opts param last
+            if (optsInfo) {
+              lines.push("          {");
+              lines.push(`            name: "opts",`);
+              lines.push(`            type: ${JSON.stringify(optsInfo.name)},`);
+              lines.push(`            description: ${JSON.stringify(optsInfo.summary)},`);
+              lines.push("            optional: true,");
+              lines.push(...serializeOptsProperties(optsInfo.properties).map((l) => "  " + l));
+              lines.push("          },");
+            }
+            lines.push("        ],");
+          }
+          lines.push("      },");
+        } else {
+          lines.push(`      { signature: ${JSON.stringify(m.signature)}, summary: ${JSON.stringify(m.summary)} },`);
+        }
+      }
+      lines.push("    ],");
+    }
+    lines.push("  },");
+  }
+
+  lines.push("];", "");
+  return lines.join("\n");
+}
+
 
 function buildSignature(
   namespaceName: string,
@@ -366,7 +633,7 @@ function serializeString(value: string): string {
   return JSON.stringify(value);
 }
 
-export function generateFile(info: NamespaceInfo): string {
+export function generateFile(info: NamespaceInfo, optsTypeRegistry?: OptsTypeRegistry): string {
   const { namespaceName, description, commands } = info;
   const isGlobals = namespaceName === "globals";
   const exportName = isGlobals ? "globalCommands" : `${namespaceName}Commands`;
@@ -413,15 +680,31 @@ export function generateFile(info: NamespaceInfo): string {
     if (mergedParams.length > 0) {
       lines.push("    params: [");
       for (const param of mergedParams) {
-        const parts: string[] = [
-          `name: ${JSON.stringify(param.name)}`,
-          `type: ${JSON.stringify(param.type)}`,
-          `description: ${JSON.stringify(param.description)}`,
-        ];
-        if (param.optional) parts.push("optional: true");
-        lines.push(`      { ${parts.join(", ")} },`);
+        const optsInfo = optsTypeRegistry?.get(param.type);
+        if (optsInfo) {
+          // Multi-line with nested properties
+          lines.push("      {");
+          lines.push(`        name: ${JSON.stringify(param.name)},`);
+          lines.push(`        type: ${JSON.stringify(param.type)},`);
+          lines.push(`        description: ${JSON.stringify(param.description)},`);
+          if (param.optional) lines.push("        optional: true,");
+          lines.push(...serializeOptsProperties(optsInfo.properties));
+          lines.push("      },");
+        } else {
+          const parts: string[] = [
+            `name: ${JSON.stringify(param.name)}`,
+            `type: ${JSON.stringify(param.type)}`,
+            `description: ${JSON.stringify(param.description)}`,
+          ];
+          if (param.optional) parts.push("optional: true");
+          lines.push(`      { ${parts.join(", ")} },`);
+        }
       }
       lines.push("    ],");
+    }
+
+    if (cmd.jsdoc?.returns) {
+      lines.push(`    returns: ${JSON.stringify(cmd.jsdoc.returns)},`);
     }
 
     if (cmd.jsdoc?.examples && cmd.jsdoc.examples.length > 0) {
@@ -437,4 +720,159 @@ export function generateFile(info: NamespaceInfo): string {
 
   lines.push("];", "");
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Opts type documentation
+// ---------------------------------------------------------------------------
+
+export interface OptsPropertyInfo {
+  name: string;
+  type: string;
+  description: string;
+  optional?: boolean;
+}
+
+export interface OptsTypeInfo {
+  name: string;
+  summary: string;
+  usedBy: string[];
+  properties: OptsPropertyInfo[];
+}
+
+/** Map from opts type name → OptsTypeInfo */
+export type OptsTypeRegistry = Map<string, OptsTypeInfo>;
+
+/** Map from method name → OptsTypeInfo (built from @usedby tags) */
+export type MethodOptsRegistry = Map<string, OptsTypeInfo>;
+
+/**
+ * Parse a single @opts JSDoc block into an OptsTypeInfo.
+ * Returns undefined if the block has no @opts tag.
+ */
+function parseOptsJsDoc(jsdocText: string): OptsTypeInfo | undefined {
+  const optsMatch = jsdocText.match(/@opts\s+(\S+)/);
+  if (!optsMatch) return undefined;
+  const name = optsMatch[1];
+
+  const inner = jsdocText.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
+  const rawLines = inner
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*\s?/, "").trimEnd());
+
+  // Collect lines before the first @tag as description/summary
+  const descLines: string[] = [];
+  let i = 0;
+  while (i < rawLines.length && !rawLines[i].startsWith("@")) {
+    descLines.push(rawLines[i]);
+    i++;
+  }
+  while (descLines.length > 0 && descLines[0].trim() === "") descLines.shift();
+  while (descLines.length > 0 && descLines[descLines.length - 1].trim() === "") {
+    descLines.pop();
+  }
+
+  const tagLines: string[] = [];
+  while (i < rawLines.length) {
+    tagLines.push(rawLines[i]);
+    i++;
+  }
+
+  // Find summary — the line right after @opts TypeName, or trailing text
+  let summary = descLines[0]?.trim() ?? "";
+  if (!summary) {
+    const optsLineIdx = tagLines.findIndex((l) => l.startsWith("@opts"));
+    if (optsLineIdx !== -1) {
+      const inlineMatch = tagLines[optsLineIdx].match(/@opts\s+\S+\s+(.*)/);
+      if (inlineMatch && inlineMatch[1].trim()) {
+        summary = inlineMatch[1].trim();
+      } else {
+        let j = optsLineIdx + 1;
+        while (j < tagLines.length && tagLines[j].trim() === "") j++;
+        if (j < tagLines.length && !tagLines[j].startsWith("@")) {
+          summary = tagLines[j].trim();
+        }
+      }
+    }
+  }
+
+  // Parse @usedby tag: comma-separated method names
+  const usedBy: string[] = [];
+  for (const line of tagLines) {
+    const match = line.match(/^@usedby\s+(.*)/);
+    if (match) {
+      usedBy.push(...match[1].split(",").map((s) => s.trim()).filter(Boolean));
+    }
+  }
+
+  // Parse @prop tags
+  const properties: OptsPropertyInfo[] = [];
+  for (const line of tagLines) {
+    // @prop {type} name description  OR  @prop {type} name? description
+    const match = line.match(/^@prop\s+\{([^}]+)\}\s+(\S+?)\??\s+(.*)/);
+    if (match) {
+      properties.push({
+        name: match[2],
+        type: match[1].trim(),
+        description: match[3].trim(),
+        optional: true,
+      });
+    }
+  }
+
+  return { name, summary, usedBy, properties };
+}
+
+/**
+ * Parse opts-docs.ts and return registries keyed by type name and method name.
+ */
+export function processOptsFile(filePath: string): {
+  typeRegistry: OptsTypeRegistry;
+  methodRegistry: MethodOptsRegistry;
+} {
+  const source = readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    /*setParentNodes=*/ true,
+  );
+
+  const typeRegistry: OptsTypeRegistry = new Map();
+  const methodRegistry: MethodOptsRegistry = new Map();
+
+  function visitTopLevel(node: ts.Node): void {
+    if (ts.isTypeAliasDeclaration(node)) {
+      const jsdocText = getLeadingJsDoc(source, node, sourceFile);
+      if (jsdocText) {
+        const info = parseOptsJsDoc(jsdocText);
+        if (info) {
+          typeRegistry.set(info.name, info);
+          for (const method of info.usedBy) {
+            methodRegistry.set(method, info);
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visitTopLevel);
+  }
+
+  ts.forEachChild(sourceFile, visitTopLevel);
+  return { typeRegistry, methodRegistry };
+}
+
+/** Serialize an OptsPropertyInfo[] as TypeScript source in the generated file. */
+function serializeOptsProperties(props: OptsPropertyInfo[]): string[] {
+  const lines: string[] = [`        properties: [`];
+  for (const p of props) {
+    const parts = [
+      `name: ${JSON.stringify(p.name)}`,
+      `type: ${JSON.stringify(p.type)}`,
+      `description: ${JSON.stringify(p.description)}`,
+    ];
+    if (p.optional !== undefined) parts.push(`optional: ${p.optional}`);
+    lines.push(`          { ${parts.join(", ")} },`);
+  }
+  lines.push("        ],");
+  return lines;
 }

@@ -1,6 +1,13 @@
+import { attachMethodHelp } from "../help.js";
 import { BounceResult, FeatureResult, type HelpFactory } from "./base.js";
-import { SamplePromise, type Sample } from "./sample.js";
+import { SamplePromise, type SampleResult } from "./sample.js";
 import { InstrumentResult } from "./instrument.js";
+import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+
+const sliceMethodHelps = porcelainTypeHelps.find(t => t.name === "SliceFeature")?.methods ?? [];
+const nmfMethodHelps = porcelainTypeHelps.find(t => t.name === "NmfFeature")?.methods ?? [];
+const nxMethodHelps = porcelainTypeHelps.find(t => t.name === "NxFeature")?.methods ?? [];
+const mfccMethodHelps = porcelainTypeHelps.find(t => t.name === "MfccFeature")?.methods ?? [];
 
 export interface ToSamplerOptions {
   name: string;
@@ -11,35 +18,36 @@ export interface ToSamplerOptions {
 export interface SliceFeatureBindings {
   help: HelpFactory;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
-  playSlice: (index?: number) => Promise<Sample>;
+  playSlice: (index?: number) => Promise<SampleResult>;
   toSampler: (opts: ToSamplerOptions) => Promise<InstrumentResult>;
 }
 
 export interface NmfFeatureBindings {
   help: HelpFactory;
   sep: (options?: SepOptions) => Promise<BounceResult>;
-  playComponent: (index?: number) => Promise<Sample>;
+  playComponent: (index?: number) => Promise<SampleResult>;
 }
 
 export interface NxFeatureBindings {
   help: HelpFactory;
-  playComponent: (index?: number) => Promise<Sample>;
+  playComponent: (index?: number) => Promise<SampleResult>;
 }
 
 export interface MfccFeatureBindings {
   help: HelpFactory;
 }
 
-export class SliceFeature extends FeatureResult {
+export class SliceFeatureResult extends FeatureResult {
   constructor(
     display: string,
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: Record<string, unknown> | undefined,
     public readonly slices: number[],
     private readonly bindings: SliceFeatureBindings,
   ) {
     super(display, source, featureHash, "onset-slice", options, bindings.help);
+    attachMethodHelp(this, "SliceFeature", sliceMethodHelps);
   }
 
   get count(): number {
@@ -59,10 +67,10 @@ export class SliceFeature extends FeatureResult {
   }
 }
 
-export class NmfFeature extends FeatureResult {
+export class NmfFeatureResult extends FeatureResult {
   constructor(
     display: string,
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: NmfOptions | undefined,
     public readonly components: number | undefined,
@@ -73,6 +81,7 @@ export class NmfFeature extends FeatureResult {
     private readonly bindings: NmfFeatureBindings,
   ) {
     super(display, source, featureHash, "nmf", options, bindings.help);
+    attachMethodHelp(this, "NmfFeature", nmfMethodHelps);
   }
 
   sep(options?: SepOptions): Promise<BounceResult> {
@@ -84,10 +93,10 @@ export class NmfFeature extends FeatureResult {
   }
 }
 
-export class NxFeature extends FeatureResult {
+export class NxFeatureResult extends FeatureResult {
   constructor(
     display: string,
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: Record<string, unknown> | undefined,
     public readonly components: number,
@@ -98,6 +107,7 @@ export class NxFeature extends FeatureResult {
     private readonly bindings: NxFeatureBindings,
   ) {
     super(display, source, featureHash, "nmf-cross", options, bindings.help);
+    attachMethodHelp(this, "NxFeature", nxMethodHelps);
   }
 
   playComponent(index = 0): SamplePromise {
@@ -105,10 +115,10 @@ export class NxFeature extends FeatureResult {
   }
 }
 
-export class MfccFeature extends FeatureResult {
+export class MfccFeatureResult extends FeatureResult {
   constructor(
     display: string,
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: MFCCOptions | undefined,
     public readonly numFrames: number,
@@ -116,14 +126,15 @@ export class MfccFeature extends FeatureResult {
     private readonly bindings: MfccFeatureBindings,
   ) {
     super(display, source, featureHash, "mfcc", options, bindings.help);
+    attachMethodHelp(this, "MfccFeature", mfccMethodHelps);
   }
 }
 
-export class SliceFeaturePromise implements PromiseLike<SliceFeature> {
-  constructor(private readonly promise: Promise<SliceFeature>) {}
+export class SliceFeaturePromise implements PromiseLike<SliceFeatureResult> {
+  constructor(private readonly promise: Promise<SliceFeatureResult>) {}
 
-  then<TResult1 = SliceFeature, TResult2 = never>(
-    onfulfilled?: ((value: SliceFeature) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = SliceFeatureResult, TResult2 = never>(
+    onfulfilled?: ((value: SliceFeatureResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -131,7 +142,7 @@ export class SliceFeaturePromise implements PromiseLike<SliceFeature> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<SliceFeature | TResult> {
+  ): Promise<SliceFeatureResult | TResult> {
     return this.promise.catch(onrejected);
   }
 
@@ -152,11 +163,11 @@ export class SliceFeaturePromise implements PromiseLike<SliceFeature> {
   }
 }
 
-export class NmfFeaturePromise implements PromiseLike<NmfFeature> {
-  constructor(private readonly promise: Promise<NmfFeature>) {}
+export class NmfFeaturePromise implements PromiseLike<NmfFeatureResult> {
+  constructor(private readonly promise: Promise<NmfFeatureResult>) {}
 
-  then<TResult1 = NmfFeature, TResult2 = never>(
-    onfulfilled?: ((value: NmfFeature) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = NmfFeatureResult, TResult2 = never>(
+    onfulfilled?: ((value: NmfFeatureResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -164,7 +175,7 @@ export class NmfFeaturePromise implements PromiseLike<NmfFeature> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<NmfFeature | TResult> {
+  ): Promise<NmfFeatureResult | TResult> {
     return this.promise.catch(onrejected);
   }
 
@@ -181,11 +192,11 @@ export class NmfFeaturePromise implements PromiseLike<NmfFeature> {
   }
 }
 
-export class NxFeaturePromise implements PromiseLike<NxFeature> {
-  constructor(private readonly promise: Promise<NxFeature>) {}
+export class NxFeaturePromise implements PromiseLike<NxFeatureResult> {
+  constructor(private readonly promise: Promise<NxFeatureResult>) {}
 
-  then<TResult1 = NxFeature, TResult2 = never>(
-    onfulfilled?: ((value: NxFeature) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = NxFeatureResult, TResult2 = never>(
+    onfulfilled?: ((value: NxFeatureResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -193,7 +204,7 @@ export class NxFeaturePromise implements PromiseLike<NxFeature> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<NxFeature | TResult> {
+  ): Promise<NxFeatureResult | TResult> {
     return this.promise.catch(onrejected);
   }
 
@@ -206,11 +217,11 @@ export class NxFeaturePromise implements PromiseLike<NxFeature> {
   }
 }
 
-export class MfccFeaturePromise implements PromiseLike<MfccFeature> {
-  constructor(private readonly promise: Promise<MfccFeature>) {}
+export class MfccFeaturePromise implements PromiseLike<MfccFeatureResult> {
+  constructor(private readonly promise: Promise<MfccFeatureResult>) {}
 
-  then<TResult1 = MfccFeature, TResult2 = never>(
-    onfulfilled?: ((value: MfccFeature) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = MfccFeatureResult, TResult2 = never>(
+    onfulfilled?: ((value: MfccFeatureResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return this.promise.then(onfulfilled, onrejected);
@@ -218,7 +229,7 @@ export class MfccFeaturePromise implements PromiseLike<MfccFeature> {
 
   catch<TResult = never>(
     onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Promise<MfccFeature | TResult> {
+  ): Promise<MfccFeatureResult | TResult> {
     return this.promise.catch(onrejected);
   }
 

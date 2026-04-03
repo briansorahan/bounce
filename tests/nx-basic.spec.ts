@@ -8,6 +8,7 @@ import {
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady, closeApp } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -19,11 +20,7 @@ test.beforeAll(async () => {
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-nx-basic-"));
   electronApp = await electron.launch({
     executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
+    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -31,13 +28,12 @@ test.beforeAll(async () => {
     },
   });
   window = await electronApp.firstWindow();
-  await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
+  await waitForReady(window);
 });
 
 test.afterAll(async () => {
   if (electronApp) {
-    await electronApp.close();
+    await closeApp(electronApp);
   }
   if (userDataDir) {
     fs.rmSync(userDataDir, { recursive: true, force: true });

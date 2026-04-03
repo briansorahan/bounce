@@ -1,35 +1,20 @@
-import { test, expect } from "@playwright/test";
-import { launchApp, waitForReady } from "./helpers";
+import { test, expect } from "./fixtures";
 
 test.describe("Bounce Terminal UI", () => {
-  test("should launch app and show terminal", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("should launch app and show terminal", async ({ window }) => {
     await expect(window).toHaveTitle("Bounce - FluCoMa Audio Editor");
 
     const terminalDiv = await window.locator("#terminal");
     await expect(terminalDiv).toBeVisible();
-
-    await electronApp.close();
   });
 
-  test("should display welcome message", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-
-    const consoleMessages: string[] = [];
+  test("should display welcome message", async ({ window }) => {
     const consoleErrors: string[] = [];
     const failedRequests: string[] = [];
 
     window.on("console", (msg) => {
       if (msg.type() === "error") {
         consoleErrors.push(msg.text());
-      } else {
-        consoleMessages.push(msg.text());
       }
     });
 
@@ -41,10 +26,7 @@ test.describe("Bounce Terminal UI", () => {
       failedRequests.push(`${request.url()} - ${request.failure()?.errorText}`);
     });
 
-    await window.waitForSelector("#terminal", { timeout: 10000 });
-
     const hasTerminal = await window.locator("#terminal").count();
-
     expect(hasTerminal).toBeGreaterThan(0);
 
     if (consoleErrors.length > 0) {
@@ -54,7 +36,5 @@ test.describe("Bounce Terminal UI", () => {
     if (failedRequests.length > 0) {
       console.log("Failed requests:", failedRequests);
     }
-
-    await electronApp.close();
   });
 });

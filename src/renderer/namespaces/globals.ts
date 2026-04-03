@@ -46,8 +46,7 @@ export function buildGlobals(deps: NamespaceDeps, namespaces: Record<string, { d
     /**
      * Show the organized command reference
      *
-     * Show the organized command reference. For detailed usage of a specific
-     * command or object, call its .help() method directly.
+     * Show the organized command reference.
      *
      * @example help()
      * @example sn.help()
@@ -67,19 +66,7 @@ export function buildGlobals(deps: NamespaceDeps, namespaces: Record<string, { d
         "  \x1b[33mhelp()\x1b[0m      Show this help message",
         "  \x1b[33mclear()\x1b[0m     Clear the terminal screen",
         "  \x1b[33merrors()\x1b[0m    Show background errors",
-        "",
-        "\x1b[90mCompose commands:\x1b[0m",
-        "  const samp = sn.read(\"path\")                           \x1b[90m# load sample\x1b[0m",
-        "  env.inspect(\"samp\")                                   \x1b[90m# inspect a binding\x1b[0m",
-        "  proj.load(\"drums\")                                    \x1b[90m# switch project context\x1b[0m",
-        "  const onsets = samp.onsetSlice(); onsets.slice()            \x1b[90m# onset workflow\x1b[0m",
-        "  const feature = samp.nmf(); feature.sep()               \x1b[90m# NMF separation\x1b[0m",
-        "  vis.waveform(samp).overlay(onsets).show()               \x1b[90m# visualize onsets\x1b[0m",
-        "  vis.waveform(samp).overlay(samp.nmf()).show()           \x1b[90m# visualize NMF\x1b[0m",
-        "  vis.waveform(samp1).overlay(samp1.nx(samp2)).show()    \x1b[90m# NMF cross-synthesis\x1b[0m",
-        "  corpus.build(samp) → corpus.query(0, 5)                 \x1b[90m# corpus search\x1b[0m",
-        "",
-        "\x1b[90mFor detailed usage:\x1b[0m \x1b[33mobj.help()\x1b[0m  \x1b[90me.g. sn.help(), vis.help(), const samp = sn.read(\"x\"); samp.help(), fs.help()\x1b[0m",
+
       ].join("\n"));
     },
     globalCommands[0],

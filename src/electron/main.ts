@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
+import { app, BrowserWindow, ipcMain, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { DatabaseManager } from "./database";
@@ -23,8 +23,15 @@ function shutdownRuntimeResources(): void {
   audioEnginePort = null;
 
   if (audioEngineProcess) {
+    const pid = audioEngineProcess.pid;
     audioEngineProcess.kill();
     audioEngineProcess = null;
+    // SIGTERM alone may not interrupt blocking C++ audio threads (miniaudio).
+    // Force-kill with SIGKILL so zombie utility processes don't accumulate
+    // across sequential test runs and block subsequent audio device opens.
+    if (pid !== undefined) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
+    }
   }
 
   if (dbManager) {
@@ -75,6 +82,7 @@ function startAudioEngineProcess(mainWindow: BrowserWindow): void {
 
   // Listen for telemetry on port2
   port2.on("message", (event) => {
+    if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
     const data = event.data as {
       type: string;
       sampleHash?: string;
@@ -157,6 +165,15 @@ registerAllHandlers({
 });
 
 // ---------------------------------------------------------------------------
+// Force-shutdown IPC — allows tests to trigger a clean teardown of the audio
+// engine utility process + database before the Electron app exits.
+// ---------------------------------------------------------------------------
+ipcMain.on("force-shutdown", () => {
+  shutdownRuntimeResources();
+  app.exit(0);
+});
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
@@ -193,13 +210,12 @@ app.whenReady().then(() => {
   });
 });
 
-app.on("before-quit", () => {
-  shutdownRuntimeResources();
-});
-
 app.on("window-all-closed", () => {
   shutdownRuntimeResources();
   if (process.platform !== "darwin") {
-    app.quit();
+    // Use app.exit() rather than app.quit() so the process terminates
+    // unconditionally without waiting for active libuv handles (timers, IPC
+    // channels, etc.) that can cause 30 s hangs in sequential test runs.
+    app.exit(0);
   }
 });

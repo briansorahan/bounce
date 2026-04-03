@@ -14,7 +14,7 @@ export const corpusCommands: CommandHelp[] = [
 Requires sample.onsets() and sample.slice() to have been run first.
 If source is omitted, uses the currently loaded audio.`,
     params: [
-      { name: "source", type: "string | Sample | PromiseLike<Sample>", description: "Audio source. Omit to use current audio.", optional: true },
+      { name: "source", type: "string | SampleResult | PromiseLike<SampleResult>", description: "Audio source. Omit to use current audio.", optional: true },
       { name: "featureHashOverride", type: "string", description: "Override the feature hash (advanced use).", optional: true },
     ],
     examples: [

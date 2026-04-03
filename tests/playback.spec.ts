@@ -1,7 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 async function getPlaybackStates(window: any): Promise<Array<{ hash: string | null; position: number; totalSamples: number }>> {
   return window.evaluate(() => {
@@ -105,190 +104,193 @@ test.describe("Playback and Visualization", () => {
     }
   });
 
-  test("playback cursor state should advance during playback", async () => {
+  test("playback cursor state should advance during playback", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "cursor-test.wav");
     createTestWavFile(testFile, 0.5);
 
-    const electronApp = await launchApp();
+    try {
+      await sendCommand(`const samp = sn.read("${testFile}")`);
+      await sendCommand("vis.waveform(samp).show()");
+      await sendCommand("samp.play()");
 
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+      await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
+        timeout: 5000,
+      });
 
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "vis.waveform(samp).show()");
-    await sendCommand(window, "samp.play()");
+      // Poll until playback position is non-zero
+      await window.waitForFunction(() => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length === 1 && states[0].position > 0;
+      }, { timeout: 5000 });
+      const playbackA = await getPlaybackStates(window);
 
-    await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
-      timeout: 5000,
-    });
+      // Poll until position has advanced further
+      const posA = playbackA[0].position;
+      await window.waitForFunction((prevPos: number) => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length === 1 && states[0].position > prevPos;
+      }, posA, { timeout: 5000 });
+      const playbackB = await getPlaybackStates(window);
+      expect(playbackB[0].position).toBeGreaterThan(posA);
 
-    await window.waitForTimeout(150);
-    const playbackA = await getPlaybackStates(window);
-    expect(playbackA).toHaveLength(1);
-    expect(playbackA[0].position).toBeGreaterThan(0);
-
-    await window.waitForTimeout(150);
-    const playbackB = await getPlaybackStates(window);
-    expect(playbackB).toHaveLength(1);
-    expect(playbackB[0].position).toBeGreaterThan(playbackA[0].position);
-
-    await sendCommand(window, "samp.stop()");
-
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+      await sendCommand("samp.stop()");
+    } finally {
+      fs.unlinkSync(testFile);
+    }
   });
 
-  test("sn.read should not auto-render visualization", async () => {
+  test("sn.read should not auto-render visualization", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "viz-test.wav");
     createTestWavFile(testFile, 0.2);
 
-    const electronApp = await launchApp();
+    try {
+      await expect(window.locator(".visualization-scene")).toHaveCount(0);
 
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+      await sendCommand(`sn.read("${testFile}")`);
 
-    await expect(window.locator(".visualization-scene")).toHaveCount(0);
-
-    await sendCommand(window, `sn.read("${testFile}")`);
-
-    await expect(window.locator(".visualization-scene")).toHaveCount(0);
-
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+      await expect(window.locator(".visualization-scene")).toHaveCount(0);
+    } finally {
+      fs.unlinkSync(testFile);
+    }
   });
 
-  test("sample.play should not create visualization if not exists", async () => {
+  test("sample.play should not create visualization if not exists", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "play-viz-test.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await launchApp();
+    try {
+      await sendCommand(`const samp = sn.read("${testFile}")`);
+      await sendCommand("samp.play()");
 
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+      await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
+        timeout: 5000,
+      });
+      await expect(window.locator(".visualization-scene")).toHaveCount(0);
 
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.play()");
-
-    await expect(window.locator(".xterm-rows")).toContainText("Playing:", {
-      timeout: 5000,
-    });
-    await expect(window.locator(".visualization-scene")).toHaveCount(0);
-
-    await sendCommand(window, "samp.stop()");
-
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+      await sendCommand("samp.stop()");
+    } finally {
+      fs.unlinkSync(testFile);
+    }
   });
 
-  test("sample.stop should work without errors", async () => {
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("sample.stop should work without errors", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "stop-test.wav");
     createTestWavFile(testFile, 0.1);
 
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.stop()");
+    try {
+      await sendCommand(`const samp = sn.read("${testFile}")`);
+      await sendCommand("samp.stop()");
 
-    await expect(window.locator(".xterm-rows")).toContainText(
-      "Playback stopped",
-      { timeout: 5000 },
-    );
-
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+      await expect(window.locator(".xterm-rows")).toContainText(
+        "Playback stopped",
+        { timeout: 5000 },
+      );
+    } finally {
+      fs.unlinkSync(testFile);
+    }
   });
 
-  test("sn.stop should stop all active playback", async () => {
+  test("sn.stop should stop all active playback", async ({ window, sendCommand }) => {
     const firstFile = path.join(testDir, "stop-all-a.wav");
     const secondFile = path.join(testDir, "stop-all-b.wav");
     createTestWavFileWithFrequency(firstFile, 440, 1.0);
     createTestWavFileWithFrequency(secondFile, 660, 1.0);
 
-    const electronApp = await launchApp();
+    try {
+      await sendCommand(`const samp1 = sn.read("${firstFile}")`);
+      await sendCommand(`const samp2 = sn.read("${secondFile}")`);
+      await sendCommand("samp1.loop()");
+      await sendCommand("samp2.loop()");
 
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+      // Poll until both loops are active
+      await window.waitForFunction(() => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length >= 2;
+      }, { timeout: 5000 });
 
-    await sendCommand(window, `const samp1 = sn.read("${firstFile}")`);
-    await sendCommand(window, `const samp2 = sn.read("${secondFile}")`);
-    await sendCommand(window, "samp1.loop()");
-    await sendCommand(window, "samp2.loop()");
-    await window.waitForTimeout(150);
+      await sendCommand("sn.stop()");
+      await expect(window.locator(".xterm-rows")).toContainText("Playback stopped", {
+        timeout: 5000,
+      });
 
-    const beforeStop = await getPlaybackStates(window);
-    expect(beforeStop.length).toBeGreaterThanOrEqual(2);
-
-    await sendCommand(window, "sn.stop()");
-    await expect(window.locator(".xterm-rows")).toContainText("Playback stopped", {
-      timeout: 5000,
-    });
-
-    await window.waitForTimeout(100);
-    const afterStop = await getPlaybackStates(window);
-    expect(afterStop).toHaveLength(0);
-
-    await electronApp.close();
-    fs.unlinkSync(firstFile);
-    fs.unlinkSync(secondFile);
+      // Poll until all playback states are cleared
+      await window.waitForFunction(() => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length === 0;
+      }, { timeout: 5000 });
+    } finally {
+      fs.unlinkSync(firstFile);
+      fs.unlinkSync(secondFile);
+    }
   });
 
-  test("multiple samples should keep independent playback when overlap starts", async () => {
+  test("multiple samples should keep independent playback when overlap starts", async ({ window, sendCommand }) => {
     const firstFile = path.join(testDir, "overlap-a.wav");
     const secondFile = path.join(testDir, "overlap-b.wav");
     createTestWavFile(firstFile, 1.2);
     createTestWavFile(secondFile, 1.0);
 
-    const electronApp = await launchApp();
+    try {
+      await sendCommand(`const samp1 = sn.read("${firstFile}")`);
+      await sendCommand(`const samp2 = sn.read("${secondFile}")`);
+      await sendCommand("vis.stack().waveform(samp1).waveform(samp2).show()");
+      await expect(window.locator(".visualization-scene")).toHaveCount(2);
 
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+      await sendCommand("samp1.loop()");
 
-    await sendCommand(window, `const samp1 = sn.read("${firstFile}")`);
-    await sendCommand(window, `const samp2 = sn.read("${secondFile}")`);
-    await sendCommand(window, "vis.stack().waveform(samp1).waveform(samp2).show()");
-    await expect(window.locator(".visualization-scene")).toHaveCount(2);
+      // Poll until first loop is active before starting second
+      await window.waitForFunction(() => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length >= 1 && states[0].position > 0;
+      }, { timeout: 5000 });
 
-    await sendCommand(window, "samp1.loop()");
-    await window.waitForTimeout(200);
-    await sendCommand(window, "samp2.play()");
-    await window.waitForTimeout(120);
+      await sendCommand("samp2.play()");
 
-    const firstStateA = await getPlaybackStates(window);
-    expect(firstStateA).toHaveLength(2);
-    const firstPlaybackA = firstStateA.find((state) => state.hash !== null && state.totalSamples === 52920);
-    const secondPlaybackA = firstStateA.find((state) => state.hash !== null && state.totalSamples === 44100);
-    expect(firstPlaybackA).toBeTruthy();
-    expect(secondPlaybackA).toBeTruthy();
+      // Poll until both playbacks are active
+      await window.waitForFunction(() => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        return states?.length === 2;
+      }, { timeout: 5000 });
 
-    await window.waitForTimeout(220);
+      const firstStateA = await getPlaybackStates(window);
+      expect(firstStateA).toHaveLength(2);
+      const firstPlaybackA = firstStateA.find((state) => state.hash !== null && state.totalSamples === 52920);
+      const secondPlaybackA = firstStateA.find((state) => state.hash !== null && state.totalSamples === 44100);
+      expect(firstPlaybackA).toBeTruthy();
+      expect(secondPlaybackA).toBeTruthy();
 
-    const firstStateB = await getPlaybackStates(window);
-    expect(firstStateB).toHaveLength(2);
-    const firstPlaybackB = firstStateB.find((state) => state.hash === firstPlaybackA?.hash);
-    const secondPlaybackB = firstStateB.find((state) => state.hash === secondPlaybackA?.hash);
-    expect(firstPlaybackB).toBeTruthy();
-    expect(secondPlaybackB).toBeTruthy();
-    expect(
-      getLoopAwareAdvance(
-        firstPlaybackA!.position,
-        firstPlaybackB!.position,
-        firstPlaybackA!.totalSamples,
-      ),
-    ).toBeGreaterThan(0);
-    if (secondPlaybackA!.position < secondPlaybackA!.totalSamples) {
-      expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
-    } else {
-      expect(secondPlaybackB!.position).toBe(secondPlaybackA!.position);
+      // Poll until the first playback has advanced from its captured position
+      const pos1A = firstPlaybackA!.position;
+      await window.waitForFunction((prevPos: number) => {
+        const states = (window as any).__bounceGetPlaybackStates?.();
+        const s = states?.find((st: any) => st.totalSamples === 52920);
+        return s && s.position !== prevPos;
+      }, pos1A, { timeout: 5000 });
+
+      const firstStateB = await getPlaybackStates(window);
+      expect(firstStateB).toHaveLength(2);
+      const firstPlaybackB = firstStateB.find((state) => state.hash === firstPlaybackA?.hash);
+      const secondPlaybackB = firstStateB.find((state) => state.hash === secondPlaybackA?.hash);
+      expect(firstPlaybackB).toBeTruthy();
+      expect(secondPlaybackB).toBeTruthy();
+      expect(
+        getLoopAwareAdvance(
+          firstPlaybackA!.position,
+          firstPlaybackB!.position,
+          firstPlaybackA!.totalSamples,
+        ),
+      ).toBeGreaterThan(0);
+      if (secondPlaybackA!.position < secondPlaybackA!.totalSamples) {
+        expect(secondPlaybackB!.position).toBeGreaterThan(secondPlaybackA!.position);
+      } else {
+        expect(secondPlaybackB!.position).toBe(secondPlaybackA!.position);
+      }
+
+      await sendCommand("samp1.stop()");
+      await sendCommand("samp2.stop()");
+    } finally {
+      fs.unlinkSync(firstFile);
+      fs.unlinkSync(secondFile);
     }
-
-    await sendCommand(window, "samp1.stop()");
-    await sendCommand(window, "samp2.stop()");
-
-    await electronApp.close();
-    fs.unlinkSync(firstFile);
-    fs.unlinkSync(secondFile);
   });
 });

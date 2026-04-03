@@ -5,14 +5,14 @@ import { BounceTerminal } from "./terminal.js";
 import { VisualizationSceneManager } from "./visualization-scene-manager.js";
 import {
   BounceResult,
-  Sample,
-  SliceFeature,
-  NmfFeature,
-  NxFeature,
-  MfccFeature,
-  VisScene,
+  SampleResult,
+  SliceFeatureResult,
+  NmfFeatureResult,
+  NxFeatureResult,
+  MfccFeatureResult,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   VisSceneListResult,
   SampleNamespace,
   SampleListResult,
@@ -34,8 +34,8 @@ import {
   LsResultPromise,
   GlobResultPromise,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
 } from "./bounce-result.js";
 import { GrainCollection } from "./grain-collection.js";
 import type { RuntimeScopeEntry } from "./runtime-introspection.js";
@@ -52,17 +52,19 @@ import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
 import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
 import { buildTransportNamespace } from "./namespaces/transport-namespace.js";
 import { buildPatNamespace } from "./namespaces/pat-namespace.js";
+import { porcelainTypeHelps } from "./results/porcelain-types.generated.js";
+import { renderTypeHelp, renderMethodHelp } from "./help.js";
 
 export {
   BounceResult,
-  Sample,
-  SliceFeature,
-  NmfFeature,
-  NxFeature,
-  MfccFeature,
-  VisScene,
+  SampleResult,
+  SliceFeatureResult,
+  NmfFeatureResult,
+  NxFeatureResult,
+  MfccFeatureResult,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   VisSceneListResult,
   SampleNamespace,
   SampleListResult,
@@ -85,8 +87,8 @@ export {
   GlobResultPromise,
   GrainCollection,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
 };
 
 export interface BounceApiDeps {
@@ -150,6 +152,28 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const { pat } = buildPatNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps, { sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat });
 
+  const typeHelpObjects = Object.fromEntries(
+    porcelainTypeHelps.map((th) => {
+      const methodSubs = Object.fromEntries(
+        (th.methods ?? []).map((m) => {
+          const name = m.signature.split("(")[0];
+          return [name, {
+            help: () => renderMethodHelp(th.name, m),
+            toString: () => renderMethodHelp(th.name, m).toString(),
+          }];
+        }),
+      );
+      return [
+        th.name,
+        {
+          help: () => renderTypeHelp(th),
+          toString: () => renderTypeHelp(th).toString(),
+          ...methodSubs,
+        },
+      ];
+    }),
+  );
+
   const api = {
     sn,
     env,
@@ -163,6 +187,7 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     transport,
     pat,
     ...globals,
+    ...typeHelpObjects,
   };
 
   sharedState.api = api;

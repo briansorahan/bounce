@@ -16,6 +16,8 @@ const mockElectron = {
 };
 
 (globalThis as Record<string, unknown>).window = { electron: mockElectron };
+// Cleanup global mock after all tests (prevents cross-suite pollution)
+process.on("beforeExit", () => { delete (globalThis as Record<string, unknown>).window; });
 
 const deps = {
   onProjectLoad: undefined as (() => Promise<void>) | undefined,

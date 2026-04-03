@@ -1,115 +1,71 @@
-import { test, expect } from "@playwright/test";
-import * as path from "path";
-import * as fs from "fs";
-import * as os from "os";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
+import { test, expect } from "./fixtures";
 
 test.describe("Runtime environment persistence", () => {
-  test("scope survives a project switch and returns intact", async () => {
-    const userDataDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "bounce-runtime-persistence-"),
-    );
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("scope survives a project switch and returns intact", async ({ window, sendCommand }) => {
     // Set up scope in default project
-    await sendCommand(window, "var x = 42");
-    await sendCommand(window, "var cfg = { rate: 44100 }");
-    await sendCommand(window, "function double(n) { return n * 2; }");
+    await sendCommand("var x = 42");
+    await sendCommand("var cfg = { rate: 44100 }");
+    await sendCommand("function double(n) { return n * 2; }");
 
     // Switch to a different project (triggers save of current scope)
-    await sendCommand(window, 'proj.load("other")');
+    await sendCommand('proj.load("other")');
 
     // Switch back (triggers clear + restore of default scope)
-    await sendCommand(window, 'proj.load("default")');
+    await sendCommand('proj.load("default")');
 
     // Verify values are restored
-    await sendCommand(window, "x");
+    await sendCommand("x");
     await expect(window.locator(".xterm-rows")).toContainText("42", { timeout: 5000 });
 
-    await sendCommand(window, "cfg.rate");
+    await sendCommand("cfg.rate");
     await expect(window.locator(".xterm-rows")).toContainText("44100", { timeout: 5000 });
 
-    await sendCommand(window, "double(5)");
+    await sendCommand("double(5)");
     await expect(window.locator(".xterm-rows")).toContainText("10", { timeout: 5000 });
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
-  test("restore notice is printed after project switch", async () => {
-    const userDataDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "bounce-runtime-persistence-"),
-    );
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
+  test("restore notice is printed after project switch", async ({ window, sendCommand }) => {
+    await sendCommand("var alpha = 1");
+    await sendCommand("var beta = 2");
 
-    await sendCommand(window, "var alpha = 1");
-    await sendCommand(window, "var beta = 2");
+    await sendCommand('proj.load("other")');
 
-    await sendCommand(window, 'proj.load("other")');
-
-    await sendCommand(window, 'proj.load("default")');
+    await sendCommand('proj.load("default")');
 
     await expect(window.locator(".xterm-rows")).toContainText("Restored 2 variables", {
       timeout: 5000,
     });
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
-  test("stale scope is cleared when switching to a project with no saved scope", async () => {
-    const userDataDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "bounce-runtime-persistence-"),
-    );
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("stale scope is cleared when switching to a project with no saved scope", async ({ window, sendCommand }) => {
     // Define a variable in default project
-    await sendCommand(window, "var staleVar = 999");
+    await sendCommand("var staleVar = 999");
 
     // Switch to a fresh project — staleVar should not be present
-    await sendCommand(window, 'proj.load("fresh")');
+    await sendCommand('proj.load("fresh")');
 
     // env.vars() should not list staleVar
-    await sendCommand(window, "env.vars()");
+    await sendCommand("env.vars()");
     await expect(window.locator(".xterm-rows")).not.toContainText("staleVar", {
       timeout: 5000,
     });
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 
-  test("scopes are isolated between projects", async () => {
-    const userDataDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "bounce-runtime-persistence-"),
-    );
-    const electronApp = await launchApp(userDataDir);
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("scopes are isolated between projects", async ({ window, sendCommand }) => {
     // Project A: x = 1
-    await sendCommand(window, "var x = 1");
-    await sendCommand(window, 'proj.load("projectB")');
+    await sendCommand("var x = 1");
+    await sendCommand('proj.load("projectB")');
 
     // Project B: x = 2
-    await sendCommand(window, "var x = 2");
-    await sendCommand(window, 'proj.load("default")');
+    await sendCommand("var x = 2");
+    await sendCommand('proj.load("default")');
 
     // Back in project A — x should be 1.
     // Use a sentinel string so assertion is stable even when xterm row text is
     // flattened without hard line breaks.
-    await sendCommand(window, '"__SCOPE_CHECK__" + (x === 1 ? "YES" : "NO")');
+    await sendCommand('"__SCOPE_CHECK__" + (x === 1 ? "YES" : "NO")');
     await expect(window.locator(".xterm-rows")).toContainText("__SCOPE_CHECK__YES", {
       timeout: 5000,
     });
-
-    await electronApp.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
   });
 });

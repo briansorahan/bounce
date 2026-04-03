@@ -1,77 +1,7 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
+import { createTestWavFile } from "./helpers";
 import * as fs from "fs";
-import * as os from "os";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
-
-async function launchApp(userDataDir: string) {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [
-      path.join(__dirname, "../dist/electron/main.js"),
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      BOUNCE_USER_DATA_PATH: userDataDir,
-    },
-  });
-}
-
-async function waitForReady(window: any) {
-  await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
-}
-
-function createTestWavFile(filePath: string, durationSeconds: number = 0.1) {
-  const sampleRate = 44100;
-  const numSamples = Math.floor(sampleRate * durationSeconds);
-  const numChannels = 1;
-  const bytesPerSample = 2;
-
-  const dataSize = numSamples * numChannels * bytesPerSample;
-  const fileSize = 36 + dataSize;
-
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(fileSize, 4);
-  buffer.write("WAVE", 8);
-
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(numChannels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * numChannels * bytesPerSample, 28);
-  buffer.writeUInt16LE(numChannels * bytesPerSample, 32);
-  buffer.writeUInt16LE(bytesPerSample * 8, 34);
-
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(dataSize, 40);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const value = Math.sin(2 * Math.PI * 440 * t);
-    const sample = Math.floor(value * 32767);
-    buffer.writeInt16LE(sample, 44 + i * 2);
-  }
-
-  fs.writeFileSync(filePath, buffer);
-}
 
 test.describe("Audio Format Support", () => {
   const testDir = path.join(__dirname, "../test-results/audio-files");
@@ -82,75 +12,43 @@ test.describe("Audio Format Support", () => {
     }
   });
 
-  test("should load and display WAV file", async () => {
+  test("should load and display WAV file", async ({ window, sendCommand }) => {
     const testFile = path.join(testDir, "test.wav");
     createTestWavFile(testFile);
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
 
     try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
-      await sendCommand(window, `const samp = sn.read("${testFile}")`);
-      await sendCommand(window, "vis.waveform(samp).show()");
+      await sendCommand(`const samp = sn.read("${testFile}")`);
+      await sendCommand("vis.waveform(samp).show()");
 
       await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
         timeout: 5000,
       });
-
-      await electronApp.close();
     } finally {
       fs.unlinkSync(testFile);
-      fs.rmSync(userDataDir, { recursive: true, force: true });
     }
   });
 
-  test("should handle missing file gracefully", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
+  test("should handle missing file gracefully", async ({ window, sendCommand }) => {
+    const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
+    await sendCommand(`sn.read("${nonexistentPath}")`);
 
-    try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
-      const nonexistentPath = path.join(__dirname, "nonexistent-file-12345.wav");
-      await sendCommand(window, `sn.read("${nonexistentPath}")`);
-
-      await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
-        timeout: 5000,
-      });
-
-      await electronApp.close();
-    } finally {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
-    }
+    await expect(window.locator(".xterm-rows")).toContainText(/error/i, {
+      timeout: 5000,
+    });
   });
 
-  test("should validate file extensions", async () => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-audio-formats-"));
+  test("should validate file extensions", async ({ window, sendCommand }) => {
+    const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
 
-    try {
-      const electronApp = await launchApp(userDataDir);
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
+    for (const file of unsupportedFormats) {
+      await sendCommand(`sn.read("${file}")`);
 
-      const unsupportedFormats = ["file.avi", "file.mov", "file.txt", "file.pdf"];
+      await expect(window.locator(".xterm-rows")).toContainText(
+        "Unsupported file format",
+        { timeout: 5000 },
+      );
 
-      for (const file of unsupportedFormats) {
-        await sendCommand(window, `sn.read("${file}")`);
-
-        await expect(window.locator(".xterm-rows")).toContainText(
-          "Unsupported file format",
-          { timeout: 5000 },
-        );
-
-        await sendCommand(window, "clear()");
-      }
-
-      await electronApp.close();
-    } finally {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
+      await sendCommand("clear()");
     }
   });
 

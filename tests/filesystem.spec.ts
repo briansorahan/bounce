@@ -1,8 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 /** Call a window.electron IPC method directly, bypassing the REPL. */
 async function callIpc<T>(
@@ -25,34 +24,18 @@ async function getTerminalText(window: any): Promise<string> {
 }
 
 test.describe("Filesystem utilities", () => {
-  test("fs.pwd() returns an absolute path via REPL", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.pwd() returns an absolute path via REPL", async ({ window }) => {
     const cwd = await callIpc<string>(window, "fsPwd");
     expect(cwd).toMatch(/\/|[A-Za-z]:\\/);
-
-    await electronApp.close();
   });
 
-  test("fs.cd() changes the working directory", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.cd() changes the working directory", async ({ window }) => {
     const tmpDir = os.tmpdir();
     const newCwd = await callIpc<string>(window, "fsCd", tmpDir);
     expect(newCwd).toBe(tmpDir);
-
-    await electronApp.close();
   });
 
-  test("fs.cd() rejects a non-existent path", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.cd() rejects a non-existent path", async ({ window }) => {
     let threw = false;
     try {
       await callIpc(
@@ -64,15 +47,9 @@ test.describe("Filesystem utilities", () => {
       threw = true;
     }
     expect(threw).toBe(true);
-
-    await electronApp.close();
   });
 
-  test("fs.ls() lists directory contents", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.ls() lists directory contents", async ({ window }) => {
     const projectRoot = path.join(__dirname, "..");
     const result = await callIpc<{ entries: Array<{ name: string }>; total: number; truncated: boolean }>(
       window,
@@ -82,20 +59,14 @@ test.describe("Filesystem utilities", () => {
 
     expect(result.entries.length).toBeGreaterThan(0);
     expect(result.entries.some((e) => e.name === "package.json")).toBe(true);
-
-    await electronApp.close();
   });
 
-  test("fs.ls() hides dotfiles, fs.la() shows them", async () => {
+  test("fs.ls() hides dotfiles, fs.la() shows them", async ({ window }) => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-dotfiles-test-"));
     fs.writeFileSync(path.join(tmpDir, "visible.txt"), "");
     fs.mkdirSync(path.join(tmpDir, ".hidden"));
 
     try {
-      const electronApp = await launchApp();
-      const window = await electronApp.firstWindow();
-      await waitForReady(window);
-
       const lsResult = await callIpc<{ entries: Array<{ name: string }> }>(
         window,
         "fsLs",
@@ -109,18 +80,12 @@ test.describe("Filesystem utilities", () => {
         tmpDir,
       );
       expect(laResult.entries.some((e) => e.name === ".hidden")).toBe(true);
-
-      await electronApp.close();
     } finally {
       fs.rmSync(tmpDir, { recursive: true });
     }
   });
 
-  test("fs.glob() returns matched paths", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.glob() returns matched paths", async ({ window }) => {
     // cd first so glob resolves against project root
     const projectRoot = path.join(__dirname, "..");
     await callIpc(window, "fsCd", projectRoot);
@@ -129,15 +94,9 @@ test.describe("Filesystem utilities", () => {
 
     expect(Array.isArray(paths)).toBe(true);
     expect(paths.some((p) => p.endsWith("package.json"))).toBe(true);
-
-    await electronApp.close();
   });
 
-  test("fs.walk() returns file entries for a directory", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.walk() returns file entries for a directory", async ({ window }) => {
     const testsDir = path.join(__dirname, "..", "tests");
     const result = await callIpc<{ entries: Array<{ path: string; type: string }>; truncated: boolean }>(
       window,
@@ -148,15 +107,9 @@ test.describe("Filesystem utilities", () => {
     expect(result.truncated).toBe(false);
     const filePaths = result.entries.map((e) => e.path);
     expect(filePaths.some((p) => p.endsWith("filesystem.spec.ts"))).toBe(true);
-
-    await electronApp.close();
   });
 
-  test("fs.walk() entries include correct FileType values", async () => {
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
+  test("fs.walk() entries include correct FileType values", async ({ window }) => {
     const testsDir = path.join(__dirname, "..", "tests");
     const result = await callIpc<{ entries: Array<{ path: string; type: string }> }>(
       window,
@@ -166,11 +119,9 @@ test.describe("Filesystem utilities", () => {
 
     const types = result.entries.map((e) => e.type);
     expect(types).toContain("file");
-
-    await electronApp.close();
   });
 
-  test("sn.read() resolves relative path against cwd", async () => {
+  test("sn.read() resolves relative path against cwd", async ({ window, sendCommand }) => {
     const srcWav = path.join(
       __dirname,
       "../third_party/flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
@@ -184,19 +135,14 @@ test.describe("Filesystem utilities", () => {
     const destWav = path.join(tmpDir, "test.wav");
     fs.copyFileSync(srcWav, destWav);
 
-    const electronApp = await launchApp();
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `fs.cd(${JSON.stringify(tmpDir)})`);
-    await sendCommand(window, 'const samp = sn.read("test.wav")');
-    await sendCommand(window, "vis.waveform(samp).show()");
+    await sendCommand(`fs.cd(${JSON.stringify(tmpDir)})`);
+    await sendCommand('const samp = sn.read("test.wav")');
+    await sendCommand("vis.waveform(samp).show()");
 
     await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
       timeout: 5000,
     });
 
-    await electronApp.close();
     fs.rmSync(tmpDir, { recursive: true });
   });
 });

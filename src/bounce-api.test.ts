@@ -2,23 +2,23 @@ import assert from "node:assert/strict";
 import {
   buildBounceApi,
   BounceResult,
-  Sample,
+  SampleResult,
   SamplePromise,
   CurrentSamplePromise,
-  SliceFeature,
+  SliceFeatureResult,
   SliceFeaturePromise,
-  NmfFeature,
+  NmfFeatureResult,
   NmfFeaturePromise,
-  MfccFeature,
+  MfccFeatureResult,
   EnvScopeResult,
   EnvInspectionResult,
   EnvFunctionListResult,
-  VisScene,
+  VisSceneResult,
   VisScenePromise,
-  VisStack,
+  VisStackResult,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
 } from "./renderer/bounce-api.js";
 
 function makeTerminal(): { lines: string[]; cleared: boolean } & object {
@@ -245,7 +245,7 @@ async function main() {
     current(): CurrentSamplePromise;
   };
   const corpus = api.corpus as {
-    build(source?: string | Sample | PromiseLike<Sample>, featureHashOverride?: string): PromiseLike<BounceResult>;
+    build(source?: string | SampleResult | PromiseLike<SampleResult>, featureHashOverride?: string): PromiseLike<BounceResult>;
   };
   const env = api.env as {
     help(): BounceResult;
@@ -256,8 +256,8 @@ async function main() {
   };
   const vis = api.vis as {
     help(): BounceResult;
-    waveform(sample: Sample | PromiseLike<Sample>): VisScene | VisScenePromise;
-    stack(): VisStack;
+    waveform(sample: SampleResult | PromiseLike<SampleResult>): VisSceneResult | VisScenePromise;
+    stack(): VisStackResult;
   };
   const proj = api.proj as {
     help(): BounceResult;
@@ -309,23 +309,23 @@ async function main() {
   assert.ok(functionList.toString().includes("current()"));
 
   const sample = await sn.read("/test.wav");
-  assert.ok(sample instanceof Sample, "sn.read returns Sample");
+  assert.ok(sample instanceof SampleResult, "sn.read returns SampleResult");
   assert.ok(sample.help().toString().includes("sample.onsetSlice()"));
   assert.ok(sample.help().toString().includes("sample.loop("), "sample.help() mentions loop method");
   assert.ok(sample.help().toString().includes("sample.loop.help()"), "sample.help() hints at loop.help()");
   assert.ok(sample.toString().includes("Loaded"));
   runtimeScope.set("samp", sample);
   const inspectSample = env.inspect("samp");
-  assert.ok(inspectSample.toString().includes("type:      Sample"));
+  assert.ok(inspectSample.toString().includes("type:      SampleResult"));
   assert.ok(inspectSample.toString().includes("Loaded"));
 
   const played = await sample.play();
-  assert.ok(played instanceof Sample, "sample.play returns Sample");
+  assert.ok(played instanceof SampleResult, "sample.play returns SampleResult");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loop, false, "sample.play uses non-looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.hash, sample.hash, "sample.play preserves sample hash for playback tracking");
 
   const looped = await sample.loop();
-  assert.ok(looped instanceof Sample, "sample.loop returns Sample");
+  assert.ok(looped instanceof SampleResult, "sample.loop returns SampleResult");
   assert.ok(looped.toString().includes("Looping"), "sample.loop indicates looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loop, true, "sample.loop uses looping playback");
   assert.equal(audioManager.getPlayCalls().at(-1)?.hash, sample.hash, "sample.loop preserves sample hash for playback tracking");
@@ -336,13 +336,13 @@ async function main() {
   assert.ok(loopHelp.toString().includes("seconds"), "sample.loop.help() mentions seconds");
 
   const loopedWithStart = await sample.loop({ loopStart: 0.5 });
-  assert.ok(loopedWithStart instanceof Sample, "sample.loop({ loopStart }) returns Sample");
+  assert.ok(loopedWithStart instanceof SampleResult, "sample.loop({ loopStart }) returns SampleResult");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loopStart, 0.5, "sample.loop passes loopStart");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loopEnd, undefined, "sample.loop omits loopEnd when not set");
   assert.ok(loopedWithStart.toString().includes("0.5s"), "sample.loop result shows loop start");
 
   const loopedWithRange = await sample.loop({ loopStart: 0.5, loopEnd: 2.0 });
-  assert.ok(loopedWithRange instanceof Sample, "sample.loop({ loopStart, loopEnd }) returns Sample");
+  assert.ok(loopedWithRange instanceof SampleResult, "sample.loop({ loopStart, loopEnd }) returns SampleResult");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loopStart, 0.5, "sample.loop passes loopStart");
   assert.equal(audioManager.getPlayCalls().at(-1)?.loopEnd, 2.0, "sample.loop passes loopEnd");
   assert.ok(loopedWithRange.toString().includes("0.5s"), "sample.loop result shows loop range start");
@@ -355,29 +355,29 @@ async function main() {
   assert.ok(namespaceStopped.toString().includes("Playback stopped"), "sn.stop stops all playback");
 
   const onsetFeature = await sample.onsetSlice();
-  assert.ok(onsetFeature instanceof SliceFeature, "sample.onsets returns OnsetFeature");
+  assert.ok(onsetFeature instanceof SliceFeatureResult, "sample.onsets returns OnsetFeature");
   assert.ok(onsetFeature.help().toString().includes("playSlice"));
   await onsetFeature.slice();
   const sliceSample = await onsetFeature.playSlice(0);
-  assert.ok(sliceSample instanceof Sample, "playSlice returns Sample");
+  assert.ok(sliceSample instanceof SampleResult, "playSlice returns SampleResult");
 
   const nmfFeature = await sample.nmf();
-  assert.ok(nmfFeature instanceof NmfFeature, "sample.nmf returns NmfFeature");
+  assert.ok(nmfFeature instanceof NmfFeatureResult, "sample.nmf returns NmfFeatureResult");
   assert.ok(nmfFeature.help().toString().includes("playComponent"));
   await nmfFeature.sep();
   const componentSample = await nmfFeature.playComponent(0);
-  assert.ok(componentSample instanceof Sample, "playComponent returns Sample");
+  assert.ok(componentSample instanceof SampleResult, "playComponent returns SampleResult");
 
   const mfccFeature = await sample.mfcc();
-  assert.ok(mfccFeature instanceof MfccFeature, "sample.mfcc returns MfccFeature");
+  assert.ok(mfccFeature instanceof MfccFeatureResult, "sample.mfcc returns MfccFeatureResult");
   assert.ok(mfccFeature.help().toString().includes("MFCC"));
 
   const scene = vis.waveform(sample);
-  assert.ok(scene instanceof VisScene, "vis.waveform returns VisScene");
-  assert.ok(scene.toString().includes("VisScene"), "VisScene prints a useful summary");
+  assert.ok(scene instanceof VisSceneResult, "vis.waveform returns VisSceneResult");
+  assert.ok(scene.toString().includes("VisSceneResult"), "VisSceneResult prints a useful summary");
   assert.equal(scene.overlay(onsetFeature), scene, "scene.overlay chains");
   assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
-  assert.ok(scene.help().toString().includes("scene.show()"), "VisScene help describes show()");
+  assert.ok(scene.help().toString().includes("scene.show()"), "VisSceneResult help describes show()");
 
   const samplePromise = sn.load("abcdef1234567890");
   const scenePromise = vis.waveform(samplePromise);
@@ -387,28 +387,28 @@ async function main() {
   assert.ok(vis.waveform(samplePromise).panel(nmfFeature) instanceof VisScenePromise, "VisScenePromise.panel chains");
   assert.equal(typeof scenePromise.show, "function", "VisScenePromise exposes show()");
 
-  // VisScene / VisScenePromise / VisStack accept promise-typed feature args
+  // VisSceneResult / VisScenePromise / VisStackResult accept promise-typed feature args
   const onsetPromise = sample.onsetSlice();
   const nmfPromise = sample.nmf();
   assert.ok(onsetPromise instanceof SliceFeaturePromise, "sample.onsetSlice() returns OnsetFeaturePromise");
   assert.ok(nmfPromise instanceof NmfFeaturePromise, "sample.nmf() returns NmfFeaturePromise");
 
   // Use already-resolved promises for population tests so one microtask flush is sufficient
-  const resolvedOnsetPromise: PromiseLike<SliceFeature> = Promise.resolve(onsetFeature);
-  const resolvedNmfPromise: PromiseLike<NmfFeature> = Promise.resolve(nmfFeature);
+  const resolvedOnsetPromise: PromiseLike<SliceFeatureResult> = Promise.resolve(onsetFeature);
+  const resolvedNmfPromise: PromiseLike<NmfFeatureResult> = Promise.resolve(nmfFeature);
 
-  // VisScene.overlay / panel accept PromiseLike feature args, return same VisScene
-  const sceneWithPromiseOverlay = vis.waveform(sample) as VisScene;
-  assert.ok(sceneWithPromiseOverlay instanceof VisScene, "vis.waveform(sample) still returns VisScene");
-  assert.equal(sceneWithPromiseOverlay.overlay(onsetPromise), sceneWithPromiseOverlay, "VisScene.overlay(OnsetFeaturePromise) chains and returns same VisScene");
-  assert.equal(sceneWithPromiseOverlay.panel(nmfPromise), sceneWithPromiseOverlay, "VisScene.panel(NmfFeaturePromise) chains and returns same VisScene");
+  // VisSceneResult.overlay / panel accept PromiseLike feature args, return same VisSceneResult
+  const sceneWithPromiseOverlay = vis.waveform(sample) as VisSceneResult;
+  assert.ok(sceneWithPromiseOverlay instanceof VisSceneResult, "vis.waveform(sample) still returns VisSceneResult");
+  assert.equal(sceneWithPromiseOverlay.overlay(onsetPromise), sceneWithPromiseOverlay, "VisSceneResult.overlay(OnsetFeaturePromise) chains and returns same VisSceneResult");
+  assert.equal(sceneWithPromiseOverlay.panel(nmfPromise), sceneWithPromiseOverlay, "VisSceneResult.panel(NmfFeaturePromise) chains and returns same VisSceneResult");
 
-  const scene2 = vis.waveform(sample) as VisScene;
+  const scene2 = vis.waveform(sample) as VisSceneResult;
   scene2.overlay(resolvedOnsetPromise);
   scene2.panel(resolvedNmfPromise);
-  await Promise.resolve(); // drain one microtask tick so the .then() handlers fire
-  assert.equal(scene2.overlays.length, 1, "VisScene.overlay(promise) populates overlays once resolved");
-  assert.equal(scene2.panels.length, 1, "VisScene.panel(promise) populates panels once resolved");
+  await Promise.resolve(); // drain one microtask tick so .then() handlers on already-resolved promises fire
+  assert.equal(scene2.overlays.length, 1, "VisSceneResult.overlay(promise) populates overlays once resolved");
+  assert.equal(scene2.panels.length, 1, "VisSceneResult.panel(promise) populates panels once resolved");
 
   // VisScenePromise.overlay / panel accept PromiseLike feature args, return VisScenePromise
   const scenePromiseWithPromiseOverlay = vis.waveform(samplePromise);
@@ -416,28 +416,28 @@ async function main() {
   assert.ok(scenePromiseWithPromiseOverlay.overlay(onsetPromise) instanceof VisScenePromise, "VisScenePromise.overlay(OnsetFeaturePromise) chains");
   assert.ok(scenePromiseWithPromiseOverlay.panel(nmfPromise) instanceof VisScenePromise, "VisScenePromise.panel(NmfFeaturePromise) chains");
 
-  // VisStack.overlay / panel accept PromiseLike feature args, return same VisStack
+  // VisStackResult.overlay / panel accept PromiseLike feature args, return same VisStackResult
   const stack2 = vis.stack();
   stack2.waveform(sample);
-  assert.equal(stack2.overlay(onsetPromise), stack2, "VisStack.overlay(OnsetFeaturePromise) chains and returns same VisStack");
-  assert.equal(stack2.panel(nmfPromise), stack2, "VisStack.panel(NmfFeaturePromise) chains and returns same VisStack");
+  assert.equal(stack2.overlay(onsetPromise), stack2, "VisStackResult.overlay(OnsetFeaturePromise) chains and returns same VisStackResult");
+  assert.equal(stack2.panel(nmfPromise), stack2, "VisStackResult.panel(NmfFeaturePromise) chains and returns same VisStackResult");
 
   const stack3 = vis.stack();
   stack3.waveform(sample);
   stack3.overlay(resolvedOnsetPromise);
   stack3.panel(resolvedNmfPromise);
-  await Promise.resolve();
-  assert.equal(stack3.scenes[0].overlays.length, 1, "VisStack.overlay(promise) populates latest scene overlays once resolved");
-  assert.equal(stack3.scenes[0].panels.length, 1, "VisStack.panel(promise) populates latest scene panels once resolved");
+  await Promise.resolve(); // drain one microtask tick so .then() handlers on already-resolved promises fire
+  assert.equal(stack3.scenes[0].overlays.length, 1, "VisStackResult.overlay(promise) populates latest scene overlays once resolved");
+  assert.equal(stack3.scenes[0].panels.length, 1, "VisStackResult.panel(promise) populates latest scene panels once resolved");
 
   const stack = vis.stack();
-  assert.ok(stack instanceof VisStack, "vis.stack returns VisStack");
-  assert.ok(stack.help().toString().includes("multiple visualization scenes"), "VisStack help describes multi-scene usage");
+  assert.ok(stack instanceof VisStackResult, "vis.stack returns VisStackResult");
+  assert.ok(stack.help().toString().includes("multiple visualization scenes"), "VisStackResult help describes multi-scene usage");
   assert.equal(stack.waveform(sample), stack, "stack.waveform chains");
   assert.equal(stack.overlay(onsetFeature), stack, "stack.overlay chains on latest scene");
   assert.equal(stack.panel(nmfFeature), stack, "stack.panel chains on latest scene");
   assert.equal(stack.waveform(sample), stack, "stack accepts multiple scenes");
-  assert.ok(stack.toString().includes("scenes: 2"), "VisStack prints scene count");
+  assert.ok(stack.toString().includes("scenes: 2"), "VisStackResult prints scene count");
 
   const grains = await sample.granularize({ grainSize: 20 });
   assert.ok(grains.toString().includes("grains"));
@@ -446,7 +446,7 @@ async function main() {
   assert.ok(String(listed).includes("Stored Samples"));
 
   const current = await sn.current();
-  assert.ok(current instanceof Sample, "sn.current returns Sample");
+  assert.ok(current instanceof SampleResult, "sn.current returns SampleResult");
 
   const currentProject = await proj.current();
   assert.equal(currentProject.name, "default", "proj.current returns active project");
@@ -465,16 +465,16 @@ async function main() {
   assert.ok(removeResult.toString().includes("Removed project drums"), "proj.rm confirms project deletion");
 
   const chainedOnsetFeature = await sn.read("/test.wav").onsetSlice();
-  assert.ok(chainedOnsetFeature instanceof SliceFeature, "sn.read().onsetSlice() returns SliceFeature");
+  assert.ok(chainedOnsetFeature instanceof SliceFeatureResult, "sn.read().onsetSlice() returns SliceFeatureResult");
 
   const chainedSliceResult = await sn.read("/test.wav").onsetSlice().slice();
   assert.ok(chainedSliceResult instanceof BounceResult, "sn.read().onsetSlice().slice() returns BounceResult");
 
   const chainedComponent = await sn.read("/test.wav").nmf().playComponent(0);
-  assert.ok(chainedComponent instanceof Sample, "sn.read().nmf().playComponent() returns Sample");
+  assert.ok(chainedComponent instanceof SampleResult, "sn.read().nmf().playComponent() returns SampleResult");
 
   const currentPlayed = await sn.current().play();
-  assert.ok(currentPlayed instanceof Sample, "sn.current().play() returns Sample");
+  assert.ok(currentPlayed instanceof SampleResult, "sn.current().play() returns SampleResult");
 
   const grainCount = await sn.read("/test.wav").granularize({ grainSize: 20 }).length();
   assert.equal(grainCount, 2, "sn.read().granularize().length() counts non-silent grains");
@@ -496,7 +496,7 @@ async function main() {
   assert.ok(hashRejected, "sn.read() rejects hash-like strings");
 
   const loadedByHash = await sn.load("abcdef1234567890");
-  assert.ok(loadedByHash instanceof Sample, "sn.load() returns Sample");
+  assert.ok(loadedByHash instanceof SampleResult, "sn.load() returns SampleResult");
   assert.ok(loadedByHash.hash.startsWith("abcdef"), "sn.load() resolves by hash prefix");
 
   // --- Recording namespace unit tests ---
@@ -516,33 +516,33 @@ async function main() {
   const inputsEmpty = new InputsResult([]);
   assert.ok(inputsEmpty.toString().includes("No audio input devices"), "InputsResult empty state message");
 
-  // AudioDevice
-  const audioDev = new AudioDevice(0, "deviceId-abc123", "Built-in Microphone", 1, {
-    record: async () => new RecordingHandle("Built-in Microphone", () => {}, Promise.resolve({} as Sample)),
+  // AudioDeviceResult
+  const audioDev = new AudioDeviceResult(0, "deviceId-abc123", "Built-in Microphone", 1, {
+    record: async () => new RecordingHandleResult("Built-in Microphone", () => {}, Promise.resolve({} as SampleResult)),
   });
-  assert.ok(audioDev.toString().includes("AudioDevice [0]"), "AudioDevice toString includes index");
-  assert.ok(audioDev.toString().includes("Built-in Microphone"), "AudioDevice toString includes label");
-  assert.ok(audioDev.toString().includes("record("), "AudioDevice toString mentions record()");
-  assert.ok(audioDev.help().toString().includes("record("), "AudioDevice help describes record()");
-  assert.ok(audioDev.help().toString().includes("stop()"), "AudioDevice help mentions stop()");
-  assert.ok(audioDev.help().toString().includes("duration"), "AudioDevice help mentions duration option");
+  assert.ok(audioDev.toString().includes("AudioDeviceResult [0]"), "AudioDeviceResult toString includes index");
+  assert.ok(audioDev.toString().includes("Built-in Microphone"), "AudioDeviceResult toString includes label");
+  assert.ok(audioDev.toString().includes("record("), "AudioDeviceResult toString mentions record()");
+  assert.ok(audioDev.help().toString().includes("record("), "AudioDeviceResult help describes record()");
+  assert.ok(audioDev.help().toString().includes("stop()"), "AudioDeviceResult help mentions stop()");
+  assert.ok(audioDev.help().toString().includes("duration"), "AudioDeviceResult help mentions duration option");
 
-  // RecordingHandle
+  // RecordingHandleResult
   let stopCalled = false;
-  const fakeSample = {} as Sample;
-  const handle = new RecordingHandle(
+  const fakeSample = {} as SampleResult;
+  const handle = new RecordingHandleResult(
     "Built-in Microphone",
     () => { stopCalled = true; },
     Promise.resolve(fakeSample),
   );
-  assert.ok(handle.toString().includes("Recording"), "RecordingHandle toString shows recording status");
-  assert.ok(handle.toString().includes("Built-in Microphone"), "RecordingHandle toString shows device label");
-  assert.ok(handle.help().toString().includes("stop()"), "RecordingHandle help describes stop()");
-  assert.ok(handle.help().toString().includes("duration"), "RecordingHandle help mentions duration option");
+  assert.ok(handle.toString().includes("Recording"), "RecordingHandleResult toString shows recording status");
+  assert.ok(handle.toString().includes("Built-in Microphone"), "RecordingHandleResult toString shows device label");
+  assert.ok(handle.help().toString().includes("stop()"), "RecordingHandleResult help describes stop()");
+  assert.ok(handle.help().toString().includes("duration"), "RecordingHandleResult help mentions duration option");
 
   const stoppedPromise = handle.stop();
-  assert.ok(stopCalled, "RecordingHandle.stop() calls the stop function");
-  assert.ok(stoppedPromise instanceof SamplePromise, "RecordingHandle.stop() returns SamplePromise");
+  assert.ok(stopCalled, "RecordingHandleResult.stop() calls the stop function");
+  assert.ok(stoppedPromise instanceof SamplePromise, "RecordingHandleResult.stop() returns SamplePromise");
 
   // sn.inputs and sn.dev help text
   const snObj = sn as typeof sn & { inputs: { help?: () => BounceResult }; dev: { help?: () => BounceResult } };
@@ -553,7 +553,9 @@ async function main() {
   assert.ok(snObj.dev.help!().toString().includes("stop()"), "sn.dev.help mentions stop()");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => { delete (globalThis as Record<string, unknown>).window; })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

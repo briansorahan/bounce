@@ -42,12 +42,22 @@ Only one device can be open at a time; call midi.close() first if needed.`,
     signature: "midi.record(inst, opts?)",
     summary: "Start MIDI recording; returns handle or timed sequence",
     description: `Start recording MIDI events from the open input device.
-Returns a MidiRecordingHandle when no duration is specified — call h.stop() to finish.
+Returns a MidiRecordingHandleResult when no duration is specified — call h.stop() to finish.
 Returns a MidiSequencePromise when opts.duration is set, which resolves automatically.`,
     params: [
       { name: "inst", type: "MidiTargetInstrument", description: "Target instrument to associate with the recording." },
-      { name: "opts", type: "MidiRecordOptions", description: "Recording options (duration in seconds, name for the saved sequence).", optional: true },
+      {
+        name: "opts",
+        type: "MidiRecordOptions",
+        description: "Recording options (duration in seconds, name for the saved sequence).",
+        optional: true,
+        properties: [
+          { name: "duration", type: "number", description: "Stop recording automatically after this many seconds", optional: true },
+          { name: "name", type: "string", description: "Name to save the recorded sequence under (auto-generated if omitted)", optional: true },
+        ],
+      },
     ],
+    returns: "MidiRecordingHandle",
     examples: [
       "const h = midi.record(keys)\\nconst seq = h.stop()\\nseq.play(keys)",
       "// Timed recording:\\nconst seq = midi.record(keys, { duration: 4 })\\nseq.play(keys)",
@@ -71,6 +81,7 @@ The imported sequence is transient — it is not auto-saved to the project.`,
     params: [
       { name: "filePath", type: "string", description: "Absolute path to the .mid file." },
     ],
+    returns: "MidiSequence",
     examples: [
       "midi.load('~/beats/groove.mid')",
     ],

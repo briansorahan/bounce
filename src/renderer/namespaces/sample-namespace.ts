@@ -2,11 +2,11 @@
 /// <reference path="../bounce-globals.d.ts" />
 import {
   BounceResult,
-  Sample,
-  SliceFeature,
-  NmfFeature,
-  NxFeature,
-  MfccFeature,
+  SampleResult,
+  SliceFeatureResult,
+  NmfFeatureResult,
+  NxFeatureResult,
+  MfccFeatureResult,
   SampleListResult,
   SamplePromise,
   CurrentSamplePromise,
@@ -17,8 +17,8 @@ import {
   GrainCollectionPromise,
   type SampleSummaryFeature,
   InputsResult,
-  AudioDevice,
-  RecordingHandle,
+  AudioDeviceResult,
+  RecordingHandleResult,
   type AudioInputDevice,
   type RecordOptions,
   InstrumentResult,
@@ -42,7 +42,7 @@ export interface SampleBinder {
       id?: number;
     },
     displayText?: string,
-  ): Sample;
+  ): SampleResult;
 }
 
 /**
@@ -101,7 +101,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
       channels: number;
       duration: number;
     },
-    title = "Sample",
+    title = "SampleResult",
   ): string {
     return [
       `\x1b[32m${title}: ${sampleLabel(sample.filePath, sample.hash)}\x1b[0m`,
@@ -109,7 +109,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     ].join("\n");
   }
 
-  function sampleHelpText(sample: Sample): BounceResult {
+  function sampleHelpText(sample: SampleResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mSample ${sample.hash.substring(0, 8)}\x1b[0m`,
       "",
@@ -154,7 +154,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function onsetHelpText(feature: SliceFeature): BounceResult {
+  function onsetHelpText(feature: SliceFeatureResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mSliceFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
       "",
@@ -168,7 +168,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function nmfHelpText(feature: NmfFeature): BounceResult {
+  function nmfHelpText(feature: NmfFeatureResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mNmfFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
       "",
@@ -183,7 +183,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function mfccHelpText(feature: MfccFeature): BounceResult {
+  function mfccHelpText(feature: MfccFeatureResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mMfccFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
       "",
@@ -195,7 +195,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function nxFeatureHelpText(feature: NxFeature): BounceResult {
+  function nxFeatureHelpText(feature: NxFeatureResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mNxFeature ${feature.featureHash.substring(0, 8)}\x1b[0m`,
       `  components : ${feature.components}`,
@@ -219,8 +219,8 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
       id?: number;
     },
     displayText = makeSampleDisplayText(sample),
-  ): Sample {
-    const bound: Sample = new Sample(
+  ): SampleResult {
+    const bound: SampleResult = new SampleResult(
       displayText,
       sample.hash,
       sample.filePath,
@@ -253,13 +253,13 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   function bindSliceFeature(
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     slices: number[],
     options?: Record<string, unknown>,
     displayText = `\x1b[32mFound ${slices.length} onset slices (feature: ${featureHash.substring(0, 8)})\x1b[0m`,
-  ): SliceFeature {
-    const bound: SliceFeature = new SliceFeature(
+  ): SliceFeatureResult {
+    const bound: SliceFeatureResult = new SliceFeatureResult(
       displayText,
       source,
       featureHash,
@@ -276,7 +276,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function toSamplerBinding(
-    sample: Sample,
+    sample: SampleResult,
     featureHash: string,
     opts: { name: string; startNote?: number; polyphony?: number },
   ): Promise<InstrumentResult> {
@@ -324,7 +324,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   function bindNmfFeature(
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: NmfOptions | undefined,
     components: number | undefined,
@@ -333,8 +333,8 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     bases: number[][] | Float32Array[] | undefined,
     activations: number[][] | Float32Array[] | undefined,
     displayText: string,
-  ): NmfFeature {
-    const bound: NmfFeature = new NmfFeature(
+  ): NmfFeatureResult {
+    const bound: NmfFeatureResult = new NmfFeatureResult(
       displayText,
         source,
         featureHash,
@@ -354,14 +354,14 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   function bindMfccFeature(
-    source: Sample,
+    source: SampleResult,
     featureHash: string,
     options: MFCCOptions | undefined,
     numFrames: number,
     numCoeffs: number,
     displayText: string,
-  ): MfccFeature {
-    const bound: MfccFeature = new MfccFeature(
+  ): MfccFeatureResult {
+    const bound: MfccFeatureResult = new MfccFeatureResult(
       displayText,
       source,
       featureHash,
@@ -376,15 +376,15 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   function bindNxFeature(
-    target: Sample,
+    target: SampleResult,
     featureHash: string,
     components: number,
     sourceSampleHash: string,
     sourceFeatureHash: string,
     bases: number[][] | undefined,
     activations: number[][] | undefined,
-  ): NxFeature {
-    const bound: NxFeature = new NxFeature(
+  ): NxFeatureResult {
+    const bound: NxFeatureResult = new NxFeatureResult(
       `\x1b[32mNX cross-synthesis complete (${components} components)\x1b[0m`,
       target,
       featureHash,
@@ -402,7 +402,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     return bound;
   }
 
-  async function display(filePath: string): Promise<Sample> {
+  async function display(filePath: string): Promise<SampleResult> {
     ensureSupportedInput(filePath);
 
     const audioFileData = await window.electron.readAudioFile(filePath);
@@ -438,7 +438,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     );
   }
 
-  async function loadByHash(hash: string): Promise<Sample> {
+  async function loadByHash(hash: string): Promise<SampleResult> {
     const audioFileData = await window.electron.readAudioFile(hash);
     const audio = {
       audioData: audioFileData.channelData,
@@ -472,11 +472,11 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     );
   }
 
-  async function resolveSample(source: Sample | PromiseLike<Sample>): Promise<Sample> {
-    return isPromiseLike<Sample>(source) ? await source : source;
+  async function resolveSample(source: SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
+    return isPromiseLike<SampleResult>(source) ? await source : source;
   }
 
-  function stop(source?: Sample): BounceResult {
+  function stop(source?: SampleResult): BounceResult {
     if (source) {
       audioManager.stopAudio(source.hash);
       return new BounceResult(`\x1b[32mPlayback stopped: ${sampleLabel(source.filePath, source.hash)}\x1b[0m`);
@@ -486,11 +486,11 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function startPlayback(
-    source: string | Sample | PromiseLike<Sample> | undefined,
+    source: string | SampleResult | PromiseLike<SampleResult> | undefined,
     loopPlayback: boolean,
     loopOpts?: { loopStart?: number; loopEnd?: number },
-  ): Promise<Sample> {
-    let loadedSample: Sample | undefined;
+  ): Promise<SampleResult> {
+    let loadedSample: SampleResult | undefined;
 
     if (typeof source === "string") {
       const isHash =
@@ -552,24 +552,24 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     );
   }
 
-  async function play(source?: string | Sample | PromiseLike<Sample>): Promise<Sample> {
+  async function play(source?: string | SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
     return startPlayback(source, false);
   }
 
   async function loop(
-    source?: string | Sample | PromiseLike<Sample>,
+    source?: string | SampleResult | PromiseLike<SampleResult>,
     opts?: { loopStart?: number; loopEnd?: number },
-  ): Promise<Sample> {
+  ): Promise<SampleResult> {
     return startPlayback(source, true, opts);
   }
 
   async function analyze(
-    source?: Sample | PromiseLike<Sample> | AnalyzeOptions,
+    source?: SampleResult | PromiseLike<SampleResult> | AnalyzeOptions,
     options?: AnalyzeOptions,
-  ): Promise<SliceFeature> {
-    const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-    const sample = resolvedSource instanceof Sample ? resolvedSource : await loadByHash(getCurrentHash());
-    const opts = resolvedSource instanceof Sample ? options : (resolvedSource as AnalyzeOptions | undefined);
+  ): Promise<SliceFeatureResult> {
+    const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
+    const sample = resolvedSource instanceof SampleResult ? resolvedSource : await loadByHash(getCurrentHash());
+    const opts = resolvedSource instanceof SampleResult ? options : (resolvedSource as AnalyzeOptions | undefined);
 
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
       await loadByHash(sample.hash);
@@ -592,9 +592,9 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeAmpSlice(
-    sample: Sample,
+    sample: SampleResult,
     options?: AmpSliceOptions,
-  ): Promise<SliceFeature> {
+  ): Promise<SliceFeatureResult> {
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
       await loadByHash(sample.hash);
     }
@@ -622,9 +622,9 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeNoveltySlice(
-    sample: Sample,
+    sample: SampleResult,
     options?: NoveltySliceOptions,
-  ): Promise<SliceFeature> {
+  ): Promise<SliceFeatureResult> {
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
       await loadByHash(sample.hash);
     }
@@ -652,9 +652,9 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeTransientSlice(
-    sample: Sample,
+    sample: SampleResult,
     options?: TransientSliceOptions,
-  ): Promise<SliceFeature> {
+  ): Promise<SliceFeatureResult> {
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
       await loadByHash(sample.hash);
     }
@@ -682,12 +682,12 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeNmf(
-    source?: Sample | PromiseLike<Sample> | NmfOptions,
+    source?: SampleResult | PromiseLike<SampleResult> | NmfOptions,
     options?: NmfOptions,
-  ): Promise<NmfFeature> {
-    const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-    const sample = resolvedSource instanceof Sample ? resolvedSource : await loadByHash(getCurrentHash());
-    const opts = resolvedSource instanceof Sample ? options : (resolvedSource as NmfOptions | undefined);
+  ): Promise<NmfFeatureResult> {
+    const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
+    const sample = resolvedSource instanceof SampleResult ? resolvedSource : await loadByHash(getCurrentHash());
+    const opts = resolvedSource instanceof SampleResult ? options : (resolvedSource as NmfOptions | undefined);
 
     if (audioManager.getCurrentAudio()?.hash !== sample.hash) {
       await loadByHash(sample.hash);
@@ -734,9 +734,9 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeMFCC(
-    sampleOrPromise: Sample | PromiseLike<Sample>,
+    sampleOrPromise: SampleResult | PromiseLike<SampleResult>,
     options?: MFCCOptions,
-  ): Promise<MfccFeature> {
+  ): Promise<MfccFeatureResult> {
     const sample = await resolveSample(sampleOrPromise);
     let audioData: Float32Array;
     let sampleRate: number;
@@ -780,10 +780,10 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   }
 
   async function analyzeNx(
-    target: Sample,
-    other: Sample | PromiseLike<Sample>,
+    target: SampleResult,
+    other: SampleResult | PromiseLike<SampleResult>,
     options?: { components?: number },
-  ): Promise<NxFeature> {
+  ): Promise<NxFeatureResult> {
     const resolvedOther = await Promise.resolve(other);
     const existingNmf = await window.electron.getMostRecentFeature(resolvedOther.hash, "nmf");
     if (!existingNmf) {
@@ -821,22 +821,22 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
   const slice = Object.assign(
     async function slice(
-      source?: SliceFeature | Sample | PromiseLike<Sample> | SliceOptions,
+      source?: SliceFeatureResult | SampleResult | PromiseLike<SampleResult> | SliceOptions,
       options?: SliceOptions,
     ): Promise<BounceResult> {
-      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
+      const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
       const explicitOptions =
-        resolvedSource instanceof SliceFeature || resolvedSource instanceof Sample
+        resolvedSource instanceof SliceFeatureResult || resolvedSource instanceof SampleResult
           ? options
           : (resolvedSource as SliceOptions | undefined);
       let feature: FeatureData | null;
       let sampleHash: string;
-      if (resolvedSource instanceof SliceFeature) {
+      if (resolvedSource instanceof SliceFeatureResult) {
         sampleHash = resolvedSource.sourceHash;
         feature = explicitOptions?.featureHash
           ? await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice")
           : await window.electron.getMostRecentFeature(resolvedSource.sourceHash, "onset-slice");
-      } else if (resolvedSource instanceof Sample) {
+      } else if (resolvedSource instanceof SampleResult) {
         sampleHash = resolvedSource.hash;
         feature = await window.electron.getMostRecentFeature(
           resolvedSource.hash,
@@ -881,17 +881,17 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
   const sep = Object.assign(
     async function sep(
-      source?: Sample | PromiseLike<Sample> | NmfFeature | SepOptions,
+      source?: SampleResult | PromiseLike<SampleResult> | NmfFeatureResult | SepOptions,
       options?: SepOptions,
     ): Promise<BounceResult> {
       let hash: string;
       let opts: SepOptions | undefined;
 
-      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-      if (resolvedSource instanceof Sample) {
+      const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
+      if (resolvedSource instanceof SampleResult) {
         hash = resolvedSource.hash;
         opts = options;
-      } else if (resolvedSource instanceof NmfFeature) {
+      } else if (resolvedSource instanceof NmfFeatureResult) {
         hash = resolvedSource.sourceHash;
         opts = options;
       } else {
@@ -1001,17 +1001,17 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   );
 
   const playSlice = Object.assign(
-    async function playSlice(index = 0, source?: SliceFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
+    async function playSlice(index = 0, source?: SliceFeatureResult | SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
       const currentHash = getCurrentHash();
 
-      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-      const lookupHash = resolvedSource instanceof Sample
+      const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
+      const lookupHash = resolvedSource instanceof SampleResult
         ? resolvedSource.hash
-        : resolvedSource instanceof SliceFeature
+        : resolvedSource instanceof SliceFeatureResult
           ? resolvedSource.sourceHash
           : currentHash;
 
-      const feature = resolvedSource instanceof SliceFeature
+      const feature = resolvedSource instanceof SliceFeatureResult
         ? await window.electron.getMostRecentFeature(lookupHash, "onset-slice")
         : await window.electron.getMostRecentFeature(lookupHash, "onset-slice");
 
@@ -1081,17 +1081,17 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
   );
 
   const playComponent = Object.assign(
-    async function playComponent(index = 0, source?: NmfFeature | NxFeature | Sample | PromiseLike<Sample>): Promise<Sample> {
+    async function playComponent(index = 0, source?: NmfFeatureResult | NxFeatureResult | SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
       const currentHash = getCurrentHash();
 
-      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
-      const lookupHash = resolvedSource instanceof Sample
+      const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
+      const lookupHash = resolvedSource instanceof SampleResult
         ? resolvedSource.hash
-        : (resolvedSource instanceof NmfFeature || resolvedSource instanceof NxFeature)
+        : (resolvedSource instanceof NmfFeatureResult || resolvedSource instanceof NxFeatureResult)
           ? resolvedSource.sourceHash
           : currentHash;
 
-      const featureType = resolvedSource instanceof NxFeature ? "nmf-cross" : "nmf";
+      const featureType = resolvedSource instanceof NxFeatureResult ? "nmf-cross" : "nmf";
       const feature = await window.electron.getMostRecentFeature(lookupHash, featureType);
       if (!feature) {
         throw new Error("No NMF analysis found. Run sample.nmf() first.");
@@ -1166,15 +1166,15 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
   const granularize = Object.assign(
     async function granularize(
-      source?: string | Sample | PromiseLike<Sample> | GranularizeOptions,
+      source?: string | SampleResult | PromiseLike<SampleResult> | GranularizeOptions,
       options?: GranularizeOptions,
     ): Promise<GrainCollection> {
-      const resolvedSource = isPromiseLike<Sample>(source) ? await source : source;
+      const resolvedSource = isPromiseLike<SampleResult>(source) ? await source : source;
       const isOptionsArg =
         resolvedSource !== null &&
         resolvedSource !== undefined &&
         typeof resolvedSource === "object" &&
-        !(resolvedSource instanceof Sample);
+        !(resolvedSource instanceof SampleResult);
       const opts = isOptionsArg
         ? (resolvedSource as GranularizeOptions)
         : options;
@@ -1183,7 +1183,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
       if (typeof resolvedSource === "string") {
         const loaded = await loadByHash(resolvedSource);
         hash = loaded.hash;
-      } else if (resolvedSource instanceof Sample) {
+      } else if (resolvedSource instanceof SampleResult) {
         hash = resolvedSource.hash;
       } else {
         hash = getCurrentHash();
@@ -1193,7 +1193,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
       const result = await window.electron.granularizeSample(hash, opts);
 
-      const grains: Array<Sample | null> = result.grainHashes.map(
+      const grains: Array<SampleResult | null> = result.grainHashes.map(
         (grainHash: string | null) => {
           if (grainHash === null) return null;
           return bindSample(
@@ -1243,12 +1243,12 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
     deviceLabel: string,
     sampleId: string,
     opts?: RecordOptions,
-  ): Promise<RecordingHandle> | SamplePromise {
-    const pipeline = async (): Promise<{ recorder: MediaRecorder; storagePromise: Promise<Sample> }> => {
+  ): Promise<RecordingHandleResult> | SamplePromise {
+    const pipeline = async (): Promise<{ recorder: MediaRecorder; storagePromise: Promise<SampleResult> }> => {
       const existing = await window.electron.getSampleByName(sampleId);
       if (existing && !opts?.overwrite) {
         throw new Error(
-          `Sample '${sampleId}' already exists. Use { overwrite: true } to replace it.`,
+          `SampleResult '${sampleId}' already exists. Use { overwrite: true } to replace it.`,
         );
       }
 
@@ -1265,7 +1265,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
         if (e.data.size > 0) chunks.push(e.data);
       };
 
-      const storagePromise = new Promise<Sample>((resolve, reject) => {
+      const storagePromise = new Promise<SampleResult>((resolve, reject) => {
         recorder.onstop = () => {
           stream.getTracks().forEach((t) => t.stop());
           const blob = new Blob(chunks, { type: recorder.mimeType });
@@ -1294,7 +1294,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
               );
 
               if (result.status === "exists") {
-                throw new Error(`Sample '${sampleId}' already exists.`);
+                throw new Error(`SampleResult '${sampleId}' already exists.`);
               }
 
               resolve(
@@ -1328,7 +1328,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
     return pipeline().then(
       ({ recorder, storagePromise }) =>
-        new RecordingHandle(deviceLabel, () => recorder.stop(), storagePromise),
+        new RecordingHandleResult(deviceLabel, () => recorder.stop(), storagePromise),
     );
   }
 
@@ -1344,12 +1344,13 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
     read: withHelp(
       /**
-       * Load an audio file from disk and return a Sample object
+       * Load an audio file from disk and return a SampleResult object
        *
-       * Load an audio file from disk and return a Sample object.
+       * Load an audio file from disk and return a SampleResult object.
        * The sample is stored in the project database for future access via sn.load().
        *
        * @param path File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS.
+       * @returns {Sample}
        * @example const samp = sn.read("kick.wav")
        * @example const samp = sn.read("samples/loop.flac")
        */
@@ -1361,12 +1362,13 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
 
     load: withHelp(
       /**
-       * Load a stored sample by hash and return a Sample object
+       * Load a stored sample by hash and return a SampleResult object
        *
-       * Load a stored sample by its hash (or hash prefix) and return a Sample object.
+       * Load a stored sample by its hash (or hash prefix) and return a SampleResult object.
        * Use sn.list() to see available sample hashes.
        *
        * @param hash Full or prefix hash from sn.list().
+       * @returns {Sample}
        * @example const samp = sn.load("a1b2c3d4")
        */
       function load(hash: string): SamplePromise {
@@ -1393,6 +1395,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
        *
        * Return the currently loaded sample or null if no sample is active.
        *
+       * @returns {Sample}
        * @example const current = sn.current()
        * @example current?.help()
        */
@@ -1448,16 +1451,17 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
       /**
        * Open an audio input device by index for recording
        *
-       * Open an audio input device by index (from sn.inputs()) and return an AudioDevice.
-       * Use AudioDevice.record() to start recording.
+       * Open an audio input device by index (from sn.inputs()) and return an AudioDeviceResult.
+       * Use AudioDeviceResult.record() to start recording.
        *
        * @param index Device index from sn.inputs().
+       * @returns {AudioDevice}
        * @example const mic = sn.dev(0)
        * @example const h = mic.record("take1")
        * @example h.stop()
        * @example mic.record("take2", { duration: 5 })
        */
-      async function dev(index: number): Promise<AudioDevice> {
+      async function dev(index: number): Promise<AudioDeviceResult> {
         const devs = await getAudioInputs();
         if (index < 0 || index >= devs.length) {
           throw new Error(
@@ -1465,7 +1469,7 @@ export function buildSampleNamespace(deps: NamespaceDeps) {
           );
         }
         const d = devs[index];
-        return new AudioDevice(index, d.deviceId, d.label, 1, {
+        return new AudioDeviceResult(index, d.deviceId, d.label, 1, {
           record: (sampleId, opts) => recordSample(d.deviceId, d.label, sampleId, opts),
         });
       },

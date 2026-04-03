@@ -1,7 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import * as path from "path";
 import * as fs from "fs";
-import { launchApp, waitForReady, sendCommand } from "./helpers";
+import * as os from "os";
 
 function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
   const sampleRate = 44100;
@@ -51,17 +51,13 @@ function createTestWavFile(filePath: string, durationSeconds: number = 0.5) {
 }
 
 test.describe("Onset Slice Analysis", () => {
-  test("should analyze onset slices and display only when explicitly shown", async () => {
-    const testFile = path.join(__dirname, "test-onset-audio.wav");
+  test("should analyze onset slices and display only when explicitly shown", async ({ window, sendCommand }) => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const testFile = path.join(tmpDir, "test-onset-audio.wav");
     createTestWavFile(testFile, 0.5);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "samp.onsetSlice()");
+    await sendCommand(`const samp = sn.read("${testFile}")`);
+    await sendCommand("samp.onsetSlice()");
 
     await expect(window.locator(".xterm-rows")).toContainText("Found", {
       timeout: 5000,
@@ -72,8 +68,8 @@ test.describe("Onset Slice Analysis", () => {
 
     await expect(window.locator(".visualization-scene-waveform-canvas")).toHaveCount(0);
 
-    await sendCommand(window, "const onsetScene = vis.waveform(samp).overlay(samp.onsetSlice())");
-    await sendCommand(window, "onsetScene.show()");
+    await sendCommand("const onsetScene = vis.waveform(samp).overlay(samp.onsetSlice())");
+    await sendCommand("onsetScene.show()");
 
     await expect(window.locator(".visualization-scene-waveform-canvas")).toBeVisible({
       timeout: 5000,
@@ -82,31 +78,26 @@ test.describe("Onset Slice Analysis", () => {
       timeout: 5000,
     });
 
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("should append a new scene when shown again", async () => {
-    const testFile = path.join(__dirname, "test-multi-analysis.wav");
+  test("should append a new scene when shown again", async ({ window, sendCommand }) => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const testFile = path.join(tmpDir, "test-multi-analysis.wav");
     createTestWavFile(testFile, 0.3);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
     // First analysis
-    await sendCommand(window, `const samp = sn.read("${testFile}")`);
-    await sendCommand(window, "const onsetsA = samp.onsetSlice()");
-    await sendCommand(window, "vis.waveform(samp).overlay(onsetsA).show()");
+    await sendCommand(`const samp = sn.read("${testFile}")`);
+    await sendCommand("const onsetsA = samp.onsetSlice()");
+    await sendCommand("vis.waveform(samp).overlay(onsetsA).show()");
     await expect(window.locator(".xterm-rows")).toContainText("Analyzing onset slices...", {
       timeout: 5000,
     });
     await expect(window.locator(".visualization-scene")).toHaveCount(1);
 
     // Second analysis with different threshold
-    await sendCommand(window, "const onsetsB = samp.onsetSlice({ threshold: 0.5 })");
-    await sendCommand(window, "vis.waveform(samp).overlay(onsetsB).show()");
+    await sendCommand("const onsetsB = samp.onsetSlice({ threshold: 0.5 })");
+    await sendCommand("vis.waveform(samp).overlay(onsetsB).show()");
 
     await expect(window.locator(".visualization-scene")).toHaveCount(2);
 
@@ -145,32 +136,25 @@ test.describe("Onset Slice Analysis", () => {
     expect(afterResize.clientHeight).toBeGreaterThan(beforeResize.clientHeight);
     expect(afterResize.scrollHeight).toBeLessThanOrEqual(afterResize.clientHeight + 2);
 
-    await electronApp.close();
-    fs.unlinkSync(testFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("should show multiple waveform scenes from one vis.stack command", async () => {
-    const firstFile = path.join(__dirname, "test-stack-a.wav");
-    const secondFile = path.join(__dirname, "test-stack-b.wav");
+  test("should show multiple waveform scenes from one vis.stack command", async ({ window, sendCommand }) => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-onset-"));
+    const firstFile = path.join(tmpDir, "test-stack-a.wav");
+    const secondFile = path.join(tmpDir, "test-stack-b.wav");
     createTestWavFile(firstFile, 0.25);
     createTestWavFile(secondFile, 0.35);
 
-    const electronApp = await launchApp();
-
-    const window = await electronApp.firstWindow();
-    await waitForReady(window);
-
-    await sendCommand(window, `const a = sn.read("${firstFile}")`);
-    await sendCommand(window, `const b = sn.read("${secondFile}")`);
-    await sendCommand(window, "vis.stack().waveform(a).waveform(b).show()");
+    await sendCommand(`const a = sn.read("${firstFile}")`);
+    await sendCommand(`const b = sn.read("${secondFile}")`);
+    await sendCommand("vis.stack().waveform(a).waveform(b).show()");
 
     await expect(window.locator(".visualization-scene")).toHaveCount(2);
     await expect(window.locator(".xterm-rows")).toContainText("Rendered 2 scenes", {
       timeout: 5000,
     });
 
-    await electronApp.close();
-    fs.unlinkSync(firstFile);
-    fs.unlinkSync(secondFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
