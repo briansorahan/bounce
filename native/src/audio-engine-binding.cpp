@@ -111,8 +111,10 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
 
 AudioEngineWrapper::AudioEngineWrapper(const Napi::CallbackInfo& info)
     : Napi::ObjectWrap<AudioEngineWrapper>(info) {
+    bool useNullBackend = info.Length() > 0 && info[0].IsBoolean()
+                          && info[0].As<Napi::Boolean>().Value();
     engine_ = std::make_unique<AudioEngine>();
-    if (!engine_->start()) {
+    if (!engine_->start(useNullBackend)) {
         Napi::Error::New(info.Env(), "AudioEngine: failed to start miniaudio device")
             .ThrowAsJavaScriptException();
     }

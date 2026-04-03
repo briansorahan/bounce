@@ -36,7 +36,7 @@ AudioEngine::~AudioEngine() {
 // ---------------------------------------------------------------------------
 // start / stop
 // ---------------------------------------------------------------------------
-bool AudioEngine::start() {
+bool AudioEngine::start(bool useNullBackend) {
     device_.reset(new ma_device());
 
     ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
@@ -46,7 +46,15 @@ bool AudioEngine::start() {
     cfg.dataCallback      = AudioEngine::audioCallback;
     cfg.pUserData         = this;
 
-    if (ma_device_init(nullptr, &cfg, device_.get()) != MA_SUCCESS) {
+    ma_result initResult;
+    if (useNullBackend) {
+        ma_backend backends[] = { ma_backend_null };
+        initResult = ma_device_init_ex(backends, 1, nullptr, &cfg, device_.get());
+    } else {
+        initResult = ma_device_init(nullptr, &cfg, device_.get());
+    }
+
+    if (initResult != MA_SUCCESS) {
         device_.reset();
         return false;
     }

@@ -28,7 +28,7 @@ const addonPath = path.resolve(_dirname, "../../build/Release/audio_engine_nativ
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { AudioEngine } = require(addonPath) as {
-  AudioEngine: new () => AudioEngineNative;
+  AudioEngine: new (useNullBackend?: boolean) => AudioEngineNative;
 };
 
 interface AudioEngineNative {
@@ -81,7 +81,7 @@ let engine: AudioEngineNative | null = null;
 
 // Initialize the audio engine; if it fails, the process stays alive but idle.
 try {
-  engine = new AudioEngine();
+  engine = new AudioEngine(!!process.env.BOUNCE_NULL_AUDIO);
 } catch (err) {
   console.error("[audio-engine-process] AudioEngine init failed:", err);
 }
