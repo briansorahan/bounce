@@ -1,74 +1,8 @@
-import { test, expect, _electron as electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import * as path from "path";
-import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
+import { launchApp, waitForReady, sendCommand, createTestWavFile } from "./helpers";
 import * as fs from "fs";
 import * as os from "os";
-
-const electronPath = require("electron") as string;
-
-async function sendCommand(window: any, command: string) {
-  await window.evaluate((cmd: string) => {
-    const executeCommand = (window as any).__bounceExecuteCommand;
-    if (!executeCommand) {
-      throw new Error("Execute command function not exposed");
-    }
-    return executeCommand(cmd);
-  }, command);
-}
-
-async function launchApp(userDataDir: string) {
-  return electron.launch({
-    executablePath: electronPath,
-    args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
-      BOUNCE_USER_DATA_PATH: userDataDir,
-    },
-  });
-}
-
-async function waitForReady(window: any) {
-  await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
-}
-
-function createTestWavFile(filePath: string, durationSeconds: number = 0.1) {
-  const sampleRate = 44100;
-  const numSamples = Math.floor(sampleRate * durationSeconds);
-  const numChannels = 1;
-  const bytesPerSample = 2;
-
-  const dataSize = numSamples * numChannels * bytesPerSample;
-  const fileSize = 36 + dataSize;
-
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(fileSize, 4);
-  buffer.write("WAVE", 8);
-
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(numChannels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * numChannels * bytesPerSample, 28);
-  buffer.writeUInt16LE(numChannels * bytesPerSample, 32);
-  buffer.writeUInt16LE(bytesPerSample * 8, 34);
-
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(dataSize, 40);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const value = Math.sin(2 * Math.PI * 440 * t);
-    const sample = Math.floor(value * 32767);
-    buffer.writeInt16LE(sample, 44 + i * 2);
-  }
-
-  fs.writeFileSync(filePath, buffer);
-}
 
 test.describe("Audio Format Support", () => {
   const testDir = path.join(__dirname, "../test-results/audio-files");

@@ -66,13 +66,20 @@ test.describe("Tab completion", () => {
 
     // First Tab shows the list with the first candidate selected
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200); // flaky-ok: need stable snapshot before capturing text for comparison
+    // Wait for the completion list to appear
+    await expect(window.locator(".xterm-rows")).toContainText("read()");
 
     const rowsAfterFirst = await window.locator(".xterm-rows").textContent();
 
-    // Second Tab cycles to the next candidate
+    // Second Tab cycles to the next candidate — wait until the text changes
     await window.keyboard.press("Tab");
-    await window.waitForTimeout(200); // flaky-ok: need stable snapshot before capturing text for comparison
+    await window.waitForFunction(
+      (prevText: string | null) => {
+        const el = document.querySelector(".xterm-rows");
+        return el && el.textContent !== prevText;
+      },
+      rowsAfterFirst,
+    );
 
     const rowsAfterSecond = await window.locator(".xterm-rows").textContent();
 

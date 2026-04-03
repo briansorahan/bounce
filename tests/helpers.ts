@@ -58,7 +58,8 @@ export async function launchApp(userDataDir?: string) {
 
 export async function waitForReady(window: any) {
   await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
+  const timeout = process.env.CI ? 30000 : 10000;
+  await window.waitForSelector(".xterm-screen", { timeout });
 }
 
 export async function sendCommand(window: any, command: string): Promise<void> {

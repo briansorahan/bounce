@@ -8,7 +8,7 @@ import {
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { ELECTRON_MAIN, ELECTRON_ARGS } from "./helpers";
+import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady } from "./helpers";
 
 const electronPath = require("electron") as string;
 
@@ -40,8 +40,7 @@ test.beforeAll(async () => {
     },
   });
   window = await electronApp.firstWindow();
-  await window.waitForLoadState("domcontentloaded");
-  await window.waitForSelector(".xterm-screen", { timeout: 10000 });
+  await waitForReady(window);
 });
 
 test.afterAll(async () => {

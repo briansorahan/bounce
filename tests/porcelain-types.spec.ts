@@ -1,12 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { launchApp, waitForReady } from "./helpers";
-
-async function evalInRepl(window: import("@playwright/test").Page, expr: string, waitMs = 800): Promise<string> {
-  await window.keyboard.type(expr);
-  await window.keyboard.press("Enter");
-  await window.waitForTimeout(waitMs);
-  return window.locator(".xterm-rows").textContent() ?? "";
-}
+import { launchApp, waitForReady, sendCommand } from "./helpers";
 
 test.describe("Porcelain type help", () => {
   test("Sample.help() outputs type name, summary, and known methods", async () => {
@@ -14,14 +7,15 @@ test.describe("Porcelain type help", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    const output = await evalInRepl(window, "Sample.help()");
+    await sendCommand(window, "Sample.help()");
+    const rows = window.locator(".xterm-rows");
 
-    expect(output).toContain("Sample");
-    expect(output).toContain("play()");
-    expect(output).toContain("loop(opts?)");
-    expect(output).toContain("onsetSlice(opts?)");
-    expect(output).toContain("nmf(opts?)");
-    expect(output).toContain("mfcc(opts?)");
+    await expect(rows).toContainText("Sample");
+    await expect(rows).toContainText("play()");
+    await expect(rows).toContainText("loop(opts?)");
+    await expect(rows).toContainText("onsetSlice(opts?)");
+    await expect(rows).toContainText("nmf(opts?)");
+    await expect(rows).toContainText("mfcc(opts?)");
 
     await electronApp.close();
   });
@@ -31,11 +25,12 @@ test.describe("Porcelain type help", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    const output = await evalInRepl(window, "SliceFeature.help()");
+    await sendCommand(window, "SliceFeature.help()");
+    const rows = window.locator(".xterm-rows");
 
-    expect(output).toContain("SliceFeature");
-    expect(output).toContain("slices");
-    expect(output).toContain("playSlice(index?)");
+    await expect(rows).toContainText("SliceFeature");
+    await expect(rows).toContainText("slices");
+    await expect(rows).toContainText("playSlice(index?)");
 
     await electronApp.close();
   });
@@ -45,12 +40,13 @@ test.describe("Porcelain type help", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    const output = await evalInRepl(window, "NmfFeature.help()");
+    await sendCommand(window, "NmfFeature.help()");
+    const rows = window.locator(".xterm-rows");
 
-    expect(output).toContain("NmfFeature");
-    expect(output).toContain("components");
-    expect(output).toContain("playComponent(index?)");
-    expect(output).toContain("sep(opts?)");
+    await expect(rows).toContainText("NmfFeature");
+    await expect(rows).toContainText("components");
+    await expect(rows).toContainText("playComponent(index?)");
+    await expect(rows).toContainText("sep(opts?)");
 
     await electronApp.close();
   });
@@ -60,11 +56,12 @@ test.describe("Porcelain type help", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    const output = await evalInRepl(window, "Pattern.help()");
+    await sendCommand(window, "Pattern.help()");
+    const rows = window.locator(".xterm-rows");
 
-    expect(output).toContain("Pattern");
-    expect(output).toContain("play(channel)");
-    expect(output).toContain("stop()");
+    await expect(rows).toContainText("Pattern");
+    await expect(rows).toContainText("play(channel)");
+    await expect(rows).toContainText("stop()");
 
     await electronApp.close();
   });
@@ -74,10 +71,11 @@ test.describe("Porcelain type help", () => {
     const window = await electronApp.firstWindow();
     await waitForReady(window);
 
-    const output = await evalInRepl(window, "Sample");
+    await sendCommand(window, "Sample");
+    const rows = window.locator(".xterm-rows");
 
-    // toString() on the help object should show the type name and summary
-    expect(output).toContain("Sample");
+    // Evaluating Sample without calling help() shows the object with its method keys
+    await expect(rows).toContainText("play");
 
     await electronApp.close();
   });

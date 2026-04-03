@@ -60,7 +60,7 @@ test.describe("Audio Recording", () => {
         timeout: 10000,
       });
 
-      await window.waitForTimeout(300); // flaky-ok: MediaRecorder needs time to buffer at least one audio chunk before stop() or decodeAudioData fails on an empty blob
+      await window.waitForTimeout(process.env.CI ? 1000 : 300); // flaky-ok: MediaRecorder needs time to buffer at least one audio chunk before stop() or decodeAudioData fails on an empty blob
       await sendCommand(window, "h.stop()");
 
       await expect(window.locator(".xterm-rows")).toContainText("Sample", {
