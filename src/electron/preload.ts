@@ -248,6 +248,10 @@ const api: ElectronAPI = {
     ipcRenderer.on("midi-playback-ended", (_event, data) => callback(data));
   },
 
+  // Completion
+  requestCompletion: (buffer: string, cursor: number, requestId: number) =>
+    ipcRenderer.invoke("completion:request", buffer, cursor, requestId),
+
   // App lifecycle
   forceShutdown: () => ipcRenderer.send("force-shutdown"),
 

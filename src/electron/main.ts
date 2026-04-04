@@ -171,6 +171,7 @@ registerAllHandlers({
   corpusManager,
   getAudioEnginePort: () => audioEnginePort,
   getMainWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+  languageServiceManager,
 });
 
 // ---------------------------------------------------------------------------

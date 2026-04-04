@@ -2,6 +2,7 @@ import { BrowserWindow, MessagePortMain } from "electron";
 import { DatabaseManager } from "../database";
 import { SettingsStore } from "../settings-store";
 import { CorpusManager } from "../corpus-manager";
+import { LanguageServiceManager } from "../language-service-manager";
 
 import { registerFilesystemHandlers } from "./filesystem-handlers";
 import { registerProjectHandlers } from "./project-handlers";
@@ -17,6 +18,7 @@ import { registerErrorHandlers } from "./error-handlers";
 import { registerMixerHandlers } from "./mixer-handlers";
 import { registerMidiHandlers } from "./midi-handlers";
 import { registerTransportHandlers } from "./transport-handlers";
+import { registerCompletionHandlers } from "./completion-handlers";
 
 export interface HandlerDeps {
   dbManager: DatabaseManager;
@@ -24,6 +26,7 @@ export interface HandlerDeps {
   corpusManager: CorpusManager;
   getAudioEnginePort: () => MessagePortMain | null;
   getMainWindow: () => BrowserWindow | null;
+  languageServiceManager: LanguageServiceManager;
 }
 
 export function registerAllHandlers(deps: HandlerDeps): void {
@@ -41,4 +44,5 @@ export function registerAllHandlers(deps: HandlerDeps): void {
   registerMixerHandlers(deps);
   registerMidiHandlers(deps);
   registerTransportHandlers(deps);
+  registerCompletionHandlers(deps);
 }
