@@ -61,6 +61,9 @@ export class LanguageServiceManager {
   /** Current escalation state. */
   private escalationLevel: "full" | "incremental" | "clean-slate" | "disabled" = "full";
 
+  /** One-time callbacks registered via onReady(). */
+  private readyCallbacks: Array<() => void> = [];
+
   private scriptPath: string;
 
   constructor(scriptPath?: string) {
@@ -133,6 +136,19 @@ export class LanguageServiceManager {
     return this.isReady && this.escalationLevel !== "disabled";
   }
 
+  /**
+   * Register a one-time callback invoked when the language service first
+   * signals ready. If the service is already ready, the callback fires
+   * synchronously on the next tick.
+   */
+  onReady(cb: () => void): void {
+    if (this.isReady) {
+      setImmediate(cb);
+    } else {
+      this.readyCallbacks.push(cb);
+    }
+  }
+
   // ── Internal ──────────────────────────────────────────────────────────────
 
   private spawnProcess(): void {
@@ -167,6 +183,7 @@ export class LanguageServiceManager {
       case "langservice:ready":
         this.isReady = true;
         console.log("[LanguageServiceManager] Language service ready");
+        for (const cb of this.readyCallbacks.splice(0)) cb();
         break;
 
       case "langservice:parse:response": {

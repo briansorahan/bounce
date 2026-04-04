@@ -47,6 +47,12 @@ export function registerProjectHandlers(deps: HandlerDeps): void {
       }
       const project = deps.dbManager.loadOrCreateProject(name);
       deps.settingsStore.setCurrentProjectName(project.name);
+      deps.dbManager.resetSessionTimestamp();
+      deps.languageServiceManager.sessionReset();
+      const history = deps.dbManager.getSessionHistory();
+      if (history.length > 0) {
+        deps.languageServiceManager.sessionRestore(history);
+      }
       return toProjectData(deps, project);
     } catch (error) {
       if (error instanceof BounceError) throw error;

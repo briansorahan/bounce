@@ -211,6 +211,7 @@ export class DatabaseManager {
       CREATE TABLE projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
+        session_start_timestamp INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -621,6 +622,38 @@ export class DatabaseManager {
     this.db
       .prepare("DELETE FROM command_history WHERE project_id = ?")
       .run(projectId);
+  }
+
+  /**
+   * Returns commands for the current project that were saved after the project's
+   * session_start_timestamp, in ascending order (oldest first) for language
+   * service replay.
+   */
+  getSessionHistory(): string[] {
+    const projectId = this.requireCurrentProjectId();
+    const row = this.db
+      .prepare("SELECT session_start_timestamp FROM projects WHERE id = ?")
+      .get(projectId) as { session_start_timestamp: number } | undefined;
+    const since = row?.session_start_timestamp ?? 0;
+    const rows = this.db
+      .prepare(
+        `SELECT command FROM command_history
+         WHERE project_id = ? AND timestamp > ?
+         ORDER BY timestamp ASC`,
+      )
+      .all(projectId, since) as { command: string }[];
+    return rows.map((r) => r.command);
+  }
+
+  /**
+   * Sets session_start_timestamp to now for the current project.
+   * Called on env.clear() and project switch to mark the start of a fresh session.
+   */
+  resetSessionTimestamp(): void {
+    const projectId = this.requireCurrentProjectId();
+    this.db
+      .prepare("UPDATE projects SET session_start_timestamp = ? WHERE id = ?")
+      .run(Date.now(), projectId);
   }
 
   dedupeCommandHistory(): { removed: number } {

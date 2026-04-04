@@ -9,6 +9,7 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
       deps.dbManager.addCommand(command);
+      deps.languageServiceManager.sessionAppend(command);
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to save command to database:", error);
@@ -35,6 +36,8 @@ export function registerHistoryHandlers(deps: HandlerDeps): void {
         throw new BounceError("HISTORY_DB_NOT_READY", "Database not initialized");
       }
       deps.dbManager.clearCommandHistory();
+      deps.dbManager.resetSessionTimestamp();
+      deps.languageServiceManager.sessionReset();
     } catch (error) {
       if (error instanceof BounceError) throw error;
       console.error("Failed to clear command history:", error);

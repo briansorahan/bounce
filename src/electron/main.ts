@@ -71,6 +71,12 @@ function createWindow() {
 
   startAudioEngineProcess(mainWindow);
   languageServiceManager.start();
+  languageServiceManager.onReady(() => {
+    const history = dbManager?.getSessionHistory() ?? [];
+    if (history.length > 0) {
+      languageServiceManager.sessionRestore(history);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
