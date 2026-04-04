@@ -1,106 +1,101 @@
 /// <reference path="../types.d.ts" />
 import { BounceResult } from "../bounce-result.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { transportCommands, transportDescription } from "./transport-commands.generated.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { transportCommands } from "./transport-commands.generated.js";
 export { transportCommands } from "./transport-commands.generated.js";
 
-export interface TransportNamespace {
-  description: string;
-  bpm: ((value?: number) => BounceResult) & { help: () => BounceResult };
-  start: (() => BounceResult) & { help: () => BounceResult };
-  stop: (() => BounceResult) & { help: () => BounceResult };
-  help(): BounceResult;
+@namespace("transport", { summary: "Global clock and BPM control" })
+export class TransportNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "Global clock and BPM control";
+
+  private currentBpm = 120;
+  private isRunning = false;
+  private lastBar = 0;
+  private lastBeat = 0;
+  private lastStep = 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_deps: NamespaceDeps) {
+    window.electron.onTransportTick((data) => {
+      this.lastBar = data.bar;
+      this.lastBeat = data.beat;
+      this.lastStep = data.step;
+    });
+  }
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
+  }
+
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "Get or set BPM (1–400). Omit argument to read current BPM.",
+    returns: "BounceResult",
+  })
+  @param("value", {
+    summary: "Beats per minute (1–400). Omit to read current BPM.",
+    kind: "plain",
+  })
+  bpm(value?: number): BounceResult {
+    if (value === undefined) {
+      return new BounceResult(`Transport  bpm: ${this.currentBpm}  running: ${this.isRunning}`);
+    }
+    if (value <= 0 || value > 400) {
+      return new BounceResult(`\x1b[31mBPM must be between 1 and 400 (got ${value})\x1b[0m`);
+    }
+    const prev = this.currentBpm;
+    this.currentBpm = value;
+    window.electron.transportSetBpm(value);
+    return new BounceResult(`Transport  bpm: ${this.currentBpm}  (was: ${prev})`);
+  }
+
+  @describe({
+    summary: "Start the global clock. Patterns scheduled with .play() will begin on the next bar.",
+    returns: "BounceResult",
+  })
+  start(): BounceResult {
+    this.isRunning = true;
+    window.electron.transportStart();
+    return new BounceResult(`Transport started  bpm: ${this.currentBpm}`);
+  }
+
+  @describe({
+    summary: "Stop the global clock. Reports last bar, beat, and step position.",
+    returns: "BounceResult",
+  })
+  stop(): BounceResult {
+    this.isRunning = false;
+    window.electron.transportStop();
+    return new BounceResult(`Transport stopped  bar: ${this.lastBar}  beat: ${this.lastBeat}  step: ${this.lastStep}`);
+  }
+
+  // ── Plumbing accessor ─────────────────────────────────────────────────────
+
+  @describe({ summary: "Return the current BPM value.", visibility: "plumbing" })
+  getCurrentBpm(): number {
+    return this.currentBpm;
+  }
 }
 
-export interface TransportNamespaceResult {
+/** @deprecated Use `new TransportNamespace(deps)` directly. Kept for backward compatibility. */
+export function buildTransportNamespace(deps: NamespaceDeps): {
   transport: TransportNamespace;
   getCurrentBpm: () => number;
+} {
+  const transport = new TransportNamespace(deps);
+  return { transport, getCurrentBpm: () => transport.getCurrentBpm() };
 }
 
-
-/**
- * Global clock and BPM control
- * @namespace transport
- */
-export function buildTransportNamespace(_deps: NamespaceDeps): TransportNamespaceResult {
-  let currentBpm = 120;
-  let isRunning = false;
-  let lastBar = 0;
-  let lastBeat = 0;
-  let lastStep = 0;
-
-  const transport: TransportNamespace = {
-    description: transportDescription,
-    help: () => renderNamespaceHelp("transport", transportDescription, transportCommands),
-
-    bpm: withHelp(
-      /**
-       * Get or set BPM (1–400)
-       *
-       * Get the current BPM when called with no argument, or set a new BPM value.
-       * Value must be between 1 and 400.
-       *
-       * @param value Beats per minute (1–400). Omit to read current BPM.
-       * @example transport.bpm()
-       * @example transport.bpm(140)
-       */
-      function bpm(value?: number): BounceResult {
-        if (value === undefined) {
-          return new BounceResult(`Transport  bpm: ${currentBpm}  running: ${isRunning}`);
-        }
-        if (value <= 0 || value > 400) {
-          return new BounceResult(`\x1b[31mBPM must be between 1 and 400 (got ${value})\x1b[0m`);
-        }
-        const prev = currentBpm;
-        currentBpm = value;
-        window.electron.transportSetBpm(value);
-        return new BounceResult(`Transport  bpm: ${currentBpm}  (was: ${prev})`);
-      },
-      transportCommands[0],
-    ),
-
-    start: withHelp(
-      /**
-       * Start the global clock
-       *
-       * Start the transport clock. Patterns scheduled with .play() will begin
-       * firing on the next bar.
-       *
-       * @example transport.bpm(120)\ntransport.start()\npat.xox(`c4 = a . . . a . . . a . . . a . . .`).play(1)
-       */
-      function start(): BounceResult {
-        isRunning = true;
-        window.electron.transportStart();
-        return new BounceResult(`Transport started  bpm: ${currentBpm}`);
-      },
-      transportCommands[1],
-    ),
-
-    stop: withHelp(
-      /**
-       * Stop the global clock
-       *
-       * Stop the transport clock. Reports the last bar, beat, and step
-       * position at the time of stopping.
-       *
-       * @example transport.stop()
-       */
-      function stop(): BounceResult {
-        isRunning = false;
-        window.electron.transportStop();
-        return new BounceResult(`Transport stopped  bar: ${lastBar}  beat: ${lastBeat}  step: ${lastStep}`);
-      },
-      transportCommands[2],
-    ),
-  };
-
-  // Update local state from tick telemetry
-  window.electron.onTransportTick((data) => {
-    lastBar = data.bar;
-    lastBeat = data.beat;
-    lastStep = data.step;
-  });
-
-  return { transport, getCurrentBpm: () => currentBpm };
-}
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { transportCommands as transportNamespaceCommands };

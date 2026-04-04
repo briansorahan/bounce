@@ -1,49 +1,50 @@
-import { BounceResult } from "../bounce-result.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
 import { parsePattern } from "../pattern-parser.js";
 import { PatternResult } from "../results/pattern.js";
-import { patCommands, patDescription } from "./pat-commands.generated.js";
+import { patCommands } from "./pat-commands.generated.js";
 export { patCommands } from "./pat-commands.generated.js";
 
-export interface PatNamespace {
-  description: string;
-  xox: ((notation: string) => PatternResult) & { help: () => BounceResult };
-  help(): BounceResult;
+@namespace("pat", { summary: "PatternResult DSL for rhythmic sequencing" })
+export class PatNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "PatternResult DSL for rhythmic sequencing";
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_deps: NamespaceDeps) {}
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
+  }
+
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "Compile an X0X step pattern for live-coding",
+    returns: "Pattern",
+  })
+  @param("notation", {
+    summary: "Multi-line X0X notation string. Each line: NOTE = STEPS (16 non-whitespace step chars). NOTE: c4, a4, etc. STEPS: . = rest, a-z = soft, A-Z = loud.",
+    kind: "plain",
+  })
+  xox(notation: string): PatternResult {
+    const compiled = parsePattern(notation);
+    return new PatternResult(notation, compiled);
+  }
 }
 
-/**
- * PatternResult DSL for rhythmic sequencing
- * @namespace pat
- */
-export function buildPatNamespace(_deps: NamespaceDeps): { pat: PatNamespace } {
-  const pat: PatNamespace = {
-    description: patDescription,
-    help: () => renderNamespaceHelp("pat", patDescription, patCommands),
-
-    xox: withHelp(
-      /**
-       * Compile an X0X step pattern for live-coding
-       *
-       * Compile an X0X step-sequencer pattern from a multi-line notation string.
-       * Returns a PatternResult object that can be played with .play(channel).
-       *
-       * X0X notation rules:
-       *   Each line:  NOTE = STEPS   (16 non-whitespace step characters)
-       *   NOTE:       c4, c'4 (sharp/flat one semitone up), a4, etc.
-       *   STEPS:      . = rest,  a-z = soft velocity,  A-Z = loud velocity
-       *
-       * @param notation Multi-line X0X notation string.
-       * @returns {Pattern}
-       * @example pat.xox(`\n  c4 = a . . . a . . . a . . . a . . .\n  e4 = . a . . . a . . . a . . . a . .\n`).play(1)
-       */
-      function xox(notation: string): PatternResult {
-        const compiled = parsePattern(notation);
-        return new PatternResult(notation, compiled);
-      },
-      patCommands[0],
-    ),
-  };
-
-  return { pat };
+/** @deprecated Use `new PatNamespace(deps)` directly. Kept for backward compatibility. */
+export function buildPatNamespace(deps: NamespaceDeps): { pat: PatNamespace } {
+  return { pat: new PatNamespace(deps) };
 }
+
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { patCommands as patNamespaceCommands };

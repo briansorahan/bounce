@@ -31,7 +31,7 @@ const PORCELAIN_GEN_PATH = join(process.cwd(), "src/renderer/results/porcelain-t
 // Files that live in the namespaces directory but are not namespace builders,
 // OR that have already been migrated to the decorator-based registration system
 // (see specs/repl-intelligence). These do not carry @namespace JSDoc tags.
-const EXCLUDED_FILES = new Set(["types.ts", "index.ts", "sample-namespace.ts"]);
+const EXCLUDED_FILES = new Set(["types.ts", "index.ts", "sample-namespace.ts", "pat-namespace.ts", "transport-namespace.ts", "corpus-namespace.ts", "fs-namespace.ts", "project-namespace.ts", "env-namespace.ts", "vis-namespace.ts", "instrument-namespace.ts", "midi-namespace.ts", "mixer-namespace.ts"]);
 
 // No summary-skip set needed: Test 3 only checks the non-empty summary
 // invariant for commands whose source function actually HAS JSDoc.

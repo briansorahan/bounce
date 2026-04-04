@@ -6,19 +6,100 @@ import {
   ProjectListResult,
   type ProjectSummary,
 } from "../bounce-result.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { projCommands, projDescription } from "./proj-commands.generated.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { projCommands } from "./proj-commands.generated.js";
 export { projCommands } from "./proj-commands.generated.js";
 
 export const projectCommands = projCommands;
 
-/**
- * Manage Bounce projects — create, switch, and list
- * @namespace proj
- */
-export function buildProjectNamespace(deps: NamespaceDeps) {
-  function makeProjectDisplayText(project: ProjectSummary, heading = "Current Project"): string {
+@namespace("proj", { summary: "Manage Bounce projects — create, switch, and list" })
+export class ProjectNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "Manage Bounce projects — create, switch, and list";
+
+  constructor(private readonly deps: NamespaceDeps) {}
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
+  }
+
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "Return the active project and its stored counts.",
+    returns: "ProjectResult",
+  })
+  async current(): Promise<ProjectResult> {
+    const project = await window.electron.getCurrentProject();
+    if (!project) {
+      throw new Error("No current project is available.");
+    }
+    return this.bindProject(project);
+  }
+
+  @describe({
+    summary: "List all projects with sample, feature, and command counts.",
+    returns: "ProjectListResult",
+  })
+  async list(): Promise<ProjectListResult> {
+    const projects = await window.electron.listProjects();
+    const summaries: ProjectSummary[] = projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      createdAt: project.created_at,
+      sampleCount: project.sample_count,
+      featureCount: project.feature_count,
+      commandCount: project.command_count,
+      current: project.current,
+    }));
+    return new ProjectListResult(
+      this.formatProjectsTable(projects),
+      summaries,
+      () => this.projectListHelpText(),
+    );
+  }
+
+  @describe({
+    summary: "Load a project by name, creating it if needed.",
+    returns: "ProjectResult",
+  })
+  @param("name", { summary: "Project name to load or create.", kind: "plain" })
+  async load(name: string): Promise<ProjectResult> {
+    if (this.deps.runtime) {
+      const entries = this.deps.runtime.serializeScope();
+      await window.electron.saveReplEnv(entries);
+    }
+    const project = await window.electron.loadProject(name);
+    if (this.deps.onProjectLoad) {
+      await this.deps.onProjectLoad();
+    } else {
+      this.dispatchProjectChanged();
+    }
+    return this.bindProject(project, "Loaded Project");
+  }
+
+  @describe({
+    summary: "Remove a project and all its scoped data. The current project cannot be removed.",
+    returns: "BounceResult",
+  })
+  @param("name", { summary: "Name of the project to remove.", kind: "plain" })
+  async rm(name: string): Promise<BounceResult> {
+    const result = await window.electron.removeProject(name);
+    return new BounceResult(`\x1b[32mRemoved project ${result.removedName}.\x1b[0m`);
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private makeProjectDisplayText(project: ProjectSummary, heading = "Current Project"): string {
     return [
       `\x1b[1;36m${heading}\x1b[0m`,
       "",
@@ -30,7 +111,7 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     ].join("\n");
   }
 
-  function projectSummaryHelpText(project: ProjectResult): BounceResult {
+  private projectSummaryHelpText(project: ProjectResult): BounceResult {
     return new BounceResult([
       `\x1b[1;36mProject ${project.name}\x1b[0m`,
       "",
@@ -43,7 +124,7 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function projectListHelpText(): BounceResult {
+  private projectListHelpText(): BounceResult {
     return new BounceResult([
       "\x1b[1;36mproj.list()\x1b[0m",
       "",
@@ -53,16 +134,14 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function bindProject(project: ProjectData, heading = "Current Project"): ProjectResult {
+  private bindProject(project: ProjectData, heading = "Current Project"): ProjectResult {
     let result: ProjectResult | null = null;
     const helpFactory = (): BounceResult => {
-      if (!result) {
-        throw new Error("Project help is not available before initialization.");
-      }
-      return projectSummaryHelpText(result);
+      if (!result) throw new Error("Project help is not available before initialization.");
+      return this.projectSummaryHelpText(result);
     };
     const bound: ProjectResult = new ProjectResult(
-      makeProjectDisplayText(
+      this.makeProjectDisplayText(
         {
           id: project.id,
           name: project.name,
@@ -87,7 +166,7 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     return bound;
   }
 
-  function formatProjectsTable(projects: ProjectData[]): string {
+  private formatProjectsTable(projects: ProjectData[]): string {
     if (projects.length === 0) {
       return "\x1b[90mNo projects\x1b[0m";
     }
@@ -123,10 +202,8 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
     ].join("\n");
   }
 
-  function dispatchProjectChanged(): void {
-    if (typeof window.dispatchEvent !== "function") {
-      return;
-    }
+  private dispatchProjectChanged(): void {
+    if (typeof window.dispatchEvent !== "function") return;
     if (typeof CustomEvent === "function") {
       window.dispatchEvent(new CustomEvent("bounce:project-changed"));
       return;
@@ -135,102 +212,12 @@ export function buildProjectNamespace(deps: NamespaceDeps) {
       window.dispatchEvent(new Event("bounce:project-changed"));
     }
   }
-
-  const proj = {
-    description: projDescription,
-    toString(): string {
-      return renderNamespaceHelp("proj", projDescription, projectCommands).toString();
-    },
-
-    help: () => renderNamespaceHelp("proj", projDescription, projectCommands),
-
-    current: withHelp(
-      /**
-       * Return the active project and its stored counts
-       *
-       * @example proj.current()
-       */
-      async function current(): Promise<ProjectResult> {
-        const project = await window.electron.getCurrentProject();
-        if (!project) {
-          throw new Error("No current project is available.");
-        }
-        return bindProject(project);
-      },
-      projectCommands[0],
-    ),
-
-    list: withHelp(
-      /**
-       * List all projects with sample, feature, and command counts
-       *
-       * @example proj.list()
-       */
-      async function list(): Promise<ProjectListResult> {
-        const projects = await window.electron.listProjects();
-        const summaries: ProjectSummary[] = projects.map((project) => ({
-          id: project.id,
-          name: project.name,
-          createdAt: project.created_at,
-          sampleCount: project.sample_count,
-          featureCount: project.feature_count,
-          commandCount: project.command_count,
-          current: project.current,
-        }));
-        return new ProjectListResult(
-          formatProjectsTable(projects),
-          summaries,
-          projectListHelpText,
-        );
-      },
-      projectCommands[1],
-    ),
-
-    load: withHelp(
-      /**
-       * Load a project by name, creating it if needed
-       *
-       * Load a project by name. If it does not exist, Bounce creates it and
-       * makes it the current project.
-       *
-       * @param name Project name to load or create.
-       * @example proj.load("drums")
-       */
-      async function load(name: string): Promise<ProjectResult> {
-        if (deps.runtime) {
-          const entries = deps.runtime.serializeScope();
-          await window.electron.saveReplEnv(entries);
-        }
-        const project = await window.electron.loadProject(name);
-        if (deps.onProjectLoad) {
-          await deps.onProjectLoad();
-        } else {
-          dispatchProjectChanged();
-        }
-        return bindProject(project, "Loaded Project");
-      },
-      projectCommands[2],
-    ),
-
-    rm: withHelp(
-      /**
-       * Remove a project and all its scoped data
-       *
-       * Remove a project and all samples, features, and command history
-       * stored inside it. The current project cannot be removed.
-       *
-       * @param name Name of the project to remove.
-       * @example proj.rm("drums")
-       */
-      async function rm(name: string): Promise<BounceResult> {
-        const result = await window.electron.removeProject(name);
-        return new BounceResult(
-          `\x1b[32mRemoved project ${result.removedName}.\x1b[0m`,
-        );
-      },
-      projectCommands[3],
-    ),
-  };
-
-  return proj;
 }
+
+/** @deprecated Use `new ProjectNamespace(deps)` directly. Kept for backward compatibility. */
+export function buildProjectNamespace(deps: NamespaceDeps): ProjectNamespace {
+  return new ProjectNamespace(deps);
+}
+
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { projCommands as projNamespaceCommands };
