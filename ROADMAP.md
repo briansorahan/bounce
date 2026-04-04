@@ -13,8 +13,22 @@ See the brainstorming section for the full description of what each of these ide
 * Freesound Integration
 * Scripts
 * Staging Area
+* Command Line Interface
+* Microtuning
 
 # Brainstorming
+
+## Microtuning
+
+* Playing instruments with alternate tunings
+* Load scala files
+
+## Command Line Interface
+
+* `bounce` CLI tool
+* Does everything the electron app does
+* Visualizations are not live and clickable
+  * Rendered with the sixel protocol
 
 ## User Configuration
 
