@@ -5,24 +5,27 @@ Bounce is an Electron desktop application with three OS-level processes that com
 ## Process Model
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        Electron Main Process                     │
-│                                                                  │
-│  Lifecycle · IPC Router · Database (SQLite) · Settings Store     │
-│  Native analysis (flucoma_native) · Audio file decoding          │
-│                                                                  │
-│         ▲ ipcMain.handle / .on          ▲ MessagePort            │
-│         │                               │                        │
-│         ▼                               ▼                        │
-│  ┌─────────────────────┐   ┌───────────────────────────────┐     │
-│  │   Renderer Process  │   │  Audio Engine Utility Process │     │
-│  │                     │   │                               │     │
-│  │  xterm.js REPL      │   │  Native playback              │     │
-│  │  Canvas overlays    │   │  (audio_engine_native)        │     │
-│  │  Bounce API / NS    │   │  Instrument voice mgmt        │     │
-│  │  Web Audio (record) │   │  Playback telemetry           │     │
-│  └─────────────────────┘   └───────────────────────────────┘     │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           Electron Main Process                            │
+│                                                                            │
+│  Lifecycle · IPC Router · Database (SQLite) · Settings Store               │
+│  Native analysis (flucoma_native) · Audio file decoding                    │
+│  REPL Intelligence Layer · LanguageServiceManager                          │
+│                                                                            │
+│    ▲ ipcMain.handle / .on      ▲ MessagePort         ▲ MessagePort         │
+│    │                           │                     │                     │
+│    ▼                           ▼                     ▼                     │
+│  ┌──────────────────┐  ┌───────────────────┐  ┌────────────────────────┐  │
+│  │ Renderer Process │  │  Audio Engine     │  │  Language Service      │  │
+│  │                  │  │  Utility Process  │  │  Utility Process       │  │
+│  │  xterm.js REPL   │  │                   │  │                        │  │
+│  │  Canvas overlays │  │  Native playback  │  │  TypeScript compiler   │  │
+│  │  Bounce API / NS │  │  (audio_engine_   │  │  Virtual REPL project  │  │
+│  │  Web Audio       │  │  native)          │  │  Type-aware completion │  │
+│  │  Tab completion  │  │  Instrument mgmt  │  │  (language-service-    │  │
+│  │  Ghost text      │  │  Playback telem.  │  │  process.ts)           │  │
+│  └──────────────────┘  └───────────────────┘  └────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Renderer Process
@@ -35,9 +38,10 @@ Responsibilities:
 - REPL evaluation — parses user input, auto-awaits promises, formats results
 - Canvas-based visualization overlays (waveforms, onset markers, NMF heatmaps)
 - Audio recording via Web Audio MediaRecorder API
-- Namespace objects (`sn`, `vis`, `proj`, `env`, `corpus`, `fs`, `inst`) that translate user commands into IPC calls
+- Namespace objects that translate user commands into IPC calls
+- Tab completion via debounced `completion:request` IPC calls — renders ghost text only (no completion menu)
 
-The renderer never touches the filesystem, database, or native audio engine directly. All such operations go through IPC to the main process.
+The renderer never touches the filesystem, database, or native audio engine directly. All such operations go through IPC to the main process. The renderer is also unaware of the language service — completion flows through main.
 
 ### Main Process
 
@@ -46,13 +50,16 @@ The renderer never touches the filesystem, database, or native audio engine dire
 Responsibilities:
 
 - App lifecycle (window creation, quit handling)
-- IPC router — ~60 channels organized into domain handler modules in `src/electron/ipc/`
+- IPC router — organized into domain handler modules in `src/electron/ipc/`
 - SQLite database management (better-sqlite3) with versioned migrations
 - Settings persistence (JSON file)
 - Audio file decoding (audio-decode)
 - FluCoMa analysis via flucoma_native addon (onset detection, NMF, MFCC, spectral shape)
 - Spawning and managing the audio engine utility process
 - Relaying playback telemetry from utility process to renderer
+- **REPL Intelligence Layer** — receives `CompletionContext` from the language service and dispatches to 6 completer types (identifier, property, file path, sample hash, options, typed value)
+- **LanguageServiceManager** — spawns and supervises the language service utility process; implements crash-loop prevention (3 crashes in 60s → incremental restore → clean-slate → disabled)
+- **Session persistence** — on startup, restores the language service session from command history; on project switch or history clear, resets the session
 
 ### Audio Engine Utility Process
 
@@ -68,6 +75,22 @@ Responsibilities:
 - Sending playback telemetry (position, ended, error) back to main
 
 This process exists so that audio I/O never blocks the main or renderer processes.
+
+### Language Service Utility Process
+
+**Entry point:** `src/utility/language-service-process.ts`
+
+Spawned by the main process via `Electron.utilityProcess.fork()`. Communicates with main over a `MessagePort`. Initializes lazily — the TypeScript language service (`ts.createLanguageService()`) is created on the first `langservice:parse` request; `langservice:ready` is sent once it is ready.
+
+Responsibilities:
+
+- Maintains a virtual TypeScript project representing the current REPL session
+- Parses REPL input buffers and cursor positions to produce a structured `CompletionContext`
+- Resolves variable types for type-aware completion (user-defined variables, return types of Bounce API calls)
+- Appends evaluated commands to the virtual project as they are executed
+- Reports health metrics (memory, parse latency, error count) to main
+
+The language service is intentionally thin — no business logic, no database access. All filtering, visibility decisions, and result assembly happen in the main process intelligence layer.
 
 ## IPC Communication
 
@@ -86,13 +109,18 @@ Domains and their handler modules (`src/electron/ipc/`):
 | `feature-handlers.ts` | Feature storage | `store-feature`, `get-most-recent-feature`, `create-slice-samples` |
 | `sample-handlers.ts` | Sample management | `list-samples`, `get-sample-by-hash`, `store-recording`, `granularize-sample` |
 | `project-handlers.ts` | Projects | `get-current-project`, `list-projects`, `load-project`, `remove-project` |
-| `history-handlers.ts` | History & logging | `save-command`, `get-command-history`, `debug-log` |
+| `history-handlers.ts` | History & logging | `save-command`, `get-command-history`, `clear-command-history`, `debug-log` |
 | `repl-handlers.ts` | REPL persistence | `save-repl-env`, `get-repl-env`, `transpile-typescript` |
 | `filesystem-handlers.ts` | Filesystem | `fs-ls`, `fs-cd`, `fs-pwd`, `fs-glob`, `fs-walk` |
 | `corpus-handlers.ts` | Corpus analysis | `corpus-build`, `corpus-query`, `corpus-resynthesize` |
 | `nmf-handlers.ts` | NMF commands | `analyze-nmf`, `visualize-nmf`, `sep`, `nx` |
+| `mixer-handlers.ts` | Mixer state | `get-mixer-state`, `save-mixer-channel`, `save-mixer-master` |
+| `midi-handlers.ts` | MIDI sequences | `save-midi-sequence`, `get-midi-sequence`, `list-midi-sequences`, `delete-midi-sequence` |
+| `transport-handlers.ts` | Transport control | `transport-set-bpm`, `transport-start`, `transport-stop` |
+| `error-handlers.ts` | Background errors | `get-background-errors`, `dismiss-background-error`, `dismiss-all-background-errors` |
+| `completion-handlers.ts` | Tab completion | `completion:request` |
 
-All handler modules receive a shared `HandlerDeps` interface providing access to `dbManager`, `settingsStore`, `corpusManager`, `getAudioEnginePort()`, and `getMainWindow()`. These deps use lazy getters — handler code must access them inside callbacks, not at registration time.
+All handler modules receive a shared `HandlerDeps` interface providing access to `dbManager`, `settingsStore`, `corpusManager`, `languageServiceManager`, `getAudioEnginePort()`, and `getMainWindow()`. These deps use lazy getters — handler code must access them inside callbacks, not at registration time.
 
 ### Send / On (fire-and-forget, renderer → main)
 
@@ -118,7 +146,7 @@ The main process pushes telemetry events to the renderer via `webContents.send()
 - `overlay-nmf-visualization` — NMF analysis results for visualization
 - `mixer-levels` — per-channel and master peak levels (~60 Hz), used for status bar meters
 
-### MessagePort (main ↔ utility process)
+### MessagePort (main ↔ audio engine utility process)
 
 Defined in `src/shared/audio-engine-protocol.ts`. The main process creates a `MessageChannelMain` and passes one port to the utility process. Messages are typed unions:
 
@@ -127,6 +155,48 @@ Defined in `src/shared/audio-engine-protocol.ts`. The main process creates a `Me
 **Telemetry (utility → main):** `position`, `ended`, `error`, `mixer-levels`
 
 The main process relays telemetry from the utility process to the renderer via `webContents.send()`.
+
+### MessagePort (main ↔ language service utility process)
+
+A separate `MessageChannelMain` connects the main process to the language service utility process. All messages are plain JSON objects. `LanguageServiceManager` (`src/electron/language-service-manager.ts`) owns this port.
+
+**Main → Language Service:**
+
+| Message type | Purpose |
+|---|---|
+| `langservice:parse` | Parse buffer + cursor position → CompletionContext |
+| `langservice:session-append` | Add one evaluated command to the virtual session |
+| `langservice:session-restore` | Bulk-replay command array on startup or after crash |
+| `langservice:session-reset` | Clear virtual session (project switch or history clear) |
+| `langservice:status` | Poll readiness before the service signals ready |
+
+**Language Service → Main:**
+
+| Message type | Purpose |
+|---|---|
+| `langservice:ready` | Service is initialized and ready to accept parse requests |
+| `langservice:parse:response` | CompletionContext result for a previous parse request |
+| `langservice:health` | Periodic health metrics (memory, parse latency, error count) |
+
+**Tab completion flow:**
+
+```
+Renderer  ──completion:request──▶  Main (completion-handlers.ts)
+                                     │
+                                     ├── languageServiceManager.parse(buffer, cursor)
+                                     │      └──langservice:parse──▶ Language Service
+                                     │      └──langservice:parse:response──▶ Main
+                                     │
+                                     └── ReplIntelligence.predict(context)
+                                            ├── IdentifierCompleter
+                                            ├── PropertyCompleter
+                                            ├── FilePathCompleter
+                                            ├── SampleHashCompleter
+                                            ├── OptionsCompleter
+                                            └── TypedValueCompleter
+                                     │
+                                     └──PredictionResult[]──▶ Renderer (ghost text)
+```
 
 ## Data Flows
 
@@ -221,16 +291,19 @@ All data tables are project-scoped (foreign key to `projects.id` with CASCADE de
 | Table | Purpose |
 |---|---|
 | `schema_versions` | Migration tracking |
-| `projects` | Named workspaces |
+| `projects` | Named workspaces. Includes `session_start_timestamp` — Unix ms timestamp marking the start of the current language service session for this project. Updated on `clear-command-history` and `load-project`. |
 | `samples` | Audio PCM data (BLOB) + metadata (hash, sample rate, channels, duration) |
 | `features` | Cached analysis results (JSON). Unique per (project, sample_hash, feature_hash) |
 | `samples_features` | Links derived samples back to source sample + feature |
-| `command_history` | REPL command history for replay |
+| `command_history` | REPL command history for replay. Commands added after `session_start_timestamp` are replayed into the language service on startup. |
 | `repl_env` | Persisted REPL variables and functions (JSON or function source) |
 | `instruments` | Named instrument definitions with config |
 | `instrument_samples` | MIDI note → sample mapping per instrument |
 | `mixer_channels` | Per-project mixer channel state (gain, pan, mute, solo, attached instrument) |
 | `mixer_master` | Per-project master bus state (gain, mute) |
+| `midi_sequences` | Named MIDI sequences (duration, event count) |
+| `midi_events` | Individual MIDI events (type, channel, note, velocity, CC) ordered by timestamp |
+| `background_errors` | Non-fatal errors from main/utility processes for user visibility via `errors()` |
 
 ### Migrations
 
@@ -300,19 +373,24 @@ Dependencies: miniaudio, AudioToolbox/CoreAudio (macOS).
 
 ### Namespaces
 
-The Bounce API is built in `src/renderer/bounce-api.ts` and provides 8 namespaces plus globals, each defined in `src/renderer/namespaces/`:
+The Bounce API is built in `src/renderer/bounce-api.ts` and provides 11 namespaces plus globals, each defined in `src/renderer/namespaces/`:
 
 | REPL name | Module | Purpose |
 |---|---|---|
 | `sn` | `sample-namespace.ts` | Sample loading, listing, audio device access, recording |
 | `vis` | `vis-namespace.ts` | Visualization scene creation and rendering |
 | `proj` | `project-namespace.ts` | Project management |
-| `env` | `env-namespace.ts` | REPL scope inspection and persistence |
+| `env` | `env-namespace.ts` | REPL scope inspection, persistence, dev-mode toggle |
 | `corpus` | `corpus-namespace.ts` | Concatenative synthesis |
 | `fs` | `fs-namespace.ts` | Filesystem navigation |
 | `inst` | `instrument-namespace.ts` | Instrument creation, sample mapping, note events |
 | `mx` | `mixer-namespace.ts` | 8-channel mixer: gain, pan, mute, solo, instrument routing |
-| *(globals)* | `globals.ts` | `help()`, `clear()`, and other top-level utilities |
+| `midi` | `midi-namespace.ts` | MIDI input devices, sequence recording and playback |
+| `transport` | `transport-namespace.ts` | BPM, start/stop, transport clock |
+| `pat` | `pat-namespace.ts` | Pattern sequencing |
+| *(globals)* | `globals.ts` | `help()`, `clear()`, `debug()`, `errors()` top-level utilities |
+
+All namespace classes are decorated with `@namespace` (from `src/shared/repl-registry.ts`) which injects a `help()` method and registers descriptors used by the REPL Intelligence Layer for tab completion and help rendering.
 
 ### Visualization
 
@@ -331,6 +409,94 @@ Custom result objects in `src/renderer/results/` and `src/renderer/bounce-result
 - Thenable wrappers (`SamplePromise`, `OnsetFeaturePromise`, etc.) enable chaining without `await` in the REPL
 - Each result type prints a concise summary emphasizing workflow-relevant properties
 
+## Application State Taxonomy
+
+Bounce maintains several distinct layers of state with different persistence and restore semantics:
+
+### Durable Project State (SQLite, persists across restarts)
+
+| State | Table | Restored on |
+|---|---|---|
+| Audio samples (hash, metadata) | `samples`, `samples_*_metadata` | On demand (hash lookups) |
+| Analysis features | `features`, `samples_features` | On demand |
+| REPL variables and functions | `repl_env` | App startup (`get-repl-env`) |
+| Command history | `command_history` | App startup (`get-command-history`) |
+| Instruments and sample maps | `instruments`, `instrument_samples` | On demand |
+| Mixer channel state | `mixer_channels`, `mixer_master` | App startup (mixer panel) |
+| MIDI sequences | `midi_sequences`, `midi_events` | On demand |
+| Background errors | `background_errors` | On demand (`errors()`) |
+
+### Session State (SQLite + in-memory, bounded lifetime)
+
+The **language service session** is the set of REPL commands executed since the last `session_start_timestamp`. It gives the TypeScript language service enough context to resolve variable types for completion.
+
+- `projects.session_start_timestamp` — Unix ms timestamp stored in SQLite. Commands in `command_history` with `timestamp > session_start_timestamp` form the session source.
+- Reset on: `clear-command-history` IPC, `load-project` IPC (project switch)
+- Restored to language service on: app startup (after `langservice:ready`), after language service crash (via `LanguageServiceManager.restoreSession()`)
+
+### Ephemeral REPL State (in-memory only, lost on restart)
+
+- Active JavaScript scope variables (`ReplEvaluator.scopeVars`)
+- Terminal screen contents and scroll position
+- Command buffer and cursor position
+- Tab completion candidates
+- Visualization overlays (waveform canvases, playhead positions)
+- Active playback handles
+
+### Settings (JSON file, persists across restarts)
+
+`<userData>/settings.json` stores:
+- `cwd` — current working directory for filesystem operations
+- `currentProjectName` — last active project name
+
+## REPL Intelligence Layer
+
+The intelligence layer provides type-aware tab completion by combining two components:
+
+### Decorator Registration System
+
+All REPL-exposed namespaces and porcelain result types are classes decorated with `@namespace` or `@replType` (from `src/shared/repl-registry.ts`). Every public method carries `@describe` and zero or more `@param` decorators:
+
+```ts
+@namespace("sn", { summary: "Sample namespace" })
+class SampleNamespace {
+  @describe({ summary: "Load an audio file.", returns: "SamplePromise" })
+  @param("filePath", { summary: "Path to audio file.", kind: "filePath" })
+  read(filePath: string): SamplePromise { ... }
+}
+```
+
+At build time, `scripts/generate-repl-artifacts.ts` scans all decorated classes and emits:
+- `src/shared/repl-registry.generated.ts` — flat registry of method metadata (summary, visibility, param kinds) imported by the intelligence layer
+- `src/shared/repl-environment.d.ts` — TypeScript ambient declarations for the REPL global scope, imported by the language service virtual project
+
+At runtime, the `@namespace`/`@replType` decorators also register `NamespaceDescriptor` / `TypeDescriptor` objects into an in-memory registry (`src/shared/repl-registration.ts`), used by the help system.
+
+### Completer Dispatch
+
+`ReplIntelligence` (`src/electron/repl-intelligence.ts`) receives a `CompletionContext` from the language service and dispatches to one of six completers:
+
+| Completer | Triggered by | Produces |
+|---|---|---|
+| `IdentifierCompleter` | Identifier position | Namespace names, global names |
+| `PropertyCompleter` | Property access (`.`) | Method names for a known type |
+| `FilePathCompleter` | `@param kind: "filePath"` | Filesystem paths |
+| `SampleHashCompleter` | `@param kind: "sampleHash"` | Sample hash prefixes from DB |
+| `OptionsCompleter` | Object literal key position | Option object keys for a method |
+| `TypedValueCompleter` | `@param kind: "typed"` | Session variables matching expected type |
+
+Visibility is controlled by `devMode` (toggled via `env.dev(true/false)`): plumbing-visibility items are hidden by default and shown only when dev mode is on.
+
+### Porcelain / Plumbing Visibility
+
+Every method has a `visibility` field (default: `"porcelain"`). Plumbing methods are infrastructure-level operations not intended for casual users. Both levels require full `@describe`/`@param` documentation — visibility is a display filter, not a documentation gate.
+
+```
+env.dev()        → shows current mode
+env.dev(true)    → enables dev mode (plumbing visible in help and completions)
+env.dev(false)   → disables dev mode
+```
+
 ## Configuration
 
 ### Settings Store
@@ -343,6 +509,7 @@ JSON file at `<userData>/settings.json`:
 ### Environment Variables
 
 - `BOUNCE_USER_DATA_PATH` — override the default app data directory (useful for test isolation)
+- `BOUNCE_NULL_AUDIO` — set to `1` to use miniaudio's null backend (no hardware audio device required); used in CI/Docker test environments
 
 ### Analysis Options
 
