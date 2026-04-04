@@ -9,7 +9,7 @@
     "build:native": "node-gyp rebuild",
     "build:ts": "tsc",
     "validate:repl": "npx tsx scripts/validate-repl-descriptors.ts",
-    "build:electron": "npm run generate:help && npm run validate:repl && tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
+    "build:electron": "npm run generate:help && npm run generate:repl-artifacts && npm run validate:repl && tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
     "build": "npm run build:deps && npm run build:native && npm run build:ts",
     "rebuild": "npm run build:deps && npx @electron/rebuild --force",
     "dev": "npm run rebuild && npm run start:electron",
@@ -21,7 +21,8 @@
     "test": "tsx src/test.ts && tsx src/command-parser.test.ts && tsx src/tab-completion.test.ts && tsx src/grain-collection.test.ts && tsx src/settings-store.test.ts && tsx src/help.test.ts && tsx src/help-codegen.test.ts && tsx src/porcelain-types.test.ts && tsx src/help-completeness.test.ts && tsx src/test-hygiene.test.ts",
     "test:e2e": "playwright test",
     "test:workflow": "npm ci --ignore-scripts && node node_modules/electron/install.js && npm run rebuild && npm run lint && npm run build && npm test && rm -rf dist && npm run build:electron && npx playwright install --with-deps chromium && npx playwright test",
-    "generate:help": "npx tsx scripts/generate-help.ts"
+    "generate:help": "npx tsx scripts/generate-help.ts",
+    "generate:repl-artifacts": "npx tsx scripts/generate-repl-artifacts.ts"
   },
   "keywords": [
     "flucoma",

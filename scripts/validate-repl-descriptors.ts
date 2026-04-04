@@ -33,14 +33,9 @@ function walk(dir: string): string[] {
 }
 
 function hasDecorator(node: ts.Node, name: string): boolean {
-  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
-  if (!modifiers) return false;
-  return modifiers.some(
-    (m) =>
-      m.kind === ts.SyntaxKind.Decorator &&
-      ts.isDecorator(m) &&
-      getDecoratorName(m) === name,
-  );
+  if (!ts.canHaveDecorators(node)) return false;
+  const decorators = ts.getDecorators(node) ?? [];
+  return decorators.some((d) => getDecoratorName(d) === name);
 }
 
 function getDecoratorName(decorator: ts.Decorator): string | undefined {
@@ -82,8 +77,10 @@ function validateFile(sourceFile: ts.SourceFile, filePath: string): Violation[] 
             const methodName = ts.isIdentifier(member.name)
               ? member.name.text
               : "<computed>";
-            // Skip TypeScript-injected lifecycle methods
+            // Skip lifecycle and decorator-injected methods
             if (methodName === "constructor") continue;
+            if (methodName === "help") continue;
+            if (methodName === "toString") continue;
             if (!hasDecorator(member, "describe")) {
               violations.push({ file: rel, className, methodName });
             }
