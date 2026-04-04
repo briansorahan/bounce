@@ -1,152 +1,137 @@
 import * as assert from "assert";
 import { TabCompletion } from "./renderer/tab-completion.js";
-import type { SampleHashCompletion } from "./shared/ipc-contract.js";
+import type { PredictionResult } from "./shared/completer.js";
 
-type TestWindow = Window & {
-  electron: Window["electron"] & {
-    fsCompletePath: (method: "ls" | "la" | "cd" | "walk" | "read", inputPath: string) => Promise<string[]>;
-    completeSampleHash: (prefix: string) => Promise<SampleHashCompletion[]>;
-  };
-};
-
-function mockFsCompletePath(
-  fn: (method: "ls" | "la" | "cd" | "walk" | "read", inputPath: string) => Promise<string[]>,
+function mockRequestCompletion(
+  fn: (b: string, c: number, id: number) => Promise<PredictionResult[]>,
 ): void {
-  const currentWindow = (globalThis as { window?: { electron?: Partial<TestWindow["electron"]> } }).window;
+  const current = (globalThis as { window?: { electron?: Record<string, unknown> } }).window;
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     writable: true,
     value: {
-      ...(currentWindow ?? {}),
+      ...(current ?? {}),
       electron: {
-        ...(currentWindow?.electron ?? {}),
-        fsCompletePath: fn,
+        ...(current?.electron ?? {}),
+        requestCompletion: fn,
       },
     },
   });
 }
 
-function mockCompleteSampleHash(
-  fn: (prefix: string) => Promise<SampleHashCompletion[]>,
-): void {
-  const currentWindow = (globalThis as { window?: { electron?: Partial<TestWindow["electron"]> } }).window;
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    writable: true,
-    value: {
-      ...(currentWindow ?? {}),
-      electron: {
-        ...(currentWindow?.electron ?? {}),
-        completeSampleHash: fn,
-      },
-    },
-  });
-}
+// ── Tests ──────────────────────────────────────────────────────────────────
 
 async function testIdleOnEmptyBuffer() {
   const c = new TabCompletion();
-  await c.update("", 0);
+  await c.update("", 0, true);
+  assert.strictEqual(c.matchCount, 0);
+}
+
+async function testNoRequestCompletionYieldsNoMatches() {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: { electron: {} },
+  });
+  const c = new TabCompletion();
+  await c.update("sn", 2, true);
   assert.strictEqual(c.matchCount, 0);
 }
 
 async function testSingleMatchNamespace() {
+  mockRequestCompletion(async () => [
+    { label: "sn", kind: "namespace" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update("sn", 2);
+  await c.update("sn", 2, true);
   assert.strictEqual(c.matchCount, 1);
   const action = c.handleTab();
   assert.ok(action && action.kind === "accept");
   if (action?.kind === "accept") {
     assert.strictEqual(action.newBuffer, "sn()");
+    assert.strictEqual(action.newCursorPosition, 3); // inside parens
   }
 }
 
-async function testMultiMatchVisualize() {
+async function testMultiMatch() {
+  mockRequestCompletion(async () => [
+    { label: "clear", kind: "namespace" as const },
+    { label: "corpus", kind: "namespace" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update("c", 1);
+  await c.update("c", 1, true);
   assert.strictEqual(c.matchCount, 2);
 }
 
-async function testSingleMatchProjectNamespace() {
-  const c = new TabCompletion();
-  await c.update("pr", 2);
-  assert.strictEqual(c.matchCount, 1);
-  const action = c.handleTab();
-  assert.ok(action && action.kind === "accept");
-  if (action?.kind === "accept") {
-    assert.strictEqual(action.newBuffer, "proj()");
-  }
-}
-
-async function testSingleMatchEnvNamespace() {
-  const c = new TabCompletion();
-  await c.update("en", 2);
-  assert.strictEqual(c.matchCount, 1);
-  const action = c.handleTab();
-  assert.ok(action && action.kind === "accept");
-  if (action?.kind === "accept") {
-    assert.strictEqual(action.newBuffer, "env()");
-  }
-}
-
 async function testGhostTextSingleMatchContainsSuffix() {
+  mockRequestCompletion(async () => [
+    { label: "sn", kind: "namespace" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update("sn", 2);
+  await c.update("sn", 2, true);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("()"));
   assert.ok(ghost.includes("\x1b[90m"));
 }
 
 async function testGhostTextMultiMatchContainsCandidates() {
+  mockRequestCompletion(async () => [
+    { label: "clear", kind: "namespace" as const },
+    { label: "corpus", kind: "namespace" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update("c", 1);
+  await c.update("c", 1, true);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("clear()"));
   assert.ok(ghost.includes("corpus()"));
 }
 
 async function testResetClearsState() {
+  mockRequestCompletion(async () => [
+    { label: "clear", kind: "namespace" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update("cl", 2);
+  await c.update("cl", 2, true);
   c.ghostText();
   c.reset();
   assert.strictEqual(c.matchCount, 0);
   assert.strictEqual(c.ghostText(), "");
 }
 
-async function testDotCompletionUsesPrototypeMethods() {
-  class SampleNamespaceStub {
-    help() {}
-    read(_path: string) {}
-    load(_hash: string) {}
-    list() {}
-    current() {}
-    stop() {}
-  }
-
+async function testHandleTabCyclesMultiMatch() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+    { label: "reset", kind: "method" as const },
+  ]);
   const c = new TabCompletion();
-  c.setApi({ sn: new SampleNamespaceStub() });
-  await c.update("sn.", 3);
-  assert.strictEqual(c.matchCount, 6);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("read()"));
-  assert.ok(ghost.includes("load()"));
-  assert.ok(ghost.includes("help()"));
-  assert.ok(ghost.includes("stop()"));
+  await c.update("sn.re", 5, true);
+  const action1 = c.handleTab();
+  assert.ok(action1?.kind === "redraw");
+  const action2 = c.handleTab();
+  assert.ok(action2?.kind === "redraw");
 }
 
-async function testDotCompletionPartialPrototypeMethod() {
-  class SampleNamespaceStub {
-    help() {}
-    read(_path: string) {}
-    load(_hash: string) {}
-    list() {}
-    current() {}
-    stop() {}
-  }
-
+async function testHandleEnterAcceptsSelected() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+    { label: "reset", kind: "method" as const },
+  ]);
   const c = new TabCompletion();
-  c.setApi({ sn: new SampleNamespaceStub() });
-  await c.update("sn.re", 5);
+  await c.update("sn.re", 5, true);
+  const action = c.handleEnter();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    // Default selected index is 0 = "read"
+    assert.strictEqual(action.newBuffer, "sn.read()");
+  }
+}
+
+async function testDotCompletionAcceptInsertsSuffix() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sn.", 3, true);
   assert.strictEqual(c.matchCount, 1);
   const action = c.handleTab();
   assert.ok(action && action.kind === "accept");
@@ -155,162 +140,25 @@ async function testDotCompletionPartialPrototypeMethod() {
   }
 }
 
-async function testDotCompletionUsesScopeVariableBindings() {
-  class SampleStub {
-    help() {}
-    play() {}
-    display() {}
-    onsets() {}
-  }
-
+async function testDotCompletionPartialAccept() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+  ]);
   const c = new TabCompletion();
-  c.setBindingsProvider(() => ({
-    contact_mic_on_plate: new SampleStub(),
-  }));
-  await c.update("contact_mic_on_plate.pl", 23);
-  assert.strictEqual(c.matchCount, 1);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("ay()"));
+  await c.update("sn.re", 5, true);
   const action = c.handleTab();
   assert.ok(action && action.kind === "accept");
   if (action?.kind === "accept") {
-    assert.strictEqual(action.newBuffer, "contact_mic_on_plate.play()");
+    assert.strictEqual(action.newBuffer, "sn.read()");
   }
 }
 
-async function testDotCompletionPrefersMergedBindingsOverStaticApiOnly() {
-  class SampleStub {
-    play() {}
-  }
-
+async function testFilePathCompletionNoSuffix() {
+  mockRequestCompletion(async () => [
+    { label: "kick.wav", kind: "filePath" as const },
+  ]);
   const c = new TabCompletion();
-  c.setApi({ sn: { help() {} } });
-  c.setBindingsProvider(() => ({
-    sn: { help() {} },
-    sample_with_underscore: new SampleStub(),
-  }));
-  await c.update("sample_with_underscore.", 23);
-  assert.strictEqual(c.matchCount, 1);
-  assert.ok(c.ghostText().includes("play()"));
-}
-
-async function testFsCompletionStillScoped() {
-  const c = new TabCompletion();
-  c.setApi({
-    fs: {
-      FileType: { File: "file" },
-      help: () => {},
-      ls: () => {},
-      la: () => {},
-      cd: () => {},
-      pwd: () => {},
-      glob: () => {},
-      walk: () => {},
-    },
-  });
-  await c.update("fs.", 3);
-  assert.strictEqual(c.matchCount, 7);
-}
-
-async function testProjectDotCompletion() {
-  class ProjectNamespaceStub {
-    help() {}
-    current() {}
-    list() {}
-    load(_name: string) {}
-    rm(_name: string) {}
-  }
-
-  const c = new TabCompletion();
-  c.setApi({ proj: new ProjectNamespaceStub() });
-  await c.update("proj.", 5);
-  assert.strictEqual(c.matchCount, 5);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("current()"));
-  assert.ok(ghost.includes("load()"));
-}
-
-async function testEnvDotCompletion() {
-  const c = new TabCompletion();
-  c.setApi({
-    env: {
-      help() {},
-      vars() {},
-      globals() {},
-      inspect(_value: unknown) {},
-      functions(_value: unknown) {},
-    },
-  });
-  await c.update("env.", 4);
-  assert.strictEqual(c.matchCount, 5);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("vars()"));
-  assert.ok(ghost.includes("inspect()"));
-}
-
-async function testPathCompletionScopesToFsString() {
-  mockFsCompletePath(async (method, inputPath) => {
-    assert.strictEqual(method, "ls");
-    assert.strictEqual(inputPath, "Insyn");
-    return ["Insync/"];
-  });
-
-  const c = new TabCompletion();
-  await c.update('fs.ls("Insyn', 12);
-  assert.strictEqual(c.matchCount, 1);
-}
-
-async function testClearDebugHiddenFromGlobalCompletion() {
-  const c = new TabCompletion();
-  await c.update("clearD", 6);
-  assert.strictEqual(c.matchCount, 0);
-}
-
-async function testHelpFactoryHiddenFromMethodCompletion() {
-  class StubWithHelpFactory {
-    help() {}
-    read() {}
-    private readonly helpFactory = () => {};
-  }
-
-  const c = new TabCompletion();
-  c.setApi({ sn: new StubWithHelpFactory() });
-  await c.update("sn.", 3);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("help()"));
-  assert.ok(ghost.includes("read()"));
-  assert.ok(!ghost.includes("helpFactory"));
-  assert.strictEqual(c.matchCount, 2);
-}
-
-async function testToStringHiddenFromMethodCompletion() {
-  class StubWithToString {
-    help() {}
-    play() {}
-    toString(): string {
-      return "stub";
-    }
-  }
-
-  const c = new TabCompletion();
-  c.setApi({ sn: new StubWithToString() });
-  await c.update("sn.", 3);
-  const ghost = c.ghostText();
-  assert.ok(ghost.includes("help()"));
-  assert.ok(ghost.includes("play()"));
-  assert.ok(!ghost.includes("toString"));
-  assert.strictEqual(c.matchCount, 2);
-}
-
-async function testSnReadPathCompletion() {
-  mockFsCompletePath(async (method, inputPath) => {
-    assert.strictEqual(method, "read");
-    assert.strictEqual(inputPath, "kick");
-    return ["kick.wav"];
-  });
-
-  const c = new TabCompletion();
-  await c.update('sn.read("kick', 13);
+  await c.update('sn.read("kick', 13, true);
   assert.strictEqual(c.matchCount, 1);
   const action = c.handleTab();
   assert.ok(action && action.kind === "accept");
@@ -319,46 +167,38 @@ async function testSnReadPathCompletion() {
   }
 }
 
-async function testSnReadNestedPathCompletion() {
-  mockFsCompletePath(async (method, inputPath) => {
-    assert.strictEqual(method, "read");
-    assert.strictEqual(inputPath, "loop");
-    return ["loop.wav", "loop.flac"];
-  });
-
+async function testFilePathNestedCompletionMultiMatch() {
+  mockRequestCompletion(async () => [
+    { label: "loop.wav", kind: "filePath" as const },
+    { label: "loop.flac", kind: "filePath" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update('vis.waveform(sn.read("loop', 26);
+  await c.update('vis.waveform(sn.read("loop', 26, true);
   assert.strictEqual(c.matchCount, 2);
   const ghost = c.ghostText();
   assert.ok(ghost.includes("loop.wav"));
   assert.ok(ghost.includes("loop.flac"));
 }
 
-async function testSnLoadHashCompletion() {
-  mockCompleteSampleHash(async (prefix) => {
-    assert.strictEqual(prefix, "a1b2");
-    return [
-      { hash: "a1b2c3d4", filePath: "/path/to/kick.wav" },
-      { hash: "a1b2e5f6", filePath: "/path/to/snare.wav" },
-    ];
-  });
-
+async function testSampleHashCompletionDetail() {
+  mockRequestCompletion(async () => [
+    { label: "a1b2c3d4", kind: "sampleHash" as const, detail: "kick.wav" },
+    { label: "a1b2e5f6", kind: "sampleHash" as const, detail: "snare.wav" },
+  ]);
   const c = new TabCompletion();
-  await c.update('sn.load("a1b2', 13);
+  await c.update('sn.load("a1b2', 13, true);
   assert.strictEqual(c.matchCount, 2);
   const ghost = c.ghostText();
-  assert.ok(ghost.includes("a1b2c3d4 kick.wav"));
-  assert.ok(ghost.includes("a1b2e5f6 snare.wav"));
+  assert.ok(ghost.includes("a1b2c3d4"));
+  assert.ok(ghost.includes("kick.wav"));
 }
 
-async function testSnLoadHashAcceptInsertsOnlyHash() {
-  mockCompleteSampleHash(async () => {
-    return [{ hash: "a1b2c3d4", filePath: "/path/to/kick.wav" }];
-  });
-
+async function testSampleHashAcceptInsertsHash() {
+  mockRequestCompletion(async () => [
+    { label: "a1b2c3d4", kind: "sampleHash" as const, detail: "kick.wav" },
+  ]);
   const c = new TabCompletion();
-  await c.update('sn.load("a1b2', 13);
-  assert.strictEqual(c.matchCount, 1);
+  await c.update('sn.load("a1b2', 13, true);
   const action = c.handleTab();
   assert.ok(action && action.kind === "accept");
   if (action?.kind === "accept") {
@@ -366,43 +206,134 @@ async function testSnLoadHashAcceptInsertsOnlyHash() {
   }
 }
 
-async function testSnLoadHashNoFilePath() {
-  mockCompleteSampleHash(async () => {
-    return [{ hash: "deadbeef", filePath: null }];
-  });
-
+async function testVariableKindNoSuffix() {
+  mockRequestCompletion(async () => [
+    { label: "myVar", kind: "variable" as const },
+  ]);
   const c = new TabCompletion();
-  await c.update('sn.load("dead', 13);
-  assert.strictEqual(c.matchCount, 1);
-  const ghost = c.ghostText();
-  assert.ok(!ghost.includes(" "), "ghost text should not have trailing label for null filePath");
+  await c.update("myV", 3, true);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "myVar");
+  }
 }
+
+async function testInsertTextOverridesLabel() {
+  mockRequestCompletion(async () => [
+    { label: "sampleNamespace", insertText: "sn", kind: "namespace" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sa", 2, true);
+  const action = c.handleTab();
+  assert.ok(action && action.kind === "accept");
+  if (action?.kind === "accept") {
+    assert.strictEqual(action.newBuffer, "sn()");
+  }
+}
+
+async function testHandleTabNullWhenNoMatches() {
+  mockRequestCompletion(async () => []);
+  const c = new TabCompletion();
+  await c.update("zzz", 3, true);
+  assert.strictEqual(c.handleTab(), null);
+}
+
+async function testHandleUpNullWhenSingleMatch() {
+  mockRequestCompletion(async () => [
+    { label: "sn", kind: "namespace" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sn", 2, true);
+  assert.strictEqual(c.handleUp(), null);
+}
+
+async function testHandleUpCyclesMultiMatch() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+    { label: "reset", kind: "method" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sn.re", 5, true);
+  const action = c.handleUp();
+  assert.ok(action?.kind === "redraw");
+}
+
+async function testHandleDownCyclesMultiMatch() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+    { label: "reset", kind: "method" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sn.re", 5, true);
+  const action = c.handleDown();
+  assert.ok(action?.kind === "redraw");
+}
+
+async function testSetApiIsNoOp() {
+  const c = new TabCompletion();
+  assert.doesNotThrow(() => c.setApi({ sn: {} }));
+}
+
+async function testSetBindingsProviderIsNoOp() {
+  const c = new TabCompletion();
+  assert.doesNotThrow(() => c.setBindingsProvider(() => ({})));
+}
+
+async function testOnMatchesChangedCallbackFires() {
+  mockRequestCompletion(async () => [
+    { label: "sn", kind: "namespace" as const },
+  ]);
+  const c = new TabCompletion();
+  let called = false;
+  c.setOnMatchesChanged(() => {
+    called = true;
+  });
+  await c.update("sn", 2, true);
+  assert.ok(called, "onMatchesChanged callback should have been called");
+}
+
+async function testEraseGhostTextClearsLines() {
+  mockRequestCompletion(async () => [
+    { label: "read", kind: "method" as const },
+    { label: "reset", kind: "method" as const },
+  ]);
+  const c = new TabCompletion();
+  await c.update("sn.re", 5, true);
+  c.ghostText(); // renders multi-match, sets ghostLines = 2
+  const erased = c.eraseGhostText();
+  // Should contain 2 line-clear sequences
+  assert.ok(erased.includes("\x1b[2K"));
+}
+
+// ── Runner ─────────────────────────────────────────────────────────────────
 
 const tests: Array<[string, () => Promise<void>]> = [
   ["idle on empty buffer", testIdleOnEmptyBuffer],
+  ["no requestCompletion yields no matches", testNoRequestCompletionYieldsNoMatches],
   ["single match namespace", testSingleMatchNamespace],
-  ["multi match visualize", testMultiMatchVisualize],
-  ["single match project namespace", testSingleMatchProjectNamespace],
-  ["single match env namespace", testSingleMatchEnvNamespace],
+  ["multi match", testMultiMatch],
   ["ghostText single match contains suffix", testGhostTextSingleMatchContainsSuffix],
   ["ghostText multi match contains candidates", testGhostTextMultiMatchContainsCandidates],
   ["reset clears state", testResetClearsState],
-  ["dot completion uses prototype methods", testDotCompletionUsesPrototypeMethods],
-  ["dot completion partial prototype method", testDotCompletionPartialPrototypeMethod],
-  ["dot completion uses scope variable bindings", testDotCompletionUsesScopeVariableBindings],
-  ["dot completion uses merged bindings", testDotCompletionPrefersMergedBindingsOverStaticApiOnly],
-  ["fs completion still scoped", testFsCompletionStillScoped],
-  ["project dot completion", testProjectDotCompletion],
-  ["env dot completion", testEnvDotCompletion],
-  ["path completion scopes to fs string", testPathCompletionScopesToFsString],
-  ["sn.read triggers path completion", testSnReadPathCompletion],
-  ["sn.read nested in vis.waveform triggers path completion", testSnReadNestedPathCompletion],
-  ["sn.load triggers hash completion", testSnLoadHashCompletion],
-  ["sn.load accept inserts only hash", testSnLoadHashAcceptInsertsOnlyHash],
-  ["sn.load hash completion with null filePath", testSnLoadHashNoFilePath],
-  ["clearDebug hidden from global completion", testClearDebugHiddenFromGlobalCompletion],
-  ["helpFactory hidden from method completion", testHelpFactoryHiddenFromMethodCompletion],
-  ["toString hidden from method completion", testToStringHiddenFromMethodCompletion],
+  ["handleTab cycles multi match", testHandleTabCyclesMultiMatch],
+  ["handleEnter accepts selected", testHandleEnterAcceptsSelected],
+  ["dot completion accept inserts suffix", testDotCompletionAcceptInsertsSuffix],
+  ["dot completion partial accept", testDotCompletionPartialAccept],
+  ["file path completion no suffix", testFilePathCompletionNoSuffix],
+  ["file path nested completion multi match", testFilePathNestedCompletionMultiMatch],
+  ["sample hash completion detail", testSampleHashCompletionDetail],
+  ["sample hash accept inserts hash", testSampleHashAcceptInsertsHash],
+  ["variable kind no suffix", testVariableKindNoSuffix],
+  ["insertText overrides label", testInsertTextOverridesLabel],
+  ["handleTab null when no matches", testHandleTabNullWhenNoMatches],
+  ["handleUp null when single match", testHandleUpNullWhenSingleMatch],
+  ["handleUp cycles multi match", testHandleUpCyclesMultiMatch],
+  ["handleDown cycles multi match", testHandleDownCyclesMultiMatch],
+  ["setApi is no-op", testSetApiIsNoOp],
+  ["setBindingsProvider is no-op", testSetBindingsProviderIsNoOp],
+  ["onMatchesChanged callback fires", testOnMatchesChangedCallbackFires],
+  ["eraseGhostText clears lines", testEraseGhostTextClearsLines],
 ];
 
 async function main() {
