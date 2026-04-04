@@ -2,6 +2,7 @@ import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
 import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 const audioDeviceMethodHelps = porcelainTypeHelps.find(t => t.name === "AudioDevice")?.methods ?? [];
 const recordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "RecordingHandle")?.methods ?? [];
@@ -27,6 +28,7 @@ export interface AudioDeviceBindings {
 /**
  * REPL object returned by sn.dev(index). Represents an audio input device.
  */
+@replType("AudioDevice", { summary: "An audio input device for recording" })
 export class AudioDeviceResult extends BounceResult {
   constructor(
     public readonly index: number,
@@ -48,6 +50,9 @@ export class AudioDeviceResult extends BounceResult {
     attachMethodHelp(this, "AudioDevice", audioDeviceMethodHelps);
   }
 
+  @describe({ summary: "Start recording. Returns a RecordingHandle (manual stop) or SamplePromise (when opts.duration is set).", returns: "RecordingHandle | SamplePromise" })
+  @param("sampleId", { summary: "Name for the new sample.", kind: "plain" })
+  @param("opts", { summary: "Recording options: { duration?, overwrite? }.", kind: "plain" })
   record(sampleId: string, opts?: RecordOptions): Promise<RecordingHandleResult> | SamplePromise {
     return this.bindings.record(sampleId, opts);
   }
@@ -80,6 +85,7 @@ export class AudioDeviceResult extends BounceResult {
  * and get back a SamplePromise.
  * Not PromiseLike — assignment stores the handle without blocking.
  */
+@replType("RecordingHandle", { summary: "A handle to an active audio recording session" })
 export class RecordingHandleResult extends BounceResult {
   constructor(
     private readonly deviceLabel: string,
@@ -96,6 +102,7 @@ export class RecordingHandleResult extends BounceResult {
     attachMethodHelp(this, "RecordingHandle", recordingHandleMethodHelps);
   }
 
+  @describe({ summary: "Stop recording and return a SamplePromise resolving to SampleResult.", returns: "SamplePromise" })
   stop(): SamplePromise {
     this.stopFn();
     return new SamplePromise(this.promise);

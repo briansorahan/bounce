@@ -1,6 +1,7 @@
 import type { GrainCollection } from "../grain-collection.js";
 import { attachMethodHelp } from "../help.js";
 import { BounceResult, HelpableResult, defaultHelp, type HelpFactory } from "./base.js";
+import { replType, describe, param } from "../../shared/repl-registry.js";
 import {
   SliceFeaturePromise,
   NmfFeaturePromise,
@@ -90,6 +91,7 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
 /**
  * User-facing sample object in the REPL.
  */
+@replType("Sample", { summary: "A loaded audio sample with analysis and playback methods" })
 export class SampleResult extends HelpableResult {
   readonly loop: ((opts?: LoopOptions) => SamplePromise) & { help: () => BounceResult };
 
@@ -111,54 +113,78 @@ export class SampleResult extends HelpableResult {
     attachMethodHelp(this, "Sample", sampleMethodHelps);
   }
 
+  @describe({ summary: "Play this sample from start to finish.", returns: "SamplePromise" })
   play(): SamplePromise {
     return new SamplePromise(this.bindings.play());
   }
 
+  @describe({ summary: "Stop playback.", returns: "BounceResult" })
   stop(): BounceResult {
     return this.bindings.stop();
   }
 
+  @describe({ summary: "Display the waveform in the visualization panel.", returns: "SamplePromise" })
   display(): SamplePromise {
     return new SamplePromise(this.bindings.display());
   }
 
+  @describe({ summary: "Onset-slice the sample and store segment boundaries.", returns: "BounceResult" })
+  @param("options", { summary: "Slice analysis options.", kind: "options" })
   slice(options?: SliceOptions): Promise<BounceResult> {
     return this.bindings.slice(options);
   }
 
+  @describe({ summary: "Separate the sample into NMF components via BufNMF.", returns: "BounceResult" })
+  @param("options", { summary: "NMF separation options.", kind: "options" })
   sep(options?: SepOptions): Promise<BounceResult> {
     return this.bindings.sep(options);
   }
 
+  @describe({ summary: "Create a GrainCollection for granular synthesis.", returns: "GrainCollectionPromise" })
+  @param("options", { summary: "Granularize options.", kind: "options" })
   granularize(options?: GranularizeOptions): GrainCollectionPromise {
     return new GrainCollectionPromise(this.bindings.granularize(options));
   }
 
+  @describe({ summary: "Analyse onset positions using FluidOnsetSlice.", returns: "SliceFeaturePromise" })
+  @param("options", { summary: "Onset analysis options.", kind: "options" })
   onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
     return new SliceFeaturePromise(this.bindings.onsetSlice(options));
   }
 
+  @describe({ summary: "Analyse amplitude-based segment boundaries.", returns: "SliceFeaturePromise" })
+  @param("options", { summary: "Amplitude slice options.", kind: "options" })
   ampSlice(options?: AmpSliceOptions): SliceFeaturePromise {
     return new SliceFeaturePromise(this.bindings.ampSlice(options));
   }
 
+  @describe({ summary: "Analyse novelty-based segment boundaries.", returns: "SliceFeaturePromise" })
+  @param("options", { summary: "Novelty slice options.", kind: "options" })
   noveltySlice(options?: NoveltySliceOptions): SliceFeaturePromise {
     return new SliceFeaturePromise(this.bindings.noveltySlice(options));
   }
 
+  @describe({ summary: "Analyse transient-based segment boundaries.", returns: "SliceFeaturePromise" })
+  @param("options", { summary: "Transient slice options.", kind: "options" })
   transientSlice(options?: TransientSliceOptions): SliceFeaturePromise {
     return new SliceFeaturePromise(this.bindings.transientSlice(options));
   }
 
+  @describe({ summary: "Run BufNMF on the sample and return component matrices.", returns: "NmfFeaturePromise" })
+  @param("options", { summary: "NMF options.", kind: "options" })
   nmf(options?: NmfOptions): NmfFeaturePromise {
     return new NmfFeaturePromise(this.bindings.nmf(options));
   }
 
+  @describe({ summary: "Compute MFCC coefficients for the sample.", returns: "MfccFeaturePromise" })
+  @param("options", { summary: "MFCC options.", kind: "options" })
   mfcc(options?: MFCCOptions): MfccFeaturePromise {
     return new MfccFeaturePromise(this.bindings.mfcc(options));
   }
 
+  @describe({ summary: "Run NMF cross-synthesis with another sample as a target.", returns: "NxFeaturePromise" })
+  @param("other", { summary: "Target SampleResult for cross-synthesis.", kind: "typed", expectedType: "SampleResult" })
+  @param("options", { summary: "Cross-synthesis options: { components? }.", kind: "options" })
   nx(other: SampleResult | PromiseLike<SampleResult>, options?: { components?: number }): NxFeaturePromise {
     return new NxFeaturePromise(this.bindings.nx(other, options));
   }

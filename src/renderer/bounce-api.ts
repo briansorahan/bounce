@@ -15,7 +15,6 @@ import {
   VisStackResult,
   VisSceneListResult,
   SampleListResult,
-  ProjectNamespace,
   ProjectResult,
   ProjectListResult,
   EnvScopeResult,

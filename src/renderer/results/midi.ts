@@ -2,6 +2,7 @@ import { attachMethodHelp } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { MidiInputDevice as MidiInputDeviceRecord } from "../../shared/ipc-contract.js";
 import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 const midiSequenceMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiSequence")?.methods ?? [];
 const midiRecordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiRecordingHandle")?.methods ?? [];
@@ -84,6 +85,7 @@ export class MidiDeviceResult extends BounceResult {
 // ---------------------------------------------------------------------------
 // MidiSequenceResult — returned by h.stop() or midi.load()
 // ---------------------------------------------------------------------------
+@replType("MidiSequence", { summary: "A MIDI sequence (recorded or imported)" })
 export class MidiSequenceResult extends BounceResult {
   constructor(
     public readonly id: number,
@@ -106,12 +108,15 @@ export class MidiSequenceResult extends BounceResult {
     attachMethodHelp(this, "MidiSequence", midiSequenceMethodHelps);
   }
 
+  @describe({ summary: "Play this sequence through an instrument. Returns a MidiSequencePromise.", returns: "MidiSequencePromise" })
+  @param("inst", { summary: "Target instrument to play through.", kind: "typed", expectedType: "InstrumentResult" })
   play(inst: MidiTargetInstrument): MidiSequencePromise {
     return new MidiSequencePromise(
       window.electron.midiStartPlayback(this.id, inst.instrumentId).then(() => this),
     );
   }
 
+  @describe({ summary: "Stop MIDI playback.", returns: "BounceResult" })
   stop(): Promise<BounceResult> {
     return window.electron.midiStopPlayback().then(
       () => new BounceResult("\x1b[90mPlayback stopped.\x1b[0m"),
@@ -175,6 +180,7 @@ export class MidiSequencePromise implements PromiseLike<MidiSequenceResult> {
 // MidiRecordingHandleResult — returned by midi.record(inst) without a duration.
 // Not PromiseLike — stores without blocking the REPL.
 // ---------------------------------------------------------------------------
+@replType("MidiRecordingHandle", { summary: "A handle to an active MIDI recording session" })
 export class MidiRecordingHandleResult extends BounceResult {
   constructor(
     private readonly instrumentName: string,
@@ -190,6 +196,7 @@ export class MidiRecordingHandleResult extends BounceResult {
     attachMethodHelp(this, "MidiRecordingHandle", midiRecordingHandleMethodHelps);
   }
 
+  @describe({ summary: "Stop recording and return a MidiSequencePromise.", returns: "MidiSequencePromise" })
   stop(): MidiSequencePromise {
     return new MidiSequencePromise(this.stopFn());
   }

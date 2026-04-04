@@ -16,6 +16,411 @@ export interface ReplRegistryEntry {
 }
 
 export const replRegistry: Record<string, ReplRegistryEntry> = {
+  "SliceFeature.slice": {
+    summary: "Re-run the onset slicer with updated options.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "options",
+            "summary": "Slice analysis options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "SliceFeature.playSlice": {
+    summary: "Preview a specific slice by index.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [
+        {
+            "name": "index",
+            "summary": "Slice index (0-based).",
+            "kind": "plain"
+        }
+    ],
+  },
+  "SliceFeature.toSampler": {
+    summary: "Create a sampler instrument from the slices.",
+    visibility: "porcelain",
+    returns: "InstrumentResult",
+    params: [
+        {
+            "name": "opts",
+            "summary": "Sampler options: { name, startNote?, polyphony? }.",
+            "kind": "options"
+        }
+    ],
+  },
+  "NmfFeature.sep": {
+    summary: "Separate the NMF components into audio files.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "options",
+            "summary": "Separation options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "NmfFeature.playComponent": {
+    summary: "Preview a specific NMF component by index.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [
+        {
+            "name": "index",
+            "summary": "Component index (0-based).",
+            "kind": "plain"
+        }
+    ],
+  },
+  "NxFeature.playComponent": {
+    summary: "Preview a specific NX cross-synthesis component by index.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [
+        {
+            "name": "index",
+            "summary": "Component index (0-based).",
+            "kind": "plain"
+        }
+    ],
+  },
+  "AudioDevice.record": {
+    summary: "Start recording. Returns a RecordingHandle (manual stop) or SamplePromise (when opts.duration is set).",
+    visibility: "porcelain",
+    returns: "RecordingHandle | SamplePromise",
+    params: [
+        {
+            "name": "opts",
+            "summary": "Recording options: { duration?, overwrite? }.",
+            "kind": "plain"
+        },
+        {
+            "name": "sampleId",
+            "summary": "Name for the new sample.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "RecordingHandle.stop": {
+    summary: "Stop recording and return a SamplePromise resolving to SampleResult.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [],
+  },
+  "Sample.play": {
+    summary: "Play this sample from start to finish.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [],
+  },
+  "Sample.stop": {
+    summary: "Stop playback.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [],
+  },
+  "Sample.display": {
+    summary: "Display the waveform in the visualization panel.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [],
+  },
+  "Sample.slice": {
+    summary: "Onset-slice the sample and store segment boundaries.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "options",
+            "summary": "Slice analysis options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.sep": {
+    summary: "Separate the sample into NMF components via BufNMF.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "options",
+            "summary": "NMF separation options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.granularize": {
+    summary: "Create a GrainCollection for granular synthesis.",
+    visibility: "porcelain",
+    returns: "GrainCollectionPromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Granularize options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.onsetSlice": {
+    summary: "Analyse onset positions using FluidOnsetSlice.",
+    visibility: "porcelain",
+    returns: "SliceFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Onset analysis options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.ampSlice": {
+    summary: "Analyse amplitude-based segment boundaries.",
+    visibility: "porcelain",
+    returns: "SliceFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Amplitude slice options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.noveltySlice": {
+    summary: "Analyse novelty-based segment boundaries.",
+    visibility: "porcelain",
+    returns: "SliceFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Novelty slice options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.transientSlice": {
+    summary: "Analyse transient-based segment boundaries.",
+    visibility: "porcelain",
+    returns: "SliceFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Transient slice options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.nmf": {
+    summary: "Run BufNMF on the sample and return component matrices.",
+    visibility: "porcelain",
+    returns: "NmfFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "NMF options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.mfcc": {
+    summary: "Compute MFCC coefficients for the sample.",
+    visibility: "porcelain",
+    returns: "MfccFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "MFCC options.",
+            "kind": "options"
+        }
+    ],
+  },
+  "Sample.nx": {
+    summary: "Run NMF cross-synthesis with another sample as a target.",
+    visibility: "porcelain",
+    returns: "NxFeaturePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Cross-synthesis options: { components? }.",
+            "kind": "options"
+        },
+        {
+            "name": "other",
+            "summary": "Target SampleResult for cross-synthesis.",
+            "kind": "typed",
+            "expectedType": "SampleResult"
+        }
+    ],
+  },
+  "MidiSequence.play": {
+    summary: "Play this sequence through an instrument. Returns a MidiSequencePromise.",
+    visibility: "porcelain",
+    returns: "MidiSequencePromise",
+    params: [
+        {
+            "name": "inst",
+            "summary": "Target instrument to play through.",
+            "kind": "typed",
+            "expectedType": "InstrumentResult"
+        }
+    ],
+  },
+  "MidiSequence.stop": {
+    summary: "Stop MIDI playback.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [],
+  },
+  "MidiRecordingHandle.stop": {
+    summary: "Stop recording and return a MidiSequencePromise.",
+    visibility: "porcelain",
+    returns: "MidiSequencePromise",
+    params: [],
+  },
+  "Pattern.play": {
+    summary: "Start playing on mixer channel N (1–8).",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "channel",
+            "summary": "Mixer channel 1–8.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "Pattern.stop": {
+    summary: "Stop the pattern on its mixer channel.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [],
+  },
+  "VisScene.title": {
+    summary: "Set the title text for this scene.",
+    visibility: "porcelain",
+    returns: "VisScene",
+    params: [
+        {
+            "name": "text",
+            "summary": "Title string to display.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "VisScene.overlay": {
+    summary: "Add a feature overlay (slice, NMF, or NX) to this scene.",
+    visibility: "porcelain",
+    returns: "VisScene",
+    params: [
+        {
+            "name": "feature",
+            "summary": "SliceFeature, NmfFeature, or NxFeature to overlay.",
+            "kind": "typed",
+            "expectedType": "SliceFeatureResult | NmfFeatureResult | NxFeatureResult"
+        }
+    ],
+  },
+  "VisScene.panel": {
+    summary: "Add an NMF feature as a separate panel below the main scene.",
+    visibility: "porcelain",
+    returns: "VisScene",
+    params: [
+        {
+            "name": "feature",
+            "summary": "NmfFeature to display as a panel.",
+            "kind": "typed",
+            "expectedType": "NmfFeatureResult"
+        }
+    ],
+  },
+  "VisScene.show": {
+    summary: "Render this scene in the terminal visualization panel.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [],
+  },
+  "VisScene.markShown": {
+    summary: "Record the scene ID after it has been rendered.",
+    visibility: "plumbing",
+    params: [
+        {
+            "name": "id",
+            "summary": "Rendered scene identifier.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "VisStack.waveform": {
+    summary: "Add a waveform scene for a sample. Replaced at runtime by vis.stack().",
+    visibility: "plumbing",
+    params: [
+        {
+            "name": "sample",
+            "summary": "SampleResult to visualize.",
+            "kind": "typed",
+            "expectedType": "SampleResult"
+        }
+    ],
+  },
+  "VisStack.addScene": {
+    summary: "Append a pre-built VisScene to this stack.",
+    visibility: "plumbing",
+    params: [
+        {
+            "name": "scene",
+            "summary": "VisSceneResult to add.",
+            "kind": "typed",
+            "expectedType": "VisSceneResult"
+        }
+    ],
+  },
+  "VisStack.title": {
+    summary: "Set the title of the most recently added scene.",
+    visibility: "porcelain",
+    returns: "VisStack",
+    params: [
+        {
+            "name": "text",
+            "summary": "Title string to display.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "VisStack.overlay": {
+    summary: "Add a feature overlay to the most recently added scene.",
+    visibility: "porcelain",
+    returns: "VisStack",
+    params: [
+        {
+            "name": "feature",
+            "summary": "SliceFeature, NmfFeature, or NxFeature to overlay.",
+            "kind": "typed",
+            "expectedType": "SliceFeatureResult | NmfFeatureResult | NxFeatureResult"
+        }
+    ],
+  },
+  "VisStack.panel": {
+    summary: "Add an NMF feature panel to the most recently added scene.",
+    visibility: "porcelain",
+    returns: "VisStack",
+    params: [
+        {
+            "name": "feature",
+            "summary": "NmfFeature to display as a panel.",
+            "kind": "typed",
+            "expectedType": "NmfFeatureResult"
+        }
+    ],
+  },
+  "VisStack.show": {
+    summary: "Render all scenes in this stack in the visualization panel.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [],
+  },
   "transport.bpm": {
     summary: "Get or set BPM (1–400). Omit argument to read current BPM.",
     visibility: "porcelain",

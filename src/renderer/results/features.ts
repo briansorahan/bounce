@@ -3,6 +3,7 @@ import { BounceResult, FeatureResult, type HelpFactory } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
 import { InstrumentResult } from "./instrument.js";
 import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 const sliceMethodHelps = porcelainTypeHelps.find(t => t.name === "SliceFeature")?.methods ?? [];
 const nmfMethodHelps = porcelainTypeHelps.find(t => t.name === "NmfFeature")?.methods ?? [];
@@ -37,6 +38,7 @@ export interface MfccFeatureBindings {
   help: HelpFactory;
 }
 
+@replType("SliceFeature", { summary: "Onset-sliced audio feature result" })
 export class SliceFeatureResult extends FeatureResult {
   constructor(
     display: string,
@@ -54,19 +56,26 @@ export class SliceFeatureResult extends FeatureResult {
     return this.slices.length;
   }
 
+  @describe({ summary: "Re-run the onset slicer with updated options.", returns: "BounceResult" })
+  @param("options", { summary: "Slice analysis options.", kind: "options" })
   slice(options?: SliceOptions): Promise<BounceResult> {
     return this.bindings.slice(options);
   }
 
+  @describe({ summary: "Preview a specific slice by index.", returns: "SamplePromise" })
+  @param("index", { summary: "Slice index (0-based).", kind: "plain" })
   playSlice(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playSlice(index));
   }
 
+  @describe({ summary: "Create a sampler instrument from the slices.", returns: "InstrumentResult" })
+  @param("opts", { summary: "Sampler options: { name, startNote?, polyphony? }.", kind: "options" })
   toSampler(opts: ToSamplerOptions): Promise<InstrumentResult> {
     return this.bindings.toSampler(opts);
   }
 }
 
+@replType("NmfFeature", { summary: "NMF (Non-negative Matrix Factorization) feature result" })
 export class NmfFeatureResult extends FeatureResult {
   constructor(
     display: string,
@@ -84,15 +93,20 @@ export class NmfFeatureResult extends FeatureResult {
     attachMethodHelp(this, "NmfFeature", nmfMethodHelps);
   }
 
+  @describe({ summary: "Separate the NMF components into audio files.", returns: "BounceResult" })
+  @param("options", { summary: "Separation options.", kind: "options" })
   sep(options?: SepOptions): Promise<BounceResult> {
     return this.bindings.sep(options);
   }
 
+  @describe({ summary: "Preview a specific NMF component by index.", returns: "SamplePromise" })
+  @param("index", { summary: "Component index (0-based).", kind: "plain" })
   playComponent(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playComponent(index));
   }
 }
 
+@replType("NxFeature", { summary: "NMF cross-synthesis feature result" })
 export class NxFeatureResult extends FeatureResult {
   constructor(
     display: string,
@@ -110,11 +124,14 @@ export class NxFeatureResult extends FeatureResult {
     attachMethodHelp(this, "NxFeature", nxMethodHelps);
   }
 
+  @describe({ summary: "Preview a specific NX cross-synthesis component by index.", returns: "SamplePromise" })
+  @param("index", { summary: "Component index (0-based).", kind: "plain" })
   playComponent(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playComponent(index));
   }
 }
 
+@replType("MfccFeature", { summary: "MFCC (Mel-frequency cepstral coefficients) feature result" })
 export class MfccFeatureResult extends FeatureResult {
   constructor(
     display: string,
