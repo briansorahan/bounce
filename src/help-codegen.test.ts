@@ -28,8 +28,10 @@ const OPTS_DOCS_PATH = join(process.cwd(), "src/renderer/opts-docs.ts");
 const PORCELAIN_SRC_PATH = join(process.cwd(), "src/renderer/results/porcelain.ts");
 const PORCELAIN_GEN_PATH = join(process.cwd(), "src/renderer/results/porcelain-types.generated.ts");
 
-// Files that live in the namespaces directory but are not namespace builders.
-const EXCLUDED_FILES = new Set(["types.ts", "index.ts"]);
+// Files that live in the namespaces directory but are not namespace builders,
+// OR that have already been migrated to the decorator-based registration system
+// (see specs/repl-intelligence). These do not carry @namespace JSDoc tags.
+const EXCLUDED_FILES = new Set(["types.ts", "index.ts", "sample-namespace.ts"]);
 
 // No summary-skip set needed: Test 3 only checks the non-empty summary
 // invariant for commands whose source function actually HAS JSDoc.
@@ -232,8 +234,9 @@ function testBounceApiCompleteness(): number {
 
   while ((match = importRe.exec(source)) !== null) {
     const nsFile = match[1]; // e.g. "fs-namespace"
-    // types.ts is infrastructure, not a namespace builder
-    if (nsFile === "types" || checkedFiles.has(nsFile)) continue;
+    // types.ts is infrastructure; decorated-class namespaces are excluded from the
+    // old JSDoc codegen checks (they use the repl-registry system instead).
+    if (EXCLUDED_FILES.has(`${nsFile}.ts`) || checkedFiles.has(nsFile)) continue;
     checkedFiles.add(nsFile);
 
     const srcPath = join(NAMESPACES_DIR, `${nsFile}.ts`);

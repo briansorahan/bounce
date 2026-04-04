@@ -14,7 +14,6 @@ import {
   VisScenePromise,
   VisStackResult,
   VisSceneListResult,
-  SampleNamespace,
   SampleListResult,
   ProjectNamespace,
   ProjectResult,
@@ -46,7 +45,7 @@ import { buildEnvNamespace } from "./namespaces/env-namespace.js";
 import { buildProjectNamespace } from "./namespaces/project-namespace.js";
 import { buildGlobals } from "./namespaces/globals.js";
 import { buildVisNamespace } from "./namespaces/vis-namespace.js";
-import { buildSampleNamespace } from "./namespaces/sample-namespace.js";
+import { SampleNamespace } from "./namespaces/sample-namespace.js";
 import { buildInstNamespace } from "./namespaces/instrument-namespace.js";
 import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
 import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
@@ -139,7 +138,8 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     getSceneManager,
   };
 
-  const { sn, sampleBinder } = buildSampleNamespace(namespaceDeps);
+  const sn = new SampleNamespace(namespaceDeps);
+  const sampleBinder = sn;
   const env = buildEnvNamespace(namespaceDeps);
   const vis = buildVisNamespace(namespaceDeps);
   const proj = buildProjectNamespace(namespaceDeps);

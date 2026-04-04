@@ -10,7 +10,8 @@
     "skipLibCheck": true,
     "strict": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node"],
+    "experimentalDecorators": true
   },
   "include": [
     "src/electron/**/*",
