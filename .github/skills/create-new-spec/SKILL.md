@@ -4,7 +4,7 @@ description: Creates specification documents for new features and bug fixes in B
 license: ISC
 metadata:
   author: briansorahan
-  version: "1.1"
+  version: "1.2"
   created: "2026-02-25"
 ---
 
@@ -31,11 +31,12 @@ Use this skill when:
 
 ## Workflow Overview
 
-The spec process has three stages:
+The spec process has four stages:
 
 1. **RESEARCH** - Gather context, explore prior art, understand constraints
 2. **PLAN** - Design the solution, define architecture, outline implementation
-3. **IMPL** - Document implementation decisions, track progress, note deviations
+3. **REVIEW** - Multi-agent review rounds to catch issues before implementation begins
+4. **IMPL** - Document implementation decisions, track progress, note deviations
 
 Each stage has its own markdown file, and each file informs every subsequent stage.
 
@@ -66,6 +67,7 @@ mkdir -p specs/$SLUG
 cp .github/skills/create-new-spec/assets/RESEARCH.md.tmpl specs/$SLUG/RESEARCH.md
 cp .github/skills/create-new-spec/assets/PLAN.md.tmpl specs/$SLUG/PLAN.md
 cp .github/skills/create-new-spec/assets/IMPL.md.tmpl specs/$SLUG/IMPL.md
+# REVIEW.md is created during Step 5 (Spec Review Phase) — do not pre-create it
 
 # Fill in placeholders (replace {SLUG}, {FEATURE_NAME}, {DATE})
 ```
@@ -103,7 +105,62 @@ Work with Copilot to create implementation plan:
 
 **This file is immutable after moving to IMPL phase** (unless critical flaw discovered).
 
-### Step 5: Implementation Phase
+### Step 5: Spec Review Phase
+
+**File:** `specs/{SLUG}/REVIEW.md`
+
+After completing the planning phase, ask the user if they would like to run a spec review. The default number of reviewers is **5** (the user may specify a different number before starting).
+
+#### Running a Review Round
+
+1. **Create or update `specs/{SLUG}/REVIEW.md`**: Copy `assets/REVIEW.md.tmpl` on the first round; append a new round section on subsequent rounds.
+
+2. **Spawn N sub-agents** (default: 5), each with a fresh context window. Each sub-agent must:
+   - Read all documents in `specs/{SLUG}/` (RESEARCH.md, PLAN.md, and IMPL.md if it exists)
+   - Read any related documents referenced in the spec (e.g., `ARCHITECTURE.md`, `README.md`)
+   - Evaluate the spec against the **Reviewer Checklist** below
+   - Return a structured critique: issues found, questions raised, and specific suggested changes
+
+3. **Collect and present results**: The main agent collects all sub-agent reviews, synthesizes them into a consolidated report (highlighting themes and priority issues), presents the report to the user, and writes/appends it to `specs/{SLUG}/REVIEW.md`.
+
+4. **Apply agreed-upon changes**: Automatically apply all agreed-upon edits to the relevant documents. This may include any spec file (RESEARCH.md, PLAN.md, IMPL.md) or any other project document that needs updating (ARCHITECTURE.md, README.md, etc.). Record every change made — document name, what changed, and rationale — in the **Changes Applied** table in REVIEW.md.
+
+5. **Continue or stop**: Ask the user whether they would like to run another review round. If yes, repeat from step 2. Continue until the user declines.
+
+#### Reviewer Checklist
+
+Each sub-agent reviewer must evaluate the spec against all of the following dimensions:
+
+**Completeness**
+- Are all sections of RESEARCH.md and PLAN.md (and IMPL.md if present) filled in meaningfully?
+- Are open questions answered or explicitly deferred with rationale?
+- Is the implementation order specific enough to execute without ambiguity?
+
+**Consistency**
+- Do RESEARCH.md and PLAN.md agree on the approach, constraints, and scope?
+- Are there any contradictions within or between documents?
+- If IMPL.md exists, does it reflect the plan, or are deviations documented with rationale?
+
+**Feasibility**
+- Is the proposed approach technically sound given the Bounce three-process architecture?
+- Are risks identified with concrete mitigations?
+
+**REPL Interface Contract**
+- If REPL surface area is involved, is the `help()` contract fully specified for every exposed object/function?
+- Are returned-object terminal summaries defined for all new custom types?
+- Is test coverage for `help()` and display behavior explicitly planned?
+
+**Testing Strategy**
+- Are unit and E2E tests identified for all meaningful behaviors?
+- Does the testing strategy cover edge cases and cross-platform concerns?
+- For REPL-facing features, are `help()` and returned-object display assertions explicitly included?
+
+**Clarity**
+- Is the spec clear enough for someone unfamiliar with the feature to understand and implement it?
+- Are architectural decisions well-motivated?
+- Are deviations from established conventions documented?
+
+### Step 6: Implementation Phase
 
 **File:** `specs/{SLUG}/IMPL.md`
 
@@ -115,7 +172,7 @@ Work with Copilot to implement and track progress:
 - **Add status updates** when pausing work (for resuming later)
 - For REPL-facing features, record whether `help()` and returned-object display behavior match the plan, including any deviations
 
-### Step 6: Verification
+### Step 7: Verification
 
 Before considering work complete:
 - Run linter: `npm run lint`
@@ -124,10 +181,10 @@ Before considering work complete:
 - Manually test in Electron app: `npm run dev:electron`
 - Verify cross-platform compatibility if possible
 - If REPL surface area changed, verify that unit and/or Playwright tests cover `help()` output and returned-object terminal summaries before closing the work
-- If architecture changed, review `ARCHITECTURE.md` for accuracy (see Step 7)
+- If architecture changed, review `ARCHITECTURE.md` for accuracy (see Step 8)
 - Do not run Playwright directly from the host for verification docs or Copilot guidance; always use `./build.sh`
 
-### Step 7: Completion
+### Step 8: Completion
 
 Before considering work done:
 - Ensure the `**Status:**` header line at the top of IMPL.md reads `**Status:** Complete` — this is the canonical marker that prune-specs and other tooling use to identify finished work
@@ -180,7 +237,8 @@ When returning to a spec after a break:
 Template files are located in `.github/skills/create-new-spec/assets/`:
 
 - `RESEARCH.md.tmpl` - Research phase template
-- `PLAN.md.tmpl` - Planning phase template  
+- `PLAN.md.tmpl` - Planning phase template
+- `REVIEW.md.tmpl` - Spec review template (created at the start of Step 5; one file per spec, new rounds appended)
 - `IMPL.md.tmpl` - Implementation phase template
 
 When creating a new spec, copy these templates to `specs/{SLUG}/` and fill in the placeholders:
