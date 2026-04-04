@@ -1,14 +1,8 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult, FeatureResult, type HelpFactory } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
 import { InstrumentResult } from "./instrument.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
-
-const sliceMethodHelps = porcelainTypeHelps.find(t => t.name === "SliceFeature")?.methods ?? [];
-const nmfMethodHelps = porcelainTypeHelps.find(t => t.name === "NmfFeature")?.methods ?? [];
-const nxMethodHelps = porcelainTypeHelps.find(t => t.name === "NxFeature")?.methods ?? [];
-const mfccMethodHelps = porcelainTypeHelps.find(t => t.name === "MfccFeature")?.methods ?? [];
 
 export interface ToSamplerOptions {
   name: string;
@@ -49,7 +43,7 @@ export class SliceFeatureResult extends FeatureResult {
     private readonly bindings: SliceFeatureBindings,
   ) {
     super(display, source, featureHash, "onset-slice", options, bindings.help);
-    attachMethodHelp(this, "SliceFeature", sliceMethodHelps);
+    attachMethodHelpFromRegistry(this, "SliceFeature");
   }
 
   get count(): number {
@@ -90,7 +84,7 @@ export class NmfFeatureResult extends FeatureResult {
     private readonly bindings: NmfFeatureBindings,
   ) {
     super(display, source, featureHash, "nmf", options, bindings.help);
-    attachMethodHelp(this, "NmfFeature", nmfMethodHelps);
+    attachMethodHelpFromRegistry(this, "NmfFeature");
   }
 
   @describe({ summary: "Separate the NMF components into audio files.", returns: "BounceResult" })
@@ -121,7 +115,7 @@ export class NxFeatureResult extends FeatureResult {
     private readonly bindings: NxFeatureBindings,
   ) {
     super(display, source, featureHash, "nmf-cross", options, bindings.help);
-    attachMethodHelp(this, "NxFeature", nxMethodHelps);
+    attachMethodHelpFromRegistry(this, "NxFeature");
   }
 
   @describe({ summary: "Preview a specific NX cross-synthesis component by index.", returns: "SamplePromise" })
@@ -143,7 +137,7 @@ export class MfccFeatureResult extends FeatureResult {
     private readonly bindings: MfccFeatureBindings,
   ) {
     super(display, source, featureHash, "mfcc", options, bindings.help);
-    attachMethodHelp(this, "MfccFeature", mfccMethodHelps);
+    attachMethodHelpFromRegistry(this, "MfccFeature");
   }
 }
 

@@ -1,11 +1,7 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
-
-const audioDeviceMethodHelps = porcelainTypeHelps.find(t => t.name === "AudioDevice")?.methods ?? [];
-const recordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "RecordingHandle")?.methods ?? [];
 
 /** A single audio input device as seen by the REPL. */
 export interface AudioInputDevice {
@@ -47,7 +43,7 @@ export class AudioDeviceResult extends BounceResult {
         `  \x1b[90mrecord(sampleId, {duration: N})  — record for N seconds\x1b[0m`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "AudioDevice", audioDeviceMethodHelps);
+    attachMethodHelpFromRegistry(this, "AudioDevice");
   }
 
   @describe({ summary: "Start recording. Returns a RecordingHandle (manual stop) or SamplePromise (when opts.duration is set).", returns: "RecordingHandle | SamplePromise" })
@@ -99,7 +95,7 @@ export class RecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m to finish recording and get a SampleResult`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "RecordingHandle", recordingHandleMethodHelps);
+    attachMethodHelpFromRegistry(this, "RecordingHandle");
   }
 
   @describe({ summary: "Stop recording and return a SamplePromise resolving to SampleResult.", returns: "SamplePromise" })

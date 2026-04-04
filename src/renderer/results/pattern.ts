@@ -1,11 +1,8 @@
 /// <reference path="../types.d.ts" />
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { CompiledPattern } from "../pattern-parser.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
-
-const patternMethodHelps = porcelainTypeHelps.find(t => t.name === "Pattern")?.methods ?? [];
 
 @replType("Pattern", { summary: "A compiled X0X step-sequencer pattern" })
 export class PatternResult extends BounceResult {
@@ -16,7 +13,7 @@ export class PatternResult extends BounceResult {
     super(""); // overridden by toString()
     this.notation = notation;
     this.compiled = compiled;
-    attachMethodHelp(this, "Pattern", patternMethodHelps);
+    attachMethodHelpFromRegistry(this, "Pattern");
   }
 
   @describe({ summary: "Start playing on mixer channel N (1–8).", returns: "BounceResult" })

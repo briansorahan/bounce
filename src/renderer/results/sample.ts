@@ -1,5 +1,5 @@
 import type { GrainCollection } from "../grain-collection.js";
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult, HelpableResult, defaultHelp, type HelpFactory } from "./base.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
 import {
@@ -13,9 +13,6 @@ import {
   type NxFeatureResult,
 } from "./features.js";
 import type { InputsResult, AudioDeviceResult } from "./recording.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
-
-const sampleMethodHelps = porcelainTypeHelps.find(t => t.name === "Sample")?.methods ?? [];
 
 export interface LoopOptions {
   loopStart?: number;
@@ -110,7 +107,7 @@ export class SampleResult extends HelpableResult {
       (opts?: LoopOptions): SamplePromise => new SamplePromise(bindings.loop(opts)),
       { help: () => bindings.loop.help() },
     );
-    attachMethodHelp(this, "Sample", sampleMethodHelps);
+    attachMethodHelpFromRegistry(this, "Sample");
   }
 
   @describe({ summary: "Play this sample from start to finish.", returns: "SamplePromise" })

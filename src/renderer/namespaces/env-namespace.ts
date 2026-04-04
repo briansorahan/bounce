@@ -16,6 +16,7 @@ import {
 } from "../runtime-introspection.js";
 import type { NamespaceDeps } from "./types.js";
 import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { setDevMode, getDevMode } from "../../shared/repl-registration.js";
 import { envCommands } from "./env-commands.generated.js";
 export { envCommands } from "./env-commands.generated.js";
 
@@ -139,6 +140,19 @@ export class EnvNamespace {
       callableMembers,
       () => this.envFunctionsHelpText(),
     );
+  }
+
+  @describe({
+    summary: "Toggle developer mode to show or hide plumbing commands.",
+    returns: "BounceResult",
+  })
+  @param("toggle", { summary: "True to enable, false to disable. Omit to query current state.", kind: "plain" })
+  dev(toggle?: boolean): BounceResult {
+    if (toggle === undefined) {
+      return new BounceResult(`dev mode: ${getDevMode() ? "on" : "off"}`);
+    }
+    setDevMode(toggle);
+    return new BounceResult(`dev mode: ${toggle ? "on" : "off"}`);
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

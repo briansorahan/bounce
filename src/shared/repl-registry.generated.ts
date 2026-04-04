@@ -679,6 +679,18 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
         }
     ],
   },
+  "env.dev": {
+    summary: "Toggle developer mode to show or hide plumbing commands.",
+    visibility: "porcelain",
+    returns: "BounceResult",
+    params: [
+        {
+            "name": "toggle",
+            "summary": "True to enable, false to disable. Omit to query current state.",
+            "kind": "plain"
+        }
+    ],
+  },
   "proj.current": {
     summary: "Return the active project and its stored counts.",
     visibility: "porcelain",

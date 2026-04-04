@@ -50,8 +50,11 @@ import { MidiNamespace } from "./namespaces/midi-namespace.js";
 import { MixerNamespace } from "./namespaces/mixer-namespace.js";
 import { TransportNamespace } from "./namespaces/transport-namespace.js";
 import { PatNamespace } from "./namespaces/pat-namespace.js";
-import { porcelainTypeHelps } from "./results/porcelain-types.generated.js";
-import { renderTypeHelp, renderMethodHelp } from "./help.js";
+import { renderDescriptorHelp, renderMethodHelpFromDescriptor } from "./help.js";
+import { setHelpRenderer } from "../shared/repl-registry.js";
+import { listTypes } from "../shared/repl-registration.js";
+
+setHelpRenderer(renderDescriptorHelp);
 
 export {
   BounceResult,
@@ -153,21 +156,23 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
   const globals = buildGlobals(namespaceDeps, { sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat });
 
   const typeHelpObjects = Object.fromEntries(
-    porcelainTypeHelps.map((th) => {
+    listTypes().map((td) => {
       const methodSubs = Object.fromEntries(
-        (th.methods ?? []).map((m) => {
-          const name = m.signature.split("(")[0];
-          return [name, {
-            help: () => renderMethodHelp(th.name, m),
-            toString: () => renderMethodHelp(th.name, m).toString(),
-          }];
-        }),
+        Object.entries(td.methods)
+          .filter(([, m]) => m.visibility !== "plumbing")
+          .map(([name, m]) => [
+            name,
+            {
+              help: () => renderMethodHelpFromDescriptor(td.name, name, m),
+              toString: () => renderMethodHelpFromDescriptor(td.name, name, m).toString(),
+            },
+          ]),
       );
       return [
-        th.name,
+        td.name,
         {
-          help: () => renderTypeHelp(th),
-          toString: () => renderTypeHelp(th).toString(),
+          help: () => renderDescriptorHelp(td),
+          toString: () => renderDescriptorHelp(td).toString(),
           ...methodSubs,
         },
       ];

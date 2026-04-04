@@ -1,12 +1,8 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult, HelpableResult, isPromiseLike, type HelpFactory } from "./base.js";
 import type { SliceFeatureResult, NmfFeatureResult, NxFeatureResult } from "./features.js";
 import type { SampleResult } from "./sample.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
-
-const visSceneMethodHelps = porcelainTypeHelps.find(t => t.name === "VisScene")?.methods ?? [];
-const visStackMethodHelps = porcelainTypeHelps.find(t => t.name === "VisStack")?.methods ?? [];
 
 export interface VisSceneBindings {
   help: HelpFactory;
@@ -42,7 +38,7 @@ export class VisSceneResult extends HelpableResult {
   ) {
     super("", bindings.help);
     this.titleText = titleText;
-    attachMethodHelp(this, "VisScene", visSceneMethodHelps);
+    attachMethodHelpFromRegistry(this, "VisScene");
   }
 
   override toString(): string {
@@ -161,7 +157,7 @@ export class VisStackResult extends HelpableResult {
 
   constructor(private readonly bindings: VisStackBindings) {
     super("", bindings.help);
-    attachMethodHelp(this, "VisStack", visStackMethodHelps);
+    attachMethodHelpFromRegistry(this, "VisStack");
   }
 
   override toString(): string {

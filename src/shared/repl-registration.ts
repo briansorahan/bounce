@@ -45,3 +45,13 @@ export function getNamespaceNames(includePlumbing = false): string[] {
     .filter((d) => includePlumbing || d.visibility === "porcelain")
     .map((d) => d.name);
 }
+
+let _devMode = false;
+
+export function setDevMode(enabled: boolean): void {
+  _devMode = enabled;
+}
+
+export function getDevMode(): boolean {
+  return _devMode;
+}

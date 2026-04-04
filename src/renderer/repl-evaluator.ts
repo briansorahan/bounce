@@ -1,26 +1,20 @@
-export const BOUNCE_GLOBALS = new Set([
-  "sn",
-  "env",
-  "vis",
+import { getNamespace } from "../shared/repl-registration.js";
+
+/**
+ * Non-namespace globals provided by buildGlobals that should always be
+ * treated as Bounce built-ins regardless of which namespaces are registered.
+ */
+const BOUNCE_GLOBAL_EXTRAS = new Set([
   "clearDebug",
   "debug",
   "help",
   "clear",
-  "corpus",
-  "fs",
-  "proj",
-  "inst",
-  "midi",
+  "errors",
 ]);
 
-/**
- * Names that are valid REPL globals but should not appear in tab completion.
- * These are developer utilities or internal functions that we don't want to
- * surface to users.
- */
-export const COMPLETION_HIDDEN_GLOBALS = new Set([
-  "clearDebug",
-]);
+function isBounceGlobal(name: string): boolean {
+  return BOUNCE_GLOBAL_EXTRAS.has(name) || getNamespace(name) !== undefined;
+}
 
 /**
  * Returns true if `source` has balanced brackets/braces/parens,
@@ -219,7 +213,7 @@ export function getTopLevelVarNames(js: string): string[] {
           while (i < js.length && /[\w$]/.test(js[i])) {
             name += js[i++];
           }
-          if (name && !BOUNCE_GLOBALS.has(name)) names.push(name);
+          if (name && !isBounceGlobal(name)) names.push(name);
           // Skip to next declarator or end
           while (i < js.length && js[i] !== "," && js[i] !== ";") {
             // Track depth to skip over initializer expressions like `var x = {a: 1}`
@@ -288,7 +282,7 @@ export function getTopLevelFunctionDeclNames(js: string): string[] {
         // Read identifier
         let name = "";
         while (nameStart < js.length && /[\w$]/.test(js[nameStart])) name += js[nameStart++];
-        if (name && !BOUNCE_GLOBALS.has(name)) names.push(name);
+        if (name && !isBounceGlobal(name)) names.push(name);
         i = nameStart;
         continue;
       }
@@ -463,7 +457,7 @@ export function checkReservedNames(js: string): void {
             while (j < js.length && /\s|,|:/.test(js[j])) j++;
             let name = "";
             while (j < js.length && /[\w$]/.test(js[j])) name += js[j++];
-            if (name && BOUNCE_GLOBALS.has(name)) {
+            if (name && isBounceGlobal(name)) {
               throw new Error(
                 `'${name}' is a Bounce built-in and cannot be redefined. Use a different variable name.`,
               );
@@ -473,7 +467,7 @@ export function checkReservedNames(js: string): void {
           // Simple identifier
           let name = "";
           while (j < js.length && /[\w$]/.test(js[j])) name += js[j++];
-          if (name && BOUNCE_GLOBALS.has(name)) {
+          if (name && isBounceGlobal(name)) {
             throw new Error(
               `'${name}' is a Bounce built-in and cannot be redefined. Use a different variable name.`,
             );
@@ -490,7 +484,7 @@ export function checkReservedNames(js: string): void {
         while (j < js.length && /\s/.test(js[j])) j++;
         let name = "";
         while (j < js.length && /[\w$]/.test(js[j])) name += js[j++];
-        if (name && BOUNCE_GLOBALS.has(name)) {
+        if (name && isBounceGlobal(name)) {
           throw new Error(
             `'${name}' is a Bounce built-in and cannot be redefined. Use a different variable name.`,
           );
@@ -503,7 +497,7 @@ export function checkReservedNames(js: string): void {
         while (j < js.length && /\s/.test(js[j])) j++;
         let name = "";
         while (j < js.length && /[\w$]/.test(js[j])) name += js[j++];
-        if (name && BOUNCE_GLOBALS.has(name)) {
+        if (name && isBounceGlobal(name)) {
           throw new Error(
             `'${name}' is a Bounce built-in and cannot be redefined. Use a different variable name.`,
           );
@@ -558,14 +552,14 @@ export class ReplEvaluator {
 
     // Emit function declarations first, using their original TypeScript source.
     for (const [name, source] of this.functionSources) {
-      if (!BOUNCE_GLOBALS.has(name)) {
+      if (!isBounceGlobal(name)) {
         entries.push({ name, kind: "function", value: source });
       }
     }
 
     // Emit JSON-serializable non-function values.
     for (const [name, value] of this.scopeVars) {
-      if (BOUNCE_GLOBALS.has(name) || this.functionSources.has(name)) {
+      if (isBounceGlobal(name) || this.functionSources.has(name)) {
         continue;
       }
       try {
@@ -586,7 +580,7 @@ export class ReplEvaluator {
   ): Promise<string[]> {
     const restored: string[] = [];
     for (const entry of entries) {
-      if (BOUNCE_GLOBALS.has(entry.name)) {
+      if (isBounceGlobal(entry.name)) {
         continue;
       }
       if (entry.kind === "json") {

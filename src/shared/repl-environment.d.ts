@@ -118,6 +118,7 @@ declare const env: {
   globals(): EnvScopeResult;
   inspect(nameOrValue: unknown): EnvInspectionResult;
   functions(nameOrValue?: unknown): EnvFunctionListResult;
+  dev(toggle?: boolean): BounceResult;
 };
 
 declare const proj: {

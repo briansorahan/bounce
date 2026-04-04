@@ -1,11 +1,7 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { MidiInputDevice as MidiInputDeviceRecord } from "../../shared/ipc-contract.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
 import { replType, describe, param } from "../../shared/repl-registry.js";
-
-const midiSequenceMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiSequence")?.methods ?? [];
-const midiRecordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiRecordingHandle")?.methods ?? [];
 
 // Re-export for convenience
 export type { MidiInputDeviceRecord };
@@ -105,7 +101,7 @@ export class MidiSequenceResult extends BounceResult {
         `  \x1b[90mseq.stop()\x1b[0m             stop playback`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "MidiSequence", midiSequenceMethodHelps);
+    attachMethodHelpFromRegistry(this, "MidiSequence");
   }
 
   @describe({ summary: "Play this sequence through an instrument. Returns a MidiSequencePromise.", returns: "MidiSequencePromise" })
@@ -193,7 +189,7 @@ export class MidiRecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m  finish recording and get a MidiSequence`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "MidiRecordingHandle", midiRecordingHandleMethodHelps);
+    attachMethodHelpFromRegistry(this, "MidiRecordingHandle");
   }
 
   @describe({ summary: "Stop recording and return a MidiSequencePromise.", returns: "MidiSequencePromise" })
