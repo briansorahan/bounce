@@ -84,8 +84,12 @@ export class LanguageServiceManager {
     this.port = null;
 
     if (this.process) {
+      const pid = this.process.pid;
       this.process.kill();
       this.process = null;
+      if (pid !== undefined) {
+        try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
+      }
     }
   }
 
@@ -93,11 +97,24 @@ export class LanguageServiceManager {
 
   /**
    * Parse a REPL buffer and return a CompletionContext.
-   * Returns a "none" context if the service is not ready.
+   * If the service is not yet ready, waits up to REQUEST_TIMEOUT_MS for it to
+   * become ready before dispatching, then falls back to a "none" context.
    */
   parse(buffer: string, cursor: number): Promise<CompletionContext> {
-    if (this.escalationLevel === "disabled" || !this.isReady) {
+    if (this.escalationLevel === "disabled") {
       return Promise.resolve(this.noneContext(buffer, cursor));
+    }
+    if (!this.isReady) {
+      return new Promise<CompletionContext>((resolve) => {
+        const timer = setTimeout(
+          () => resolve(this.noneContext(buffer, cursor)),
+          REQUEST_TIMEOUT_MS,
+        );
+        this.onReady(() => {
+          clearTimeout(timer);
+          this.parse(buffer, cursor).then(resolve);
+        });
+      });
     }
 
     const requestId = this.nextRequestId++;

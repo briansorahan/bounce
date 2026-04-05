@@ -42,7 +42,7 @@ export class EnvNamespace {
   // ── Public REPL-facing methods ────────────────────────────────────────────
 
   @describe({
-    summary: "List user-defined variables in scope. Each entry shows name, type, callable flag, and preview.",
+    summary: "List user-defined bindings in scope. Each entry shows name, type, callable flag, and preview.",
     returns: "EnvScopeResult",
   })
   vars(): EnvScopeResult {
@@ -58,7 +58,7 @@ export class EnvNamespace {
   }
 
   @describe({
-    summary: "List built-in Bounce globals. Each entry shows name, type, callable flag, and preview.",
+    summary: "List Bounce-provided globals. Each entry shows name, type, callable flag, and preview.",
     returns: "EnvScopeResult",
   })
   globals(): EnvScopeResult {
@@ -74,7 +74,7 @@ export class EnvNamespace {
   }
 
   @describe({
-    summary: "Show details for one binding or value. Pass a name string to resolve by name, or pass a value directly.",
+    summary: "Inspect one runtime binding or value. Pass a name string to resolve by name, or pass a value directly.",
     returns: "EnvInspectionResult",
   })
   @param("nameOrValue", {

@@ -1,7 +1,7 @@
 import type { GrainCollection } from "../grain-collection.js";
 import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult, HelpableResult, defaultHelp, type HelpFactory } from "./base.js";
-import { replType, describe, param } from "../../shared/repl-registry.js";
+import { replType, describe, param, registerMethod } from "../../shared/repl-registry.js";
 import {
   SliceFeaturePromise,
   NmfFeaturePromise,
@@ -22,7 +22,7 @@ export interface LoopOptions {
 export interface SampleMethodBindings {
   help: HelpFactory;
   play: () => Promise<SampleResult>;
-  loop: ((opts?: LoopOptions) => Promise<SampleResult>) & { help: () => BounceResult };
+  loop: (opts?: LoopOptions) => Promise<SampleResult>;
   stop: () => BounceResult;
   display: () => Promise<SampleResult>;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
@@ -38,16 +38,12 @@ export interface SampleMethodBindings {
 }
 
 function unavailableSampleBindings(name: string): SampleMethodBindings {
-  const loopUnavailable = Object.assign(
-    async () => { throw new Error(`${name} cannot be looped in this context.`); },
-    { help: () => new BounceResult(`\x1b[33m${name} loop is not available in this context\x1b[0m`) },
-  );
   return {
     help: () => defaultHelp(name),
     play: async () => {
       throw new Error(`${name} cannot be played in this context.`);
     },
-    loop: loopUnavailable,
+    loop: async () => { throw new Error(`${name} cannot be looped in this context.`); },
     stop: () => new BounceResult("\x1b[33mPlayback is not available for this object\x1b[0m"),
     display: async () => {
       throw new Error(`${name} cannot be displayed in this context.`);
@@ -86,11 +82,34 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
 }
 
 /**
+ * Class decorator that registers `loop` method metadata into the registry
+ * before @replType reads it. Because class decorators run bottom-up (closest
+ * to the class first), placing this below @replType ensures it executes first.
+ */
+function withLoopMeta(): ClassDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  return (target: Function) => {
+    registerMethod(
+      target.prototype as object,
+      "loop",
+      { summary: "Play this sample in a loop.", returns: "SamplePromise" },
+      [{ name: "opts?", summary: "Loop start/end in seconds: loopStart?, loopEnd?.", kind: "options" }],
+    );
+  };
+}
+
+/**
  * User-facing sample object in the REPL.
  */
-@replType("Sample", { summary: "A loaded audio sample with analysis and playback methods" })
+@replType("Sample", { summary: "A loaded audio sample with analysis and playback methods", instanceName: "sample" })
+@withLoopMeta()
 export class SampleResult extends HelpableResult {
-  readonly loop: ((opts?: LoopOptions) => SamplePromise) & { help: () => BounceResult };
+  /**
+   * Play this sample in a loop.
+   * Declared as an instance field (not a prototype method) so TypeScript can express
+   * the `.help()` property that attachMethodHelpFromRegistry attaches at runtime.
+   */
+  loop!: ((opts?: LoopOptions) => SamplePromise) & { help: () => BounceResult };
 
   constructor(
     display: string,
@@ -103,10 +122,9 @@ export class SampleResult extends HelpableResult {
     private readonly bindings: SampleMethodBindings,
   ) {
     super(display, bindings.help);
-    this.loop = Object.assign(
-      (opts?: LoopOptions): SamplePromise => new SamplePromise(bindings.loop(opts)),
-      { help: () => bindings.loop.help() },
-    );
+    // Assign the bare loop function first; attachMethodHelpFromRegistry will attach .help().
+    // @ts-expect-error — .help() is not present yet; it is attached on the next line.
+    this.loop = (opts?: LoopOptions): SamplePromise => new SamplePromise(this.bindings.loop(opts));
     attachMethodHelpFromRegistry(this, "Sample");
   }
 
@@ -144,7 +162,7 @@ export class SampleResult extends HelpableResult {
   }
 
   @describe({ summary: "Analyse onset positions using FluidOnsetSlice.", returns: "SliceFeaturePromise" })
-  @param("options", { summary: "Onset analysis options.", kind: "options" })
+  @param("opts?", { summary: "Onset analysis options.", kind: "options" })
   onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
     return new SliceFeaturePromise(this.bindings.onsetSlice(options));
   }
@@ -168,13 +186,13 @@ export class SampleResult extends HelpableResult {
   }
 
   @describe({ summary: "Run BufNMF on the sample and return component matrices.", returns: "NmfFeaturePromise" })
-  @param("options", { summary: "NMF options.", kind: "options" })
+  @param("opts?", { summary: "NMF options.", kind: "options" })
   nmf(options?: NmfOptions): NmfFeaturePromise {
     return new NmfFeaturePromise(this.bindings.nmf(options));
   }
 
   @describe({ summary: "Compute MFCC coefficients for the sample.", returns: "MfccFeaturePromise" })
-  @param("options", { summary: "MFCC options.", kind: "options" })
+  @param("opts?", { summary: "MFCC options.", kind: "options" })
   mfcc(options?: MFCCOptions): MfccFeaturePromise {
     return new MfccFeaturePromise(this.bindings.mfcc(options));
   }

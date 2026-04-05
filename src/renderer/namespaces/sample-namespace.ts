@@ -125,13 +125,13 @@ export class SampleNamespace implements SampleBinder {
     return this.stopAudio();
   }
 
-  @describe({ summary: "List available audio input devices" })
+  @describe({ summary: "List available audio input devices. Use the index shown to open a device with sn.dev(index)." })
   inputs(): Promise<InputsResult> {
     return this.getAudioInputs().then((devs) => new InputsResult(devs));
   }
 
   @describe({
-    summary: "Open an audio input device by index for recording",
+    summary: "Open an audio input device by index for recording. Call device.record() to start recording.",
     returns: "AudioDeviceResult",
   })
   @param("index", { summary: "Device index from sn.inputs()." })

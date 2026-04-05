@@ -50,7 +50,7 @@ import { MidiNamespace } from "./namespaces/midi-namespace.js";
 import { MixerNamespace } from "./namespaces/mixer-namespace.js";
 import { TransportNamespace } from "./namespaces/transport-namespace.js";
 import { PatNamespace } from "./namespaces/pat-namespace.js";
-import { renderDescriptorHelp, renderMethodHelpFromDescriptor } from "./help.js";
+import { renderDescriptorHelp, renderMethodHelpFromDescriptor, attachNamespaceMethodHelp } from "./help.js";
 import { setHelpRenderer } from "../shared/repl-registry.js";
 import { listTypes } from "../shared/repl-registration.js";
 
@@ -178,6 +178,14 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
       ];
     }),
   );
+
+  for (const [ns, name] of [
+    [sn, "sn"], [env, "env"], [vis, "vis"], [proj, "proj"],
+    [corpus, "corpus"], [fs, "fs"], [inst, "inst"], [mx, "mx"],
+    [midi, "midi"], [transport, "transport"], [pat, "pat"],
+  ] as [object, string][]) {
+    attachNamespaceMethodHelp(ns, name);
+  }
 
   const api = {
     sn,

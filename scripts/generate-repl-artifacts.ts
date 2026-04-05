@@ -380,6 +380,71 @@ function emitRegistryFile(classes: ClassMeta[]): string {
   }
 
   lines.push("};", "");
+
+  // replNamespaces
+  lines.push("export interface ReplNamespaceEntry {");
+  lines.push("  name: string;");
+  lines.push("  summary: string;");
+  lines.push("  visibility: \"porcelain\" | \"plumbing\";");
+  lines.push("  methods: Record<string, ReplRegistryEntry>;");
+  lines.push("}", "");
+  lines.push("export const replNamespaces: Record<string, ReplNamespaceEntry> = {");
+  for (const cls of classes.filter((c) => c.kind === "namespace")) {
+    lines.push(`  ${JSON.stringify(cls.registeredName)}: {`);
+    lines.push(`    name: ${JSON.stringify(cls.registeredName)},`);
+    lines.push(`    summary: ${JSON.stringify(cls.summary)},`);
+    lines.push(`    visibility: ${JSON.stringify(cls.visibility ?? "porcelain")},`);
+    lines.push("    methods: {");
+    for (const m of cls.methods) {
+      const paramsJson = JSON.stringify(m.params, null, 6)
+        .split("\n")
+        .map((l, i) => (i === 0 ? l : "      " + l))
+        .join("\n");
+      lines.push(`      ${JSON.stringify(m.methodName)}: {`);
+      lines.push(`        summary: ${JSON.stringify(m.summary)},`);
+      lines.push(`        visibility: ${JSON.stringify(m.visibility)},`);
+      if (m.returns !== undefined) {
+        lines.push(`        returns: ${JSON.stringify(m.returns)},`);
+      }
+      lines.push(`        params: ${paramsJson},`);
+      lines.push("      },");
+    }
+    lines.push("    },");
+    lines.push("  },");
+  }
+  lines.push("};", "");
+
+  // replTypes
+  lines.push("export interface ReplTypeEntry {");
+  lines.push("  name: string;");
+  lines.push("  summary: string;");
+  lines.push("  methods: Record<string, ReplRegistryEntry>;");
+  lines.push("}", "");
+  lines.push("export const replTypes: Record<string, ReplTypeEntry> = {");
+  for (const cls of classes.filter((c) => c.kind === "replType")) {
+    lines.push(`  ${JSON.stringify(cls.registeredName)}: {`);
+    lines.push(`    name: ${JSON.stringify(cls.registeredName)},`);
+    lines.push(`    summary: ${JSON.stringify(cls.summary)},`);
+    lines.push("    methods: {");
+    for (const m of cls.methods) {
+      const paramsJson = JSON.stringify(m.params, null, 6)
+        .split("\n")
+        .map((l, i) => (i === 0 ? l : "      " + l))
+        .join("\n");
+      lines.push(`      ${JSON.stringify(m.methodName)}: {`);
+      lines.push(`        summary: ${JSON.stringify(m.summary)},`);
+      lines.push(`        visibility: ${JSON.stringify(m.visibility)},`);
+      if (m.returns !== undefined) {
+        lines.push(`        returns: ${JSON.stringify(m.returns)},`);
+      }
+      lines.push(`        params: ${paramsJson},`);
+      lines.push("      },");
+    }
+    lines.push("    },");
+    lines.push("  },");
+  }
+  lines.push("};", "");
+
   return lines.join("\n");
 }
 

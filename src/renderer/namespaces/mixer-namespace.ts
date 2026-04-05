@@ -277,6 +277,7 @@ export class MixerNamespace {
 
   // ── Getter properties ─────────────────────────────────────────────────────
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   get channels(): BounceResult {
     const lines = ["\x1b[1mMixer Channels\x1b[0m"];
     for (let i = 0; i < NUM_USER_CHANNELS; i++) {
@@ -287,10 +288,12 @@ export class MixerNamespace {
     return new BounceResult(lines.join("\n"));
   }
 
+  @describe({ summary: "Preview channel control (used by sample.play and sample.loop).", returns: "PreviewControl" })
   get preview(): PreviewControl {
     return this.previewControl;
   }
 
+  @describe({ summary: "Master bus control (gain, mute).", returns: "MasterControl" })
   get master(): MasterControl {
     return this.masterControl;
   }

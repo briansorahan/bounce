@@ -182,11 +182,15 @@ function getSessionVariables(): SessionVariable[] {
 
 /**
  * Find the deepest AST node whose span contains the given position.
+ * EndOfFileToken is skipped — it always has pos === end === file length and
+ * would overwrite a legitimate node (e.g. an Identifier) found earlier when
+ * the cursor is at the very end of the buffer.
  */
 function findNodeAtPos(sf: ts.SourceFile, pos: number): ts.Node {
   let found: ts.Node = sf;
 
   function visit(node: ts.Node): void {
+    if (node.kind === ts.SyntaxKind.EndOfFileToken) return;
     if (node.pos <= pos && pos <= node.end) {
       found = node;
       ts.forEachChild(node, visit);
@@ -480,7 +484,19 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
   port = event.ports[0] as unknown as MessagePort;
 
   port.on("message", handlePortMessage);
+  port.once("close", () => process.exit(0));
   port.start();
 
   console.log("[lang-service-process] MessagePort connected");
+
+  // Eagerly initialize the language service so the main process receives
+  // langservice:ready before any completion request arrives.
+  try {
+    initLanguageService();
+  } catch (err) {
+    console.error("[lang-service-process] Language service init failed:", err);
+  }
 });
+
+// Force-exit on SIGTERM — matches audio-engine-process behaviour.
+process.once("SIGTERM", () => process.kill(process.pid, "SIGKILL"));

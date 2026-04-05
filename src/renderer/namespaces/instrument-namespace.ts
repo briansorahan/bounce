@@ -107,7 +107,7 @@ export class InstNamespace {
   }
 
   @describe({
-    summary: "Create a granular synthesis instrument. Load source with .load(sample), control with .set({ position, grainSize, density, ... }).",
+    summary: "Create a new granular synthesis instrument. Load source with .load(sample), control with .set({ position, grainSize, density, ... }).",
     returns: "InstrumentResult",
   })
   @param("opts", {

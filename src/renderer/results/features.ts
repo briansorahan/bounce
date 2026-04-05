@@ -32,7 +32,7 @@ export interface MfccFeatureBindings {
   help: HelpFactory;
 }
 
-@replType("SliceFeature", { summary: "Onset-sliced audio feature result" })
+@replType("SliceFeature", { summary: "Onset-sliced audio feature result. Contains slices[] boundary array." })
 export class SliceFeatureResult extends FeatureResult {
   constructor(
     display: string,
@@ -57,7 +57,7 @@ export class SliceFeatureResult extends FeatureResult {
   }
 
   @describe({ summary: "Preview a specific slice by index.", returns: "SamplePromise" })
-  @param("index", { summary: "Slice index (0-based).", kind: "plain" })
+  @param("index?", { summary: "Slice index (0-based).", kind: "plain" })
   playSlice(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playSlice(index));
   }
@@ -69,7 +69,7 @@ export class SliceFeatureResult extends FeatureResult {
   }
 }
 
-@replType("NmfFeature", { summary: "NMF (Non-negative Matrix Factorization) feature result" })
+@replType("NmfFeature", { summary: "NMF feature result. Contains components, bases, and activations matrices." })
 export class NmfFeatureResult extends FeatureResult {
   constructor(
     display: string,
@@ -88,13 +88,13 @@ export class NmfFeatureResult extends FeatureResult {
   }
 
   @describe({ summary: "Separate the NMF components into audio files.", returns: "BounceResult" })
-  @param("options", { summary: "Separation options.", kind: "options" })
+  @param("opts?", { summary: "Separation options.", kind: "options" })
   sep(options?: SepOptions): Promise<BounceResult> {
     return this.bindings.sep(options);
   }
 
   @describe({ summary: "Preview a specific NMF component by index.", returns: "SamplePromise" })
-  @param("index", { summary: "Component index (0-based).", kind: "plain" })
+  @param("index?", { summary: "Component index (0-based).", kind: "plain" })
   playComponent(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playComponent(index));
   }
@@ -119,7 +119,7 @@ export class NxFeatureResult extends FeatureResult {
   }
 
   @describe({ summary: "Preview a specific NX cross-synthesis component by index.", returns: "SamplePromise" })
-  @param("index", { summary: "Component index (0-based).", kind: "plain" })
+  @param("index?", { summary: "Component index (0-based).", kind: "plain" })
   playComponent(index = 0): SamplePromise {
     return new SamplePromise(this.bindings.playComponent(index));
   }

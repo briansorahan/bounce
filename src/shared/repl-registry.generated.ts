@@ -34,7 +34,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "SamplePromise",
     params: [
         {
-            "name": "index",
+            "name": "index?",
             "summary": "Slice index (0-based).",
             "kind": "plain"
         }
@@ -58,7 +58,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "BounceResult",
     params: [
         {
-            "name": "options",
+            "name": "opts?",
             "summary": "Separation options.",
             "kind": "options"
         }
@@ -70,7 +70,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "SamplePromise",
     params: [
         {
-            "name": "index",
+            "name": "index?",
             "summary": "Component index (0-based).",
             "kind": "plain"
         }
@@ -82,7 +82,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "SamplePromise",
     params: [
         {
-            "name": "index",
+            "name": "index?",
             "summary": "Component index (0-based).",
             "kind": "plain"
         }
@@ -171,7 +171,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "SliceFeaturePromise",
     params: [
         {
-            "name": "options",
+            "name": "opts?",
             "summary": "Onset analysis options.",
             "kind": "options"
         }
@@ -219,7 +219,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "NmfFeaturePromise",
     params: [
         {
-            "name": "options",
+            "name": "opts?",
             "summary": "NMF options.",
             "kind": "options"
         }
@@ -231,7 +231,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     returns: "MfccFeaturePromise",
     params: [
         {
-            "name": "options",
+            "name": "opts?",
             "summary": "MFCC options.",
             "kind": "options"
         }
@@ -574,12 +574,12 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     params: [],
   },
   "sn.inputs": {
-    summary: "List available audio input devices",
+    summary: "List available audio input devices. Use the index shown to open a device with sn.dev(index).",
     visibility: "porcelain",
     params: [],
   },
   "sn.dev": {
-    summary: "Open an audio input device by index for recording",
+    summary: "Open an audio input device by index for recording. Call device.record() to start recording.",
     visibility: "porcelain",
     returns: "AudioDeviceResult",
     params: [
@@ -644,19 +644,19 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     ],
   },
   "env.vars": {
-    summary: "List user-defined variables in scope. Each entry shows name, type, callable flag, and preview.",
+    summary: "List user-defined bindings in scope. Each entry shows name, type, callable flag, and preview.",
     visibility: "porcelain",
     returns: "EnvScopeResult",
     params: [],
   },
   "env.globals": {
-    summary: "List built-in Bounce globals. Each entry shows name, type, callable flag, and preview.",
+    summary: "List Bounce-provided globals. Each entry shows name, type, callable flag, and preview.",
     visibility: "porcelain",
     returns: "EnvScopeResult",
     params: [],
   },
   "env.inspect": {
-    summary: "Show details for one binding or value. Pass a name string to resolve by name, or pass a value directly.",
+    summary: "Inspect one runtime binding or value. Pass a name string to resolve by name, or pass a value directly.",
     visibility: "porcelain",
     returns: "EnvInspectionResult",
     params: [
@@ -783,7 +783,7 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     ],
   },
   "inst.granular": {
-    summary: "Create a granular synthesis instrument. Load source with .load(sample), control with .set({ position, grainSize, density, ... }).",
+    summary: "Create a new granular synthesis instrument. Load source with .load(sample), control with .set({ position, grainSize, density, ... }).",
     visibility: "porcelain",
     returns: "InstrumentResult",
     params: [
@@ -904,5 +904,1068 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
             "kind": "plain"
         }
     ],
+  },
+};
+
+export interface ReplNamespaceEntry {
+  name: string;
+  summary: string;
+  visibility: "porcelain" | "plumbing";
+  methods: Record<string, ReplRegistryEntry>;
+}
+
+export const replNamespaces: Record<string, ReplNamespaceEntry> = {
+  "transport": {
+    name: "transport",
+    summary: "Global clock and BPM control",
+    visibility: "porcelain",
+    methods: {
+      "bpm": {
+        summary: "Get or set BPM (1–400). Omit argument to read current BPM.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "value",
+                  "summary": "Beats per minute (1–400). Omit to read current BPM.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "start": {
+        summary: "Start the global clock. Patterns scheduled with .play() will begin on the next bar.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "stop": {
+        summary: "Stop the global clock. Reports last bar, beat, and step position.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "getCurrentBpm": {
+        summary: "Return the current BPM value.",
+        visibility: "plumbing",
+        params: [],
+      },
+    },
+  },
+  "pat": {
+    name: "pat",
+    summary: "PatternResult DSL for rhythmic sequencing",
+    visibility: "porcelain",
+    methods: {
+      "xox": {
+        summary: "Compile an X0X step pattern for live-coding",
+        visibility: "porcelain",
+        returns: "Pattern",
+        params: [
+            {
+                  "name": "notation",
+                  "summary": "Multi-line X0X notation string. Each line: NOTE = STEPS (16 non-whitespace step chars). NOTE: c4, a4, etc. STEPS: . = rest, a-z = soft, A-Z = loud.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "fs": {
+    name: "fs",
+    summary: "Filesystem utilities",
+    visibility: "porcelain",
+    methods: {
+      "ls": {
+        summary: "List directory contents (dotfiles hidden). Directories in blue, audio files in green. Capped at 200 entries.",
+        visibility: "porcelain",
+        returns: "LsResultPromise",
+        params: [
+            {
+                  "name": "dirPath",
+                  "summary": "Path (absolute, relative, or ~). Defaults to cwd.",
+                  "kind": "filePath"
+            }
+      ],
+      },
+      "la": {
+        summary: "List directory contents including dotfiles. Like fs.ls() but shows hidden entries.",
+        visibility: "porcelain",
+        returns: "LsResultPromise",
+        params: [
+            {
+                  "name": "dirPath",
+                  "summary": "Path (absolute, relative, or ~). Defaults to cwd.",
+                  "kind": "filePath"
+            }
+      ],
+      },
+      "cd": {
+        summary: "Change working directory (persists across restarts). Supports ~ expansion and relative paths.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "dirPath",
+                  "summary": "Target directory (absolute, relative, or starting with ~).",
+                  "kind": "filePath"
+            }
+      ],
+      },
+      "pwd": {
+        summary: "Print current working directory. Relative paths in sn.read() and other commands resolve against this.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "glob": {
+        summary: "Find files matching a glob pattern (e.g. **/*.wav). Returns sorted absolute paths.",
+        visibility: "porcelain",
+        returns: "GlobResultPromise",
+        params: [
+            {
+                  "name": "pattern",
+                  "summary": "Glob pattern string. Supports ** for recursive search.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "walk": {
+        summary: "Recursively walk a directory; handler fires per entry. Capped at 10,000 entries.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "handler",
+                  "summary": "Catch-all callback (filePath, type) => void, or handler-map keyed by fs.FileType.",
+                  "kind": "plain"
+            },
+            {
+                  "name": "dirPath",
+                  "summary": "Directory to walk (absolute, relative, or ~).",
+                  "kind": "filePath"
+            }
+      ],
+      },
+    },
+  },
+  "sn": {
+    name: "sn",
+    summary: "Load and play audio samples; entry point for all audio analysis",
+    visibility: "porcelain",
+    methods: {
+      "read": {
+        summary: "Load an audio file from disk and return a SampleResult object",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "path",
+                  "summary": "File path (absolute, relative, or ~). Supports WAV, MP3, OGG, FLAC, M4A, AAC, OPUS.",
+                  "kind": "filePath"
+            }
+      ],
+      },
+      "load": {
+        summary: "Load a stored sample by hash and return a SampleResult object",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "hash",
+                  "summary": "Full or prefix hash from sn.list().",
+                  "kind": "sampleHash"
+            }
+      ],
+      },
+      "list": {
+        summary: "List stored samples and features in the database",
+        visibility: "porcelain",
+        params: [],
+      },
+      "current": {
+        summary: "Return the currently loaded sample, or null",
+        visibility: "porcelain",
+        returns: "CurrentSamplePromise",
+        params: [],
+      },
+      "stop": {
+        summary: "Stop all active sample playback and looping voices",
+        visibility: "porcelain",
+        params: [],
+      },
+      "inputs": {
+        summary: "List available audio input devices. Use the index shown to open a device with sn.dev(index).",
+        visibility: "porcelain",
+        params: [],
+      },
+      "dev": {
+        summary: "Open an audio input device by index for recording. Call device.record() to start recording.",
+        visibility: "porcelain",
+        returns: "AudioDeviceResult",
+        params: [
+            {
+                  "name": "index",
+                  "summary": "Device index from sn.inputs().",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "bindSample": {
+        summary: "Bind a raw sample record to a SampleResult with bound methods (internal use)",
+        visibility: "plumbing",
+        returns: "SampleResult",
+        params: [],
+      },
+    },
+  },
+  "corpus": {
+    name: "corpus",
+    summary: "KDTree corpus for nearest-neighbor resynthesis",
+    visibility: "porcelain",
+    methods: {
+      "build": {
+        summary: "Build a KDTree from onset slices of an audio file. Requires sample.onsets() and sample.slice() first.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "featureHashOverride",
+                  "summary": "Override the feature hash (advanced use).",
+                  "kind": "sampleHash"
+            },
+            {
+                  "name": "source",
+                  "summary": "Audio source (SampleResult, hash string, or omit to use current audio).",
+                  "kind": "typed",
+                  "expectedType": "SampleResult"
+            }
+      ],
+      },
+      "query": {
+        summary: "Find k nearest corpus neighbors for a segment. Returns ranked table of indices and distances.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "k",
+                  "summary": "Number of nearest neighbors to return (default: 5).",
+                  "kind": "plain"
+            },
+            {
+                  "name": "segmentIndex",
+                  "summary": "Index of the query segment.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "resynthesize": {
+        summary: "Concatenate corpus segments by index array and play them back immediately.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "queryIndices",
+                  "summary": "Array of segment indices to concatenate and play.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "env": {
+    name: "env",
+    summary: "Runtime introspection — inspect variables, globals, and functions",
+    visibility: "porcelain",
+    methods: {
+      "vars": {
+        summary: "List user-defined bindings in scope. Each entry shows name, type, callable flag, and preview.",
+        visibility: "porcelain",
+        returns: "EnvScopeResult",
+        params: [],
+      },
+      "globals": {
+        summary: "List Bounce-provided globals. Each entry shows name, type, callable flag, and preview.",
+        visibility: "porcelain",
+        returns: "EnvScopeResult",
+        params: [],
+      },
+      "inspect": {
+        summary: "Inspect one runtime binding or value. Pass a name string to resolve by name, or pass a value directly.",
+        visibility: "porcelain",
+        returns: "EnvInspectionResult",
+        params: [
+            {
+                  "name": "nameOrValue",
+                  "summary": "Variable name string or a direct value to inspect.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "functions": {
+        summary: "List callable members on a value, or all user-defined functions if no argument given.",
+        visibility: "porcelain",
+        returns: "EnvFunctionListResult",
+        params: [
+            {
+                  "name": "nameOrValue",
+                  "summary": "Value or name to inspect. Omit to list all user-defined functions.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "dev": {
+        summary: "Toggle developer mode to show or hide plumbing commands.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "toggle",
+                  "summary": "True to enable, false to disable. Omit to query current state.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "proj": {
+    name: "proj",
+    summary: "Manage Bounce projects — create, switch, and list",
+    visibility: "porcelain",
+    methods: {
+      "current": {
+        summary: "Return the active project and its stored counts.",
+        visibility: "porcelain",
+        returns: "ProjectResult",
+        params: [],
+      },
+      "list": {
+        summary: "List all projects with sample, feature, and command counts.",
+        visibility: "porcelain",
+        returns: "ProjectListResult",
+        params: [],
+      },
+      "load": {
+        summary: "Load a project by name, creating it if needed.",
+        visibility: "porcelain",
+        returns: "ProjectResult",
+        params: [
+            {
+                  "name": "name",
+                  "summary": "Project name to load or create.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "rm": {
+        summary: "Remove a project and all its scoped data. The current project cannot be removed.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "name",
+                  "summary": "Name of the project to remove.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "vis": {
+    name: "vis",
+    summary: "Build and manage waveform and analysis visualizations",
+    visibility: "porcelain",
+    methods: {
+      "waveform": {
+        summary: "Create a draft VisSceneResult for a sample waveform. Chain .overlay()/.panel()/.title() and call .show() to render.",
+        visibility: "porcelain",
+        returns: "VisScene",
+        params: [
+            {
+                  "name": "sampleOrPromise",
+                  "summary": "Resolved SampleResult or SamplePromise to visualize.",
+                  "kind": "typed",
+                  "expectedType": "SampleResult"
+            }
+      ],
+      },
+      "stack": {
+        summary: "Build multiple visualization scenes in one chained expression. Add scenes with .waveform(), render all with .show().",
+        visibility: "porcelain",
+        returns: "VisStack",
+        params: [],
+      },
+      "list": {
+        summary: "List currently shown visualization scenes.",
+        visibility: "porcelain",
+        returns: "VisSceneListResult",
+        params: [],
+      },
+      "remove": {
+        summary: "Remove a shown visualization scene by id.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "id",
+                  "summary": "Scene id from vis.list().",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "clear": {
+        summary: "Remove all shown visualization scenes.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+    },
+  },
+  "inst": {
+    name: "inst",
+    summary: "Create and manage sample-based and synthesizer instruments",
+    visibility: "porcelain",
+    methods: {
+      "sampler": {
+        summary: "Create a sampler instrument. Load samples per MIDI note with .loadSample(note, sample), trigger with .noteOn/.noteOff.",
+        visibility: "porcelain",
+        returns: "InstrumentResult",
+        params: [
+            {
+                  "name": "opts",
+                  "summary": "{ name: string, polyphony?: number }. name is required.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "granular": {
+        summary: "Create a new granular synthesis instrument. Load source with .load(sample), control with .set({ position, grainSize, density, ... }).",
+        visibility: "porcelain",
+        returns: "InstrumentResult",
+        params: [
+            {
+                  "name": "opts",
+                  "summary": "{ name: string, polyphony?: number }. name is required.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "list": {
+        summary: "List all instruments in the current session, showing name, kind, and sample count.",
+        visibility: "porcelain",
+        returns: "InstrumentListResult",
+        params: [],
+      },
+      "get": {
+        summary: "Get an existing instrument by name. Returns the instrument object with all methods attached.",
+        visibility: "porcelain",
+        returns: "InstrumentResult",
+        params: [
+            {
+                  "name": "name",
+                  "summary": "Instrument name.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "midi": {
+    name: "midi",
+    summary: "MIDI recording and playback",
+    visibility: "porcelain",
+    methods: {
+      "devices": {
+        summary: "List available MIDI input devices on the system.",
+        visibility: "porcelain",
+        returns: "MidiDevicesResult",
+        params: [],
+      },
+      "open": {
+        summary: "Open the MIDI input device at the given index (from midi.devices()). Only one device can be open at a time.",
+        visibility: "porcelain",
+        returns: "MidiDeviceResult",
+        params: [
+            {
+                  "name": "index",
+                  "summary": "Device index from midi.devices().",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "close": {
+        summary: "Close the currently open MIDI input device.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "record": {
+        summary: "Start MIDI recording. Returns a handle (call h.stop()) or a timed MidiSequencePromise when opts.duration is set.",
+        visibility: "porcelain",
+        returns: "MidiRecordingHandle",
+        params: [
+            {
+                  "name": "opts",
+                  "summary": "Recording options: { duration?: number, name?: string }.",
+                  "kind": "plain"
+            },
+            {
+                  "name": "inst",
+                  "summary": "Target instrument to associate with the recording.",
+                  "kind": "typed",
+                  "expectedType": "InstrumentResult"
+            }
+      ],
+      },
+      "sequences": {
+        summary: "List all MIDI sequences saved in the current project.",
+        visibility: "porcelain",
+        returns: "MidiSequencesResult",
+        params: [],
+      },
+      "load": {
+        summary: "Import a .mid file as a transient MidiSequenceResult (not auto-saved to the project).",
+        visibility: "porcelain",
+        returns: "MidiSequence",
+        params: [
+            {
+                  "name": "filePath",
+                  "summary": "Absolute path to the .mid file.",
+                  "kind": "filePath"
+            }
+      ],
+      },
+      "__injectEvent": {
+        summary: "Inject a raw MIDI event for testing.",
+        visibility: "plumbing",
+        params: [
+            {
+                  "name": "data2",
+                  "summary": "MIDI data byte 2.",
+                  "kind": "plain"
+            },
+            {
+                  "name": "data1",
+                  "summary": "MIDI data byte 1.",
+                  "kind": "plain"
+            },
+            {
+                  "name": "status",
+                  "summary": "MIDI status byte.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "mx": {
+    name: "mx",
+    summary: "8-channel mixer with channel controls, preview channel, and master bus",
+    visibility: "porcelain",
+    methods: {
+      "ch": {
+        summary: "Get a ChannelControl for channel n (1–8). All methods (.gain, .pan, .mute, .solo, .attach, .detach) are chainable.",
+        visibility: "porcelain",
+        returns: "ChannelControl",
+        params: [
+            {
+                  "name": "n",
+                  "summary": "Channel index, 1–8.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+};
+
+export interface ReplTypeEntry {
+  name: string;
+  summary: string;
+  methods: Record<string, ReplRegistryEntry>;
+}
+
+export const replTypes: Record<string, ReplTypeEntry> = {
+  "InstrumentResult": {
+    name: "InstrumentResult",
+    summary: "A sampler or granular instrument",
+    methods: {
+    },
+  },
+  "SliceFeature": {
+    name: "SliceFeature",
+    summary: "Onset-sliced audio feature result. Contains slices[] boundary array.",
+    methods: {
+      "slice": {
+        summary: "Re-run the onset slicer with updated options.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Slice analysis options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "playSlice": {
+        summary: "Preview a specific slice by index.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "index?",
+                  "summary": "Slice index (0-based).",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "toSampler": {
+        summary: "Create a sampler instrument from the slices.",
+        visibility: "porcelain",
+        returns: "InstrumentResult",
+        params: [
+            {
+                  "name": "opts",
+                  "summary": "Sampler options: { name, startNote?, polyphony? }.",
+                  "kind": "options"
+            }
+      ],
+      },
+    },
+  },
+  "NmfFeature": {
+    name: "NmfFeature",
+    summary: "NMF feature result. Contains components, bases, and activations matrices.",
+    methods: {
+      "sep": {
+        summary: "Separate the NMF components into audio files.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "opts?",
+                  "summary": "Separation options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "playComponent": {
+        summary: "Preview a specific NMF component by index.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "index?",
+                  "summary": "Component index (0-based).",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "NxFeature": {
+    name: "NxFeature",
+    summary: "NMF cross-synthesis feature result",
+    methods: {
+      "playComponent": {
+        summary: "Preview a specific NX cross-synthesis component by index.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "index?",
+                  "summary": "Component index (0-based).",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "MfccFeature": {
+    name: "MfccFeature",
+    summary: "MFCC (Mel-frequency cepstral coefficients) feature result",
+    methods: {
+    },
+  },
+  "AudioDevice": {
+    name: "AudioDevice",
+    summary: "An audio input device for recording",
+    methods: {
+      "record": {
+        summary: "Start recording. Returns a RecordingHandle (manual stop) or SamplePromise (when opts.duration is set).",
+        visibility: "porcelain",
+        returns: "RecordingHandle | SamplePromise",
+        params: [
+            {
+                  "name": "opts",
+                  "summary": "Recording options: { duration?, overwrite? }.",
+                  "kind": "plain"
+            },
+            {
+                  "name": "sampleId",
+                  "summary": "Name for the new sample.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "RecordingHandle": {
+    name: "RecordingHandle",
+    summary: "A handle to an active audio recording session",
+    methods: {
+      "stop": {
+        summary: "Stop recording and return a SamplePromise resolving to SampleResult.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [],
+      },
+    },
+  },
+  "Sample": {
+    name: "Sample",
+    summary: "A loaded audio sample with analysis and playback methods",
+    methods: {
+      "play": {
+        summary: "Play this sample from start to finish.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [],
+      },
+      "stop": {
+        summary: "Stop playback.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "display": {
+        summary: "Display the waveform in the visualization panel.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [],
+      },
+      "slice": {
+        summary: "Onset-slice the sample and store segment boundaries.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Slice analysis options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "sep": {
+        summary: "Separate the sample into NMF components via BufNMF.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "NMF separation options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "granularize": {
+        summary: "Create a GrainCollection for granular synthesis.",
+        visibility: "porcelain",
+        returns: "GrainCollectionPromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Granularize options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "onsetSlice": {
+        summary: "Analyse onset positions using FluidOnsetSlice.",
+        visibility: "porcelain",
+        returns: "SliceFeaturePromise",
+        params: [
+            {
+                  "name": "opts?",
+                  "summary": "Onset analysis options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "ampSlice": {
+        summary: "Analyse amplitude-based segment boundaries.",
+        visibility: "porcelain",
+        returns: "SliceFeaturePromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Amplitude slice options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "noveltySlice": {
+        summary: "Analyse novelty-based segment boundaries.",
+        visibility: "porcelain",
+        returns: "SliceFeaturePromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Novelty slice options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "transientSlice": {
+        summary: "Analyse transient-based segment boundaries.",
+        visibility: "porcelain",
+        returns: "SliceFeaturePromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Transient slice options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "nmf": {
+        summary: "Run BufNMF on the sample and return component matrices.",
+        visibility: "porcelain",
+        returns: "NmfFeaturePromise",
+        params: [
+            {
+                  "name": "opts?",
+                  "summary": "NMF options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "mfcc": {
+        summary: "Compute MFCC coefficients for the sample.",
+        visibility: "porcelain",
+        returns: "MfccFeaturePromise",
+        params: [
+            {
+                  "name": "opts?",
+                  "summary": "MFCC options.",
+                  "kind": "options"
+            }
+      ],
+      },
+      "nx": {
+        summary: "Run NMF cross-synthesis with another sample as a target.",
+        visibility: "porcelain",
+        returns: "NxFeaturePromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Cross-synthesis options: { components? }.",
+                  "kind": "options"
+            },
+            {
+                  "name": "other",
+                  "summary": "Target SampleResult for cross-synthesis.",
+                  "kind": "typed",
+                  "expectedType": "SampleResult"
+            }
+      ],
+      },
+    },
+  },
+  "MidiSequence": {
+    name: "MidiSequence",
+    summary: "A MIDI sequence (recorded or imported)",
+    methods: {
+      "play": {
+        summary: "Play this sequence through an instrument. Returns a MidiSequencePromise.",
+        visibility: "porcelain",
+        returns: "MidiSequencePromise",
+        params: [
+            {
+                  "name": "inst",
+                  "summary": "Target instrument to play through.",
+                  "kind": "typed",
+                  "expectedType": "InstrumentResult"
+            }
+      ],
+      },
+      "stop": {
+        summary: "Stop MIDI playback.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+    },
+  },
+  "MidiRecordingHandle": {
+    name: "MidiRecordingHandle",
+    summary: "A handle to an active MIDI recording session",
+    methods: {
+      "stop": {
+        summary: "Stop recording and return a MidiSequencePromise.",
+        visibility: "porcelain",
+        returns: "MidiSequencePromise",
+        params: [],
+      },
+    },
+  },
+  "Pattern": {
+    name: "Pattern",
+    summary: "A compiled X0X step-sequencer pattern",
+    methods: {
+      "play": {
+        summary: "Start playing on mixer channel N (1–8).",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [
+            {
+                  "name": "channel",
+                  "summary": "Mixer channel 1–8.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "stop": {
+        summary: "Stop the pattern on its mixer channel.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+    },
+  },
+  "VisScene": {
+    name: "VisScene",
+    summary: "A visualization scene for a sample",
+    methods: {
+      "title": {
+        summary: "Set the title text for this scene.",
+        visibility: "porcelain",
+        returns: "VisScene",
+        params: [
+            {
+                  "name": "text",
+                  "summary": "Title string to display.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "overlay": {
+        summary: "Add a feature overlay (slice, NMF, or NX) to this scene.",
+        visibility: "porcelain",
+        returns: "VisScene",
+        params: [
+            {
+                  "name": "feature",
+                  "summary": "SliceFeature, NmfFeature, or NxFeature to overlay.",
+                  "kind": "typed",
+                  "expectedType": "SliceFeatureResult | NmfFeatureResult | NxFeatureResult"
+            }
+      ],
+      },
+      "panel": {
+        summary: "Add an NMF feature as a separate panel below the main scene.",
+        visibility: "porcelain",
+        returns: "VisScene",
+        params: [
+            {
+                  "name": "feature",
+                  "summary": "NmfFeature to display as a panel.",
+                  "kind": "typed",
+                  "expectedType": "NmfFeatureResult"
+            }
+      ],
+      },
+      "show": {
+        summary: "Render this scene in the terminal visualization panel.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+      "markShown": {
+        summary: "Record the scene ID after it has been rendered.",
+        visibility: "plumbing",
+        params: [
+            {
+                  "name": "id",
+                  "summary": "Rendered scene identifier.",
+                  "kind": "plain"
+            }
+      ],
+      },
+    },
+  },
+  "VisStack": {
+    name: "VisStack",
+    summary: "A stack of visualization scenes",
+    methods: {
+      "waveform": {
+        summary: "Add a waveform scene for a sample. Replaced at runtime by vis.stack().",
+        visibility: "plumbing",
+        params: [
+            {
+                  "name": "sample",
+                  "summary": "SampleResult to visualize.",
+                  "kind": "typed",
+                  "expectedType": "SampleResult"
+            }
+      ],
+      },
+      "addScene": {
+        summary: "Append a pre-built VisScene to this stack.",
+        visibility: "plumbing",
+        params: [
+            {
+                  "name": "scene",
+                  "summary": "VisSceneResult to add.",
+                  "kind": "typed",
+                  "expectedType": "VisSceneResult"
+            }
+      ],
+      },
+      "title": {
+        summary: "Set the title of the most recently added scene.",
+        visibility: "porcelain",
+        returns: "VisStack",
+        params: [
+            {
+                  "name": "text",
+                  "summary": "Title string to display.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "overlay": {
+        summary: "Add a feature overlay to the most recently added scene.",
+        visibility: "porcelain",
+        returns: "VisStack",
+        params: [
+            {
+                  "name": "feature",
+                  "summary": "SliceFeature, NmfFeature, or NxFeature to overlay.",
+                  "kind": "typed",
+                  "expectedType": "SliceFeatureResult | NmfFeatureResult | NxFeatureResult"
+            }
+      ],
+      },
+      "panel": {
+        summary: "Add an NMF feature panel to the most recently added scene.",
+        visibility: "porcelain",
+        returns: "VisStack",
+        params: [
+            {
+                  "name": "feature",
+                  "summary": "NmfFeature to display as a panel.",
+                  "kind": "typed",
+                  "expectedType": "NmfFeatureResult"
+            }
+      ],
+      },
+      "show": {
+        summary: "Render all scenes in this stack in the visualization panel.",
+        visibility: "porcelain",
+        returns: "BounceResult",
+        params: [],
+      },
+    },
   },
 };

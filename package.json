@@ -9,7 +9,7 @@
     "build:native": "node-gyp rebuild",
     "build:ts": "tsc",
     "validate:repl": "npx tsx scripts/validate-repl-descriptors.ts",
-    "build:electron": "npm run generate:repl-artifacts && npm run validate:repl && tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm",
+    "build:electron": "npm run generate:repl-artifacts && npm run validate:repl && tsc -p tsconfig.electron.json && tsc -p tsconfig.renderer.json && cp src/renderer/index.html dist/renderer/ && cp -r node_modules/@xterm dist/xterm && cp src/shared/repl-environment.d.ts dist/shared/",
     "build": "npm run build:deps && npm run build:native && npm run build:ts",
     "rebuild": "npm run build:deps && npx @electron/rebuild --force",
     "dev": "npm run rebuild && npm run start:electron",

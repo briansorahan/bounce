@@ -1,6 +1,6 @@
 import type { CompletionContext } from "../../shared/completion-context.js";
 import type { Completer, PredictionResult } from "../../shared/completer.js";
-import { getNamespace, getType } from "../../shared/repl-registration.js";
+import { replNamespaces, replTypes } from "../../shared/repl-registry.generated.js";
 
 /**
  * Suggests methods / properties after a `.` on a known object.
@@ -44,19 +44,19 @@ export class PropertyCompleter implements Completer {
     objectName: string,
   ): Record<string, { summary: string; visibility: string; returns?: string; params: Array<{ name: string }> }> {
     // 1. Check registered namespaces
-    const ns = getNamespace(objectName);
+    const ns = replNamespaces[objectName];
     if (ns) return ns.methods;
 
     // 2. Resolve via session variable inferredType
     const sessionVar = context.sessionVariables.find((v) => v.name === objectName);
     if (sessionVar?.inferredType) {
-      const type = getType(sessionVar.inferredType);
+      const type = replTypes[sessionVar.inferredType];
       if (type) return type.methods;
 
       // Handle Promise<T> — unwrap the T
       const promiseMatch = /^Promise<(.+)>$/.exec(sessionVar.inferredType);
       if (promiseMatch) {
-        const inner = getType(promiseMatch[1]);
+        const inner = replTypes[promiseMatch[1]];
         if (inner) return inner.methods;
       }
     }
@@ -66,7 +66,7 @@ export class PropertyCompleter implements Completer {
       ? context.position.resolvedType
       : undefined;
     if (resolved?.name) {
-      const type = getType(resolved.name);
+      const type = replTypes[resolved.name];
       if (type) return type.methods;
     }
 

@@ -6,20 +6,25 @@ import {
   Page,
 } from "@playwright/test";
 import path from "path";
+import * as fs from "fs";
+import * as os from "os";
 import { ELECTRON_MAIN, ELECTRON_ARGS, waitForReady, closeApp } from "./helpers";
 
 const electronPath = require("electron") as string;
 
 let electronApp: ElectronApplication;
 let window: Page;
+let userDataDir: string;
 
 test.beforeAll(async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-nmf-component-context-"));
   electronApp = await electron.launch({
     executablePath: electronPath,
     args: [ELECTRON_MAIN, ...ELECTRON_ARGS],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
+      BOUNCE_USER_DATA_PATH: userDataDir,
     },
   });
   window = await electronApp.firstWindow();
@@ -29,6 +34,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (electronApp) {
     await closeApp(electronApp);
+  }
+  if (userDataDir) {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
 

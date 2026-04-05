@@ -37,6 +37,11 @@ export interface TypeDescriptor {
   summary: string;
   /** Optional {{propertyName}} template for terminal display. */
   terminalSummary?: string;
+  /**
+   * Optional conventional REPL variable name for this type (e.g. "sample" for SampleResult).
+   * Used by the help renderer to prefix method signatures with the instance name.
+   */
+  instanceName?: string;
   methods: Record<string, MethodDescriptor>;
 }
 
@@ -143,6 +148,37 @@ export function param(
 }
 
 /**
+ * Directly registers method metadata on a class prototype without using decorators.
+ * Use this when the method cannot be decorated (e.g. it's an instance field rather than
+ * a prototype method). Must be called before the @replType class decorator runs so that
+ * collectMethods() can pick it up.
+ */
+export function registerMethod(
+  proto: object,
+  methodName: string,
+  meta: { summary: string; visibility?: Visibility; returns?: string },
+  params?: Array<{ name: string; summary: string; kind?: ParamKind; expectedType?: string }>,
+): void {
+  const mMap = getOrCreate(methodMeta, proto);
+  const existing = mMap.get(methodName) ?? { summary: "", visibility: "porcelain" as Visibility };
+  mMap.set(methodName, {
+    ...existing,
+    summary: meta.summary,
+    visibility: meta.visibility ?? "porcelain",
+    returns: meta.returns,
+  });
+  if (params?.length) {
+    const pMap = getOrCreate(paramMeta, proto);
+    pMap.set(methodName, params.map((p) => ({
+      name: p.name,
+      summary: p.summary,
+      kind: p.kind ?? "plain",
+      expectedType: p.expectedType,
+    })));
+  }
+}
+
+/**
  * Registers a REPL namespace (e.g. sn, fs, vis).
  * Automatically injects a help() method onto the class prototype.
  */
@@ -165,7 +201,7 @@ export function namespace(
  */
 export function replType(
   name: string,
-  meta: { summary: string; terminalSummary?: string },
+  meta: { summary: string; terminalSummary?: string; instanceName?: string },
 ): ClassDecorator {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   return (target: Function) => {
@@ -179,6 +215,14 @@ export function replType(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function injectHelp(proto: object, descriptor: NamespaceDescriptor | TypeDescriptor): void {
+  const isNamespace = "visibility" in descriptor;
+  if (!isNamespace) {
+    // For @replType: preserve a real custom help() already defined in the class body.
+    if (Object.prototype.hasOwnProperty.call(proto, "help")) return;
+    // Skip types with no registered methods — let HelpableResult.prototype.help
+    // use the helpFactory passed at construction time (e.g. InstrumentResult).
+    if (Object.keys(descriptor.methods).length === 0) return;
+  }
   (proto as Record<string, unknown>).help = function () {
     return _helpRenderer(descriptor);
   };
@@ -216,13 +260,14 @@ function buildNamespaceDescriptor(
 
 function buildTypeDescriptor(
   name: string,
-  meta: { summary: string; terminalSummary?: string },
+  meta: { summary: string; terminalSummary?: string; instanceName?: string },
   proto: object,
 ): TypeDescriptor {
   return {
     name,
     summary: meta.summary,
     terminalSummary: meta.terminalSummary,
+    instanceName: meta.instanceName,
     methods: collectMethods(proto),
   };
 }

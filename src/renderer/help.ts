@@ -1,6 +1,6 @@
 import { BounceResult } from "./results/base.js";
 import type { NamespaceDescriptor, TypeDescriptor, MethodDescriptor, ParamDescriptor } from "../shared/repl-registry.js";
-import { getType, getDevMode } from "../shared/repl-registration.js";
+import { getType, getNamespace, getDevMode } from "../shared/repl-registration.js";
 
 export interface OptsPropertyHelp {
   name: string;
@@ -292,6 +292,7 @@ export function renderDescriptorHelp(
 ): BounceResult {
   const devMode = getDevMode();
   const isNamespace = "visibility" in descriptor;
+  const instanceName = !isNamespace ? (descriptor as TypeDescriptor).instanceName : undefined;
   const visibleEntries = Object.entries(descriptor.methods).filter(
     ([, m]) => devMode || m.visibility !== "plumbing",
   );
@@ -301,7 +302,12 @@ export function renderDescriptorHelp(
   ];
 
   if (visibleEntries.length > 0) {
-    const sigs = visibleEntries.map(([name, m]) => buildMethodSignature(name, m.params));
+    const rawSigs = visibleEntries.map(([name, m]) => buildMethodSignature(name, m.params));
+    const sigs = isNamespace
+      ? rawSigs.map((s) => `${descriptor.name}.${s}`)
+      : instanceName
+        ? rawSigs.map((s) => `${instanceName}.${s}`)
+        : rawSigs;
     const maxSig = sigs.reduce((max, s) => Math.max(max, s.length), 0);
     lines.push("");
     if (!isNamespace) lines.push("  \x1b[90mMethods:\x1b[0m");
@@ -311,6 +317,16 @@ export function renderDescriptorHelp(
       const pad = " ".repeat(Math.max(1, maxSig - sig.length + 2));
       const indent = isNamespace ? "  " : "    ";
       lines.push(`${indent}\x1b[33m${sig}\x1b[0m${pad}${m.summary}`);
+    }
+
+    // For types with an instanceName, add a hint for methods that have options.
+    if (!isNamespace && instanceName) {
+      const methodsWithParams = visibleEntries.filter(([, m]) => m.params.length > 0);
+      if (methodsWithParams.length > 0) {
+        const hints = methodsWithParams.map(([name]) => `${instanceName}.${name}.help()`).join(", ");
+        lines.push("");
+        lines.push(`  \x1b[90mFor option details: ${hints}\x1b[0m`);
+      }
     }
   }
 
@@ -337,6 +353,29 @@ export function attachMethodHelpFromRegistry(
     const bound = original.bind(instance);
     instance[methodName] = Object.assign(bound, {
       help: () => renderMethodHelpFromDescriptor(typeName, methodName, methodDesc),
+    });
+  }
+}
+
+/**
+ * Attach .help() to each porcelain method on a namespace instance using the registry.
+ * Skips plumbing methods and methods that already have .help().
+ */
+export function attachNamespaceMethodHelp(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  instance: any,
+  namespaceName: string,
+): void {
+  const nd = getNamespace(namespaceName);
+  if (!nd) return;
+  for (const [methodName, methodDesc] of Object.entries(nd.methods)) {
+    if (methodDesc.visibility === "plumbing") continue;
+    const original = instance[methodName];
+    if (typeof original !== "function") continue;
+    if (typeof original.help === "function") continue;
+    const bound = original.bind(instance);
+    instance[methodName] = Object.assign(bound, {
+      help: () => renderMethodHelpFromDescriptor(namespaceName, methodName, methodDesc),
     });
   }
 }
