@@ -320,9 +320,12 @@ function emitEnvFile(classes: ClassMeta[]): string {
       }
       lines.push("};", "");
     } else {
+      const publicMethods = methods.filter((m) => m.visibility !== "plumbing");
+      if (publicMethods.length === 0) {
+        lines.push("// eslint-disable-next-line @typescript-eslint/no-empty-object-type");
+      }
       lines.push(`interface ${registeredName} {`);
-      for (const m of methods) {
-        if (m.visibility === "plumbing") continue;
+      for (const m of publicMethods) {
         lines.push(`  ${m.signatureText}`);
       }
       lines.push("}", "");

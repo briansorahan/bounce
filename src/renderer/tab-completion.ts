@@ -242,7 +242,7 @@ export class TabCompletion {
   private getActivePrefix(): string {
     const text = this.lastBuffer.slice(0, this.lastCursor);
     // String literal: prefix is the content after the last quote character
-    const strMatch = /['"]([\w./~\-]*)$/.exec(text);
+    const strMatch = /['"]([\w./~-]*)$/.exec(text);
     if (strMatch) return strMatch[1];
     // Property access: prefix is the identifier after the dot (possibly empty)
     const dotMatch = /\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(text);

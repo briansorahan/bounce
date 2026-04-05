@@ -3,6 +3,7 @@
  * AUTO-GENERATED — do not edit by hand. Run `npm run generate:repl-artifacts`.
  */
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface InstrumentResult {
 }
 
@@ -21,6 +22,7 @@ interface NxFeature {
   playComponent(index: unknown): SamplePromise;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface MfccFeature {
 }
 

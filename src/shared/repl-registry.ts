@@ -150,6 +150,7 @@ export function namespace(
   name: string,
   meta: { summary: string; visibility?: Visibility },
 ): ClassDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   return (target: Function) => {
     const proto = target.prototype as object;
     const descriptor = buildNamespaceDescriptor(name, meta, proto);
@@ -166,6 +167,7 @@ export function replType(
   name: string,
   meta: { summary: string; terminalSummary?: string },
 ): ClassDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   return (target: Function) => {
     const proto = target.prototype as object;
     const descriptor = buildTypeDescriptor(name, meta, proto);
