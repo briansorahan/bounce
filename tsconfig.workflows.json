@@ -6,15 +6,22 @@
     "noEmit": true
   },
   "include": [
-    "src/shared/rpc/**/*",
-    "src/electron/services/state/storage.ts",
-    "src/electron/services/state/index.ts",
+    "src/shared/**/*",
+    "src/electron/audio-extensions.ts",
+    "src/electron/settings-store.ts",
     "src/electron/services/audio-file/index.ts",
+    "src/electron/services/filesystem/index.ts",
+    "src/electron/services/project/index.ts",
+    "src/electron/services/instrument/index.ts",
+    "src/electron/services/midi/index.ts",
+    "src/electron/services/mixer/index.ts",
+    "src/electron/services/repl-env/index.ts",
     "tests/workflows/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/electron/services/state/database-storage.ts"
+    "src/electron/services/persistence/index.ts",
+    "src/electron/services/query/index.ts"
   ]
 }

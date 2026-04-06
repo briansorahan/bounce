@@ -3,8 +3,8 @@
  *
  * Runs via: tsx tests/workflows/run.ts
  *
- * No Electron. No native addons. Services are backed by InMemoryStateStorage
- * so this starts in milliseconds and works in any Node environment.
+ * No Electron. No native addons. Services are backed by InMemoryStore +
+ * EventBusImpl so this starts in milliseconds and works in any Node environment.
  */
 
 import { run, printResults } from "./runner";
@@ -13,6 +13,7 @@ import { buildWorkflow as buildReadAudioFileWorkflow } from "./read-audio-file.w
 import { buildWorkflow as buildProjectsWorkflow } from "./projects.workflow";
 import { buildWorkflow as buildListSamplesWorkflow } from "./list-samples.workflow";
 import { buildWorkflow as buildFilesystemWorkflow } from "./filesystem.workflow";
+import { buildWorkflow as buildAudioFormatsWorkflow } from "./audio-formats.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -22,6 +23,7 @@ async function main() {
     buildProjectsWorkflow(),
     buildListSamplesWorkflow(),
     buildFilesystemWorkflow(),
+    buildAudioFormatsWorkflow(),
     // Register new workflows here as they are created.
   ];
 

@@ -10,7 +10,7 @@
  *   - Valid WAV file → hash is a 64-char hex SHA-256
  *   - Valid WAV file → sampleRate matches the WAV header
  *   - Valid WAV file → channelData is a non-empty number array
- *   - Valid WAV file → sample is stored and retrievable from StateService
+ *   - Valid WAV file → sample is stored and retrievable from QueryService
  *   - Valid WAV file → sample appears in listSamples
  *   - Re-reading the same file → identical hash (deterministic)
  *   - File with no audio extension → BounceError SAMPLE_READ_FAILED
@@ -93,19 +93,17 @@ export function buildWorkflow() {
 
   // ---- Checks: persistence -------------------------------------------------
 
-  wf.check("sample-stored-in-state-service", async (rawCtx) => {
+  wf.check("sample-stored-in-query-service", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const sample = await ctx.stateClient.invoke("getSampleByHash", {
-      hash: ctx.firstRead!.hash,
-    });
-    assert.ok(sample !== null, "sample should be stored in StateService");
+    const sample = await ctx.queryService.getSampleByHash(ctx.firstRead!.hash);
+    assert.ok(sample !== null, "sample should be stored and visible via QueryService");
     assert.equal(sample!.sample_rate, 44100);
     assert.equal(sample!.sample_type, "raw");
   }, { after: [readWav] });
 
   wf.check("sample-appears-in-list-samples", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const samples = await ctx.stateClient.invoke("listSamples", {});
+    const samples = await ctx.queryService.listSamples();
     const found = samples.find((s) => s.hash === ctx.firstRead!.hash);
     assert.ok(found, "sample should appear in listSamples result");
   }, { after: [readWav] });
@@ -153,7 +151,7 @@ export function buildWorkflow() {
       "sample-rate-is-44100",
       "channel-data-is-non-empty-array",
       "file-path-is-set",
-      "sample-stored-in-state-service",
+      "sample-stored-in-query-service",
       "sample-appears-in-list-samples",
       "re-reading-same-file-gives-identical-hash",
       "rejects-file-with-non-audio-extension",

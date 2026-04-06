@@ -1,7 +1,7 @@
 /**
  * Workflow: projects
  *
- * Tests the StateService project management IPC contract.
+ * Tests the ProjectService project management IPC contract.
  * Corresponds to tests/projects.spec.ts — covers project creation,
  * listing with scoped sample counts, and removal constraints, without
  * any Electron/renderer dependency.
@@ -23,7 +23,7 @@ import * as fs from "fs";
 import { createWorkflow } from "./types";
 import { createTestWav } from "./helpers";
 import type { WorkflowServices } from "./helpers";
-import type { ProjectListEntry } from "../../src/shared/rpc/state.rpc";
+import type { ProjectListEntry } from "../../src/shared/domain-types";
 
 interface Ctx extends WorkflowServices, Record<string, unknown> {
   testDir?: string;
@@ -47,7 +47,7 @@ export function buildWorkflow() {
 
   const getDefault = wf.action("get-default-project", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const defaultProject = await ctx.stateClient.invoke("getCurrentProject", {});
+    const defaultProject = await ctx.queryService.getCurrentProject();
     return { defaultProject };
   }, { after: [setup] });
 
@@ -60,7 +60,7 @@ export function buildWorkflow() {
 
   const loadDrums = wf.action("load-drums-project", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const drumsProject = await ctx.stateClient.invoke("loadProject", { name: "drums" });
+    const drumsProject = await ctx.projectClient.invoke("loadProject", { name: "drums" });
     return { drumsProject };
   }, { after: [getDefault] });
 
@@ -78,7 +78,7 @@ export function buildWorkflow() {
 
   const listAfterRead = wf.action("list-projects-after-read", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const projects = await ctx.stateClient.invoke("listProjects", {});
+    const projects = await ctx.queryService.listProjects();
     return { projects };
   }, { after: [readFile] });
 
@@ -108,7 +108,7 @@ export function buildWorkflow() {
   wf.check("cannot-remove-current-project", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
     await assert.rejects(
-      ctx.stateClient.invoke("removeProject", { name: "drums" }),
+      ctx.projectClient.invoke("removeProject", { name: "drums" }),
       (err: Error) => {
         assert.ok(
           err.message.includes("Cannot remove the current project"),
@@ -120,23 +120,22 @@ export function buildWorkflow() {
   }, { after: [listAfterRead] });
 
   // ---- Phase 4: switch to default, then remove drums -----------------------
-  // loadDefault depends on the cannot-remove check so it runs after it.
 
   const loadDefault = wf.action("load-default-project", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    await ctx.stateClient.invoke("loadProject", { name: "default" });
+    await ctx.projectClient.invoke("loadProject", { name: "default" });
     return {};
   }, { after: ["cannot-remove-current-project"] });
 
   const removeDrums = wf.action("remove-drums-project", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const removeResult = await ctx.stateClient.invoke("removeProject", { name: "drums" });
+    const removeResult = await ctx.projectClient.invoke("removeProject", { name: "drums" });
     return { removeResult };
   }, { after: [loadDefault] });
 
   const listAfterRemove = wf.action("list-projects-after-remove", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const projectsAfterRemove = await ctx.stateClient.invoke("listProjects", {});
+    const projectsAfterRemove = await ctx.queryService.listProjects();
     return { projectsAfterRemove };
   }, { after: [removeDrums] });
 

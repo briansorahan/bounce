@@ -15,19 +15,22 @@ import type {
   AudioFileRpc,
   ReadAudioFileResult,
 } from "../../../shared/rpc/audio-file.rpc";
-import type { ServiceClient } from "../../../shared/rpc/types";
-import type { StateRpc } from "../../../shared/rpc/state.rpc";
+import type { EventBus } from "../../../shared/event-bus";
+import type { ISampleQuery, ICwdQuery } from "../../../shared/query-interfaces";
+import type { SampleListRecord } from "../../../shared/domain-types";
 
 /**
- * AudioFileService — decode audio files, compute hashes, persist via StateService.
+ * AudioFileService — decode audio files, compute hashes, persist via EventBus.
  *
- * Stateless except for its dependency on StateService. Never accesses SQLite
- * directly. CPU-light (decode + hash) — runs in the main process.
- *
- * Constructor dependency: StateService client (ServiceClient<StateRpc>-compatible).
+ * Writes a SampleLoadedEvent to the bus on each new file read.
+ * Reads (getSampleByHash, listSamples) delegate to ISampleQuery / ICwdQuery.
  */
 export class AudioFileService implements AudioFileHandlers {
-  constructor(private state: ServiceClient<StateRpc>) {}
+  constructor(
+    private bus: EventBus,
+    private sampleQuery: ISampleQuery,
+    private cwdQuery: ICwdQuery,
+  ) {}
 
   async readAudioFile(params: { filePathOrHash: string }): Promise<ReadAudioFileResult> {
     const { filePathOrHash } = params;
@@ -39,14 +42,14 @@ export class AudioFileService implements AudioFileHandlers {
       !filePathOrHash.includes("\\");
 
     if (isHash) {
-      const sample = await this.state.invoke("getSampleByHash", { hash: filePathOrHash });
+      const sample = await this.sampleQuery.getSampleByHash(filePathOrHash);
       if (!sample) {
         throw new BounceError(
           "SAMPLE_NOT_FOUND",
           `Sample with hash "${filePathOrHash.substring(0, 8)}..." not found in database.`,
         );
       }
-      const rawMeta = await this.state.invoke("getRawMetadata", { hash: sample.hash });
+      const rawMeta = await this.sampleQuery.getRawMetadata(sample.hash);
       if (!rawMeta) {
         throw new BounceError("SAMPLE_NOT_FOUND", `No file path found for sample hash "${sample.hash.substring(0, 8)}..."`);
       }
@@ -63,11 +66,10 @@ export class AudioFileService implements AudioFileHandlers {
     }
 
     // --- File path ---
-    // Resolve relative paths against the stored cwd.
     let resolvedPath = filePathOrHash;
     if (!path.isAbsolute(filePathOrHash)) {
       const expanded = SettingsStore.expandHome(filePathOrHash);
-      const cwd = await this.state.invoke("getCwd", {});
+      const cwd = await this.cwdQuery.getCwd();
       resolvedPath = path.resolve(cwd, expanded);
     }
 
@@ -87,7 +89,8 @@ export class AudioFileService implements AudioFileHandlers {
       const audioDataBuffer = Buffer.from(channelData.buffer);
       const hash = crypto.createHash("sha256").update(audioDataBuffer).digest("hex");
 
-      await this.state.invoke("storeRawSample", {
+      this.bus.emit({
+        type: "SampleLoaded",
         hash,
         filePath: resolvedPath,
         sampleRate: audioBuffer.sampleRate,
@@ -111,19 +114,14 @@ export class AudioFileService implements AudioFileHandlers {
     }
   }
 
-  async listSamples(_params: Record<string, never>): Promise<AudioFileRpc["listSamples"]["result"]> {
-    return this.state.invoke("listSamples", {});
+  async listSamples(_params: Record<string, never>): Promise<SampleListRecord[]> {
+    return this.sampleQuery.listSamples();
   }
 
-  /**
-   * Register all handlers on the given JSON-RPC connection.
-   * The caller must call `connection.listen()` after this.
-   */
   listen(connection: MessageConnection): void {
     registerAudioFileHandlers(connection, this);
   }
 
-  /** Convenience wrapper — returns a typed client over the given connection. */
   asClient(clientConnection: MessageConnection): ReturnType<typeof createAudioFileClient> {
     return createAudioFileClient(clientConnection);
   }

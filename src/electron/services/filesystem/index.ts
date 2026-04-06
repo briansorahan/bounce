@@ -1,6 +1,5 @@
 import * as path from "path";
 import * as fs from "fs";
-import * as os from "os";
 import type { MessageConnection } from "vscode-jsonrpc";
 import { SettingsStore } from "../../settings-store";
 import { AUDIO_EXTENSIONS } from "../../audio-extensions";
@@ -16,8 +15,8 @@ import type {
   LsResult,
   WalkResult,
 } from "../../../shared/rpc/filesystem.rpc";
-import type { ServiceClient } from "../../../shared/rpc/types";
-import type { StateRpc } from "../../../shared/rpc/state.rpc";
+import type { EventBus } from "../../../shared/event-bus";
+import type { ICwdQuery } from "../../../shared/query-interfaces";
 
 function direntToFileType(d: fs.Dirent): FileType {
   if (d.isFile()) return "file";
@@ -33,38 +32,37 @@ function direntToFileType(d: fs.Dirent): FileType {
 /**
  * FilesystemService — pwd, cd, ls, glob, walk operations.
  *
- * Uses StateService for cwd persistence so cwd survives across all services
- * that depend on it (e.g. AudioFileService relative path resolution).
- *
- * Constructor dependency: StateService (via ServiceClient<StateRpc>).
+ * Writes a CwdChangedEvent to the bus on cd(). Reads the current cwd via
+ * ICwdQuery (InMemoryPersistenceService applies changes synchronously, so
+ * getCwd() immediately reflects the new path after cd()).
  */
 export class FilesystemService implements FilesystemHandlers {
-  constructor(private state: ServiceClient<StateRpc>) {}
+  constructor(
+    private bus: EventBus,
+    private cwdQuery: ICwdQuery,
+  ) {}
 
   async pwd(_params: Record<string, never>): Promise<string> {
-    return this.state.invoke("getCwd", {});
+    return this.cwdQuery.getCwd();
   }
 
   async cd(params: { dirPath: string }): Promise<string> {
     const resolved = SettingsStore.expandHome(params.dirPath);
-    const abs = path.isAbsolute(resolved)
-      ? resolved
-      : path.resolve(await this.state.invoke("getCwd", {}), resolved);
+    const cwd = await this.cwdQuery.getCwd();
+    const abs = path.isAbsolute(resolved) ? resolved : path.resolve(cwd, resolved);
     const stat = await fs.promises.stat(abs);
     if (!stat.isDirectory()) {
       throw new Error(`Not a directory: ${abs}`);
     }
-    return this.state.invoke("setCwd", { cwd: abs });
+    this.bus.emit({ type: "CwdChanged", cwd: abs });
+    return abs;
   }
 
   async ls(params: { dirPath?: string; showHidden?: boolean }): Promise<LsResult> {
     const showHidden = params.showHidden ?? false;
-    const base = params.dirPath
-      ? SettingsStore.expandHome(params.dirPath)
-      : await this.state.invoke("getCwd", {});
-    const resolved = path.isAbsolute(base)
-      ? base
-      : path.resolve(await this.state.invoke("getCwd", {}), base);
+    const cwd = await this.cwdQuery.getCwd();
+    const base = params.dirPath ? SettingsStore.expandHome(params.dirPath) : cwd;
+    const resolved = path.isAbsolute(base) ? base : path.resolve(cwd, base);
     const dirents = await fs.promises.readdir(resolved, { withFileTypes: true });
     const entries: FsEntry[] = [];
     for (const d of dirents) {
@@ -84,7 +82,7 @@ export class FilesystemService implements FilesystemHandlers {
   }
 
   async glob(params: { pattern: string }): Promise<string[]> {
-    const cwd = await this.state.invoke("getCwd", {});
+    const cwd = await this.cwdQuery.getCwd();
     const results: string[] = [];
     const globFn = (fs.promises as Record<string, unknown>)["glob"] as
       | ((pattern: string, opts: { cwd: string }) => AsyncIterable<string>)
@@ -100,9 +98,8 @@ export class FilesystemService implements FilesystemHandlers {
 
   async walk(params: { dirPath: string }): Promise<WalkResult> {
     const expanded = SettingsStore.expandHome(params.dirPath);
-    const resolved = path.isAbsolute(expanded)
-      ? expanded
-      : path.resolve(await this.state.invoke("getCwd", {}), expanded);
+    const cwd = await this.cwdQuery.getCwd();
+    const resolved = path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
     const dirents = await fs.promises.readdir(resolved, {
       recursive: true,
       withFileTypes: true,

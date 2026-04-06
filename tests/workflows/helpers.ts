@@ -1,69 +1,133 @@
 import * as fs from "fs";
 import * as path from "path";
 import { createInProcessPair } from "../../src/shared/rpc/connection";
-import { createStateClient } from "../../src/shared/rpc/state.rpc";
 import { createAudioFileClient } from "../../src/shared/rpc/audio-file.rpc";
 import { createFilesystemClient } from "../../src/shared/rpc/filesystem.rpc";
+import { createProjectClient } from "../../src/shared/rpc/project.rpc";
+import { createInstrumentClient } from "../../src/shared/rpc/instrument.rpc";
+import { createMidiClient } from "../../src/shared/rpc/midi.rpc";
+import { createMixerClient } from "../../src/shared/rpc/mixer.rpc";
+import { createReplEnvClient } from "../../src/shared/rpc/repl-env.rpc";
 import type { MessageConnection } from "vscode-jsonrpc";
-import { StateService } from "../../src/electron/services/state";
+import { EventBusImpl } from "../../src/shared/event-bus";
 import { AudioFileService } from "../../src/electron/services/audio-file";
 import { FilesystemService } from "../../src/electron/services/filesystem";
-import { InMemoryStateStorage } from "./in-memory-storage";
+import { ProjectService } from "../../src/electron/services/project";
+import { InstrumentService } from "../../src/electron/services/instrument";
+import { MidiService } from "../../src/electron/services/midi";
+import { MixerService } from "../../src/electron/services/mixer";
+import { ReplEnvService } from "../../src/electron/services/repl-env";
+import { InMemoryStore } from "./in-memory-store";
+import { InMemoryPersistenceService, InMemoryQueryService } from "./in-memory-query-service";
+import type { IQueryService } from "../../src/shared/query-interfaces";
 
 export interface WorkflowServices {
-  stateClient: ReturnType<typeof createStateClient>;
+  projectClient: ReturnType<typeof createProjectClient>;
   audioFileClient: ReturnType<typeof createAudioFileClient>;
   filesystemClient: ReturnType<typeof createFilesystemClient>;
+  instrumentClient: ReturnType<typeof createInstrumentClient>;
+  midiClient: ReturnType<typeof createMidiClient>;
+  mixerClient: ReturnType<typeof createMixerClient>;
+  replEnvClient: ReturnType<typeof createReplEnvClient>;
+  queryService: IQueryService;
 }
 
 /**
- * Boot workflow-test services backed by InMemoryStateStorage.
+ * Boot workflow-test services backed by InMemoryStore + EventBus.
+ *
  * No SQLite, no native addons, no Electron — runs under plain Node (tsx).
  *
- * Services communicate over in-process JSON-RPC connections (vscode-jsonrpc)
- * using an EventEmitter-based transport — no streams, no serialisation overhead.
+ * EventBusImpl calls handlers synchronously so InMemoryPersistenceService
+ * applies events inline. Queries see updated state immediately after any write.
  */
 export function bootServices(): {
   ctx: WorkflowServices & Record<string, unknown>;
   cleanup: () => void;
 } {
-  const storage = new InMemoryStateStorage();
-  const stateService = new StateService(storage);
+  const store = new InMemoryStore();
+  const bus = new EventBusImpl();
+  new InMemoryPersistenceService(bus, store);
+  const queryService = new InMemoryQueryService(store);
 
-  // Wire state service.
-  const statePair = createInProcessPair();
-  stateService.listen(statePair.server);
-  statePair.server.listen();
-  statePair.client.listen();
-  const stateClient = createStateClient(statePair.client);
+  // ProjectService writes directly to the store (strong consistency).
+  const projectService = new ProjectService(store, bus, queryService);
+  const projectPair = createInProcessPair();
+  projectService.listen(projectPair.server);
+  projectPair.server.listen();
+  projectPair.client.listen();
+  const projectClient = createProjectClient(projectPair.client);
 
-  // Wire audio file service (depends on stateClient).
-  const audioFileService = new AudioFileService(stateClient);
+  // AudioFileService emits events to bus, reads via queryService.
+  const audioFileService = new AudioFileService(bus, queryService, queryService);
   const audioFilePair = createInProcessPair();
   audioFileService.listen(audioFilePair.server);
   audioFilePair.server.listen();
   audioFilePair.client.listen();
   const audioFileClient = createAudioFileClient(audioFilePair.client);
 
-  // Wire filesystem service (depends on stateClient).
-  const filesystemService = new FilesystemService(stateClient);
+  // FilesystemService emits CwdChanged events, reads cwd via queryService.
+  const filesystemService = new FilesystemService(bus, queryService);
   const fsPair = createInProcessPair();
   filesystemService.listen(fsPair.server);
   fsPair.server.listen();
   fsPair.client.listen();
   const filesystemClient = createFilesystemClient(fsPair.client);
 
+  // InstrumentService.
+  const instrumentService = new InstrumentService(bus, queryService, queryService);
+  const instrumentPair = createInProcessPair();
+  instrumentService.listen(instrumentPair.server);
+  instrumentPair.server.listen();
+  instrumentPair.client.listen();
+  const instrumentClient = createInstrumentClient(instrumentPair.client);
+
+  // MidiService.
+  const midiService = new MidiService(bus, queryService);
+  const midiPair = createInProcessPair();
+  midiService.listen(midiPair.server);
+  midiPair.server.listen();
+  midiPair.client.listen();
+  const midiClient = createMidiClient(midiPair.client);
+
+  // MixerService.
+  const mixerService = new MixerService(bus, queryService);
+  const mixerPair = createInProcessPair();
+  mixerService.listen(mixerPair.server);
+  mixerPair.server.listen();
+  mixerPair.client.listen();
+  const mixerClient = createMixerClient(mixerPair.client);
+
+  // ReplEnvService.
+  const replEnvService = new ReplEnvService(bus, queryService);
+  const replEnvPair = createInProcessPair();
+  replEnvService.listen(replEnvPair.server);
+  replEnvPair.server.listen();
+  replEnvPair.client.listen();
+  const replEnvClient = createReplEnvClient(replEnvPair.client);
+
   const connections: MessageConnection[] = [
-    statePair.client, statePair.server,
+    projectPair.client, projectPair.server,
     audioFilePair.client, audioFilePair.server,
     fsPair.client, fsPair.server,
+    instrumentPair.client, instrumentPair.server,
+    midiPair.client, midiPair.server,
+    mixerPair.client, mixerPair.server,
+    replEnvPair.client, replEnvPair.server,
   ];
 
   return {
-    ctx: { stateClient, audioFileClient, filesystemClient },
+    ctx: {
+      projectClient,
+      audioFileClient,
+      filesystemClient,
+      instrumentClient,
+      midiClient,
+      mixerClient,
+      replEnvClient,
+      queryService,
+    },
     cleanup: () => {
       for (const conn of connections) conn.dispose();
-      stateService.close();
     },
   };
 }

@@ -1,7 +1,7 @@
 /**
  * Workflow: list-samples
  *
- * Tests the StateService.listSamples IPC contract.
+ * Tests the listSamples IPC contract (via AudioFileService + QueryService).
  * Corresponds to tests/list-samples.spec.ts.
  *
  * Checks:
@@ -17,7 +17,7 @@ import * as fs from "fs";
 import { createWorkflow } from "./types";
 import { createTestWav } from "./helpers";
 import type { WorkflowServices } from "./helpers";
-import type { SampleListRecord } from "../../src/shared/rpc/state.rpc";
+import type { SampleListRecord } from "../../src/shared/domain-types";
 
 interface Ctx extends WorkflowServices, Record<string, unknown> {
   testDir?: string;
@@ -38,7 +38,7 @@ export function buildWorkflow() {
 
   const listEmpty = wf.action("list-samples-empty", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const samplesBeforeRead = await ctx.stateClient.invoke("listSamples", {});
+    const samplesBeforeRead = await ctx.queryService.listSamples();
     return { samplesBeforeRead };
   }, { after: [setup] });
 
@@ -50,7 +50,7 @@ export function buildWorkflow() {
 
   const listAfterRead = wf.action("list-samples-after-read", async (rawCtx) => {
     const ctx = rawCtx as Ctx;
-    const samplesAfterRead = await ctx.stateClient.invoke("listSamples", {});
+    const samplesAfterRead = await ctx.queryService.listSamples();
     return { samplesAfterRead };
   }, { after: [readFile] });
 
