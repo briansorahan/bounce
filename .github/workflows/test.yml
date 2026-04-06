@@ -7,17 +7,50 @@ on:
     branches: [ main ]
 
 jobs:
+  # ── Fast checks (every PR and push) ───────────────────────────────────────
+  # No Docker, no Playwright, no xvfb.
+  # Unit tests (tsx) + workflow tests (tsx, in-memory storage, no Electron).
   test:
     runs-on: ubuntu-latest
-    
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    
-    - name: Run build
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci --ignore-scripts && node node_modules/electron/install.js
+
+    - name: Build native addons
+      run: npm run rebuild
+
+    - name: Lint
+      run: npm run lint
+
+    - name: Build electron
+      run: npm run build:electron
+
+    - name: Test
+      run: npm test
+
+  # ── Integration tests (push to main only) ─────────────────────────────────
+  # Full Playwright suite via Docker + xvfb. PRs are not blocked by this job.
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Run integration tests (Docker)
       run: ./build.sh
-    
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4

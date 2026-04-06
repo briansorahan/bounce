@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "noEmit": true
+  },
+  "include": [
+    "src/shared/rpc/**/*",
+    "src/electron/services/state/storage.ts",
+    "src/electron/services/state/index.ts",
+    "src/electron/services/audio-file/index.ts",
+    "tests/workflows/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/electron/services/state/database-storage.ts"
+  ]
+}

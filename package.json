@@ -18,9 +18,8 @@
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "lint": "eslint src/**/*.ts",
     "start:electron": "npm run build:electron && electron .",
-    "test": "tsx --tsconfig tsconfig.renderer.json src/test.ts && tsx --tsconfig tsconfig.renderer.json src/command-parser.test.ts && tsx --tsconfig tsconfig.renderer.json src/tab-completion.test.ts && tsx --tsconfig tsconfig.renderer.json src/grain-collection.test.ts && tsx --tsconfig tsconfig.renderer.json src/settings-store.test.ts && tsx --tsconfig tsconfig.renderer.json src/help.test.ts && tsx --tsconfig tsconfig.renderer.json src/help-codegen.test.ts && tsx --tsconfig tsconfig.renderer.json src/porcelain-types.test.ts && tsx --tsconfig tsconfig.renderer.json src/help-completeness.test.ts && tsx --tsconfig tsconfig.renderer.json src/test-hygiene.test.ts",
-    "test:e2e": "playwright test",
-    "test:workflow": "npm ci --ignore-scripts && node node_modules/electron/install.js && npm run rebuild && npm run lint && npm run build && npm test && rm -rf dist && npm run build:electron && npx playwright install --with-deps chromium && npx playwright test",
+    "test": "tsx --tsconfig tsconfig.renderer.json src/test.ts && tsx --tsconfig tsconfig.renderer.json src/command-parser.test.ts && tsx --tsconfig tsconfig.renderer.json src/tab-completion.test.ts && tsx --tsconfig tsconfig.renderer.json src/grain-collection.test.ts && tsx --tsconfig tsconfig.renderer.json src/settings-store.test.ts && tsx --tsconfig tsconfig.renderer.json src/help.test.ts && tsx --tsconfig tsconfig.renderer.json src/help-codegen.test.ts && tsx --tsconfig tsconfig.renderer.json src/porcelain-types.test.ts && tsx --tsconfig tsconfig.renderer.json src/help-completeness.test.ts && tsx --tsconfig tsconfig.renderer.json src/test-hygiene.test.ts && tsx tests/workflows/run.ts",
+    "test:integration": "playwright test",
     "generate:repl-artifacts": "npx tsx scripts/generate-repl-artifacts.ts"
   },
   "keywords": [
