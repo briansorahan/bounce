@@ -14,6 +14,8 @@ import { buildWorkflow as buildProjectsWorkflow } from "./projects.workflow";
 import { buildWorkflow as buildListSamplesWorkflow } from "./list-samples.workflow";
 import { buildWorkflow as buildFilesystemWorkflow } from "./filesystem.workflow";
 import { buildWorkflow as buildAudioFormatsWorkflow } from "./audio-formats.workflow";
+import { buildWorkflow as buildTabCompletionWorkflow } from "./tab-completion.workflow";
+import { buildWorkflow as buildRuntimePersistenceWorkflow } from "./runtime-persistence.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -24,6 +26,8 @@ async function main() {
     buildListSamplesWorkflow(),
     buildFilesystemWorkflow(),
     buildAudioFormatsWorkflow(),
+    buildTabCompletionWorkflow(),
+    buildRuntimePersistenceWorkflow(),
     // Register new workflows here as they are created.
   ];
 

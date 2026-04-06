@@ -9,6 +9,8 @@
     "src/shared/**/*",
     "src/electron/audio-extensions.ts",
     "src/electron/settings-store.ts",
+    "src/electron/completers/property-completer.ts",
+    "src/electron/completers/identifier-completer.ts",
     "src/electron/services/audio-file/index.ts",
     "src/electron/services/filesystem/index.ts",
     "src/electron/services/project/index.ts",
