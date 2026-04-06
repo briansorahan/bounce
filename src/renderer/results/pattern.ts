@@ -1,11 +1,10 @@
 /// <reference path="../types.d.ts" />
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { CompiledPattern } from "../pattern-parser.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
-const patternMethodHelps = porcelainTypeHelps.find(t => t.name === "Pattern")?.methods ?? [];
-
+@replType("Pattern", { summary: "A compiled X0X step-sequencer pattern" })
 export class PatternResult extends BounceResult {
   private readonly notation: string;
   private readonly compiled: CompiledPattern;
@@ -14,9 +13,11 @@ export class PatternResult extends BounceResult {
     super(""); // overridden by toString()
     this.notation = notation;
     this.compiled = compiled;
-    attachMethodHelp(this, "Pattern", patternMethodHelps);
+    attachMethodHelpFromRegistry(this, "Pattern");
   }
 
+  @describe({ summary: "Start playing on mixer channel N (1–8).", returns: "BounceResult" })
+  @param("channel", { summary: "Mixer channel 1–8.", kind: "plain" })
   play(channel: number): BounceResult {
     if (channel < 1 || channel > 8) {
       return new BounceResult(`\x1b[31mChannel must be 1–8 (got ${channel})\x1b[0m`);
@@ -27,6 +28,7 @@ export class PatternResult extends BounceResult {
     return new BounceResult(`PatternResult playing on channel ${channel}  bar: next`);
   }
 
+  @describe({ summary: "Stop the pattern on its mixer channel.", returns: "BounceResult" })
   stop(): BounceResult {
     if (this.compiled.channelIndex >= 0) {
       window.electron.transportClearPattern(this.compiled.channelIndex);

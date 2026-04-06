@@ -1,10 +1,7 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import { SamplePromise, type SampleResult } from "./sample.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
-
-const audioDeviceMethodHelps = porcelainTypeHelps.find(t => t.name === "AudioDevice")?.methods ?? [];
-const recordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "RecordingHandle")?.methods ?? [];
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 /** A single audio input device as seen by the REPL. */
 export interface AudioInputDevice {
@@ -27,6 +24,7 @@ export interface AudioDeviceBindings {
 /**
  * REPL object returned by sn.dev(index). Represents an audio input device.
  */
+@replType("AudioDevice", { summary: "An audio input device for recording" })
 export class AudioDeviceResult extends BounceResult {
   constructor(
     public readonly index: number,
@@ -45,9 +43,12 @@ export class AudioDeviceResult extends BounceResult {
         `  \x1b[90mrecord(sampleId, {duration: N})  — record for N seconds\x1b[0m`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "AudioDevice", audioDeviceMethodHelps);
+    attachMethodHelpFromRegistry(this, "AudioDevice");
   }
 
+  @describe({ summary: "Start recording. Returns a RecordingHandle (manual stop) or SamplePromise (when opts.duration is set).", returns: "RecordingHandle | SamplePromise" })
+  @param("sampleId", { summary: "Name for the new sample.", kind: "plain" })
+  @param("opts", { summary: "Recording options: { duration?, overwrite? }.", kind: "plain" })
   record(sampleId: string, opts?: RecordOptions): Promise<RecordingHandleResult> | SamplePromise {
     return this.bindings.record(sampleId, opts);
   }
@@ -80,6 +81,7 @@ export class AudioDeviceResult extends BounceResult {
  * and get back a SamplePromise.
  * Not PromiseLike — assignment stores the handle without blocking.
  */
+@replType("RecordingHandle", { summary: "A handle to an active audio recording session" })
 export class RecordingHandleResult extends BounceResult {
   constructor(
     private readonly deviceLabel: string,
@@ -93,9 +95,10 @@ export class RecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m to finish recording and get a SampleResult`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "RecordingHandle", recordingHandleMethodHelps);
+    attachMethodHelpFromRegistry(this, "RecordingHandle");
   }
 
+  @describe({ summary: "Stop recording and return a SamplePromise resolving to SampleResult.", returns: "SamplePromise" })
   stop(): SamplePromise {
     this.stopFn();
     return new SamplePromise(this.promise);

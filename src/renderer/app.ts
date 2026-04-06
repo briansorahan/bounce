@@ -45,7 +45,6 @@ export class BounceApp {
   private inputLines: string[] = [];
   private replEvaluator!: ReplEvaluator;
   private completion: TabCompletion;
-  private redrawVersion: number = 0;
   private sceneManager: VisualizationSceneManager;
   private statusLine: StatusLine;
   private mixerMeters: MixerMeters;
@@ -72,6 +71,7 @@ export class BounceApp {
     this.replEvaluator = new ReplEvaluator(bounceApi);
     this.completion.setApi(bounceApi);
     this.completion.setBindingsProvider(() => this.replEvaluator.getCompletionBindings());
+    this.completion.setOnMatchesChanged(() => this.onCompletionUpdate());
 
     this.setupEventHandlers();
     this.loadHistoryFromStorage().catch((err) => {
@@ -304,7 +304,7 @@ export class BounceApp {
       // ESC sequences (arrows, Alt+f, Alt+b)
       if (data === "\x1b[A") {
         // Up arrow
-        await this.completion.update(this.commandBuffer, this.cursorPosition);
+        await this.completion.update(this.commandBuffer, this.cursorPosition, true);
         const action = this.completion.handleUp();
         if (action !== null) {
           this.terminal.write(this.completion.eraseGhostText());
@@ -314,7 +314,7 @@ export class BounceApp {
         }
       } else if (data === "\x1b[B") {
         // Down arrow
-        await this.completion.update(this.commandBuffer, this.cursorPosition);
+        await this.completion.update(this.commandBuffer, this.cursorPosition, true);
         const action = this.completion.handleDown();
         if (action !== null) {
           this.terminal.write(this.completion.eraseGhostText());
@@ -347,13 +347,13 @@ export class BounceApp {
         // Unknown escape sequence - ignore it
       }
     } else if (data === "\t") {
-      await this.completion.update(this.commandBuffer, this.cursorPosition);
+      await this.completion.update(this.commandBuffer, this.cursorPosition, true);
       const action = this.completion.handleTab();
       if (action === null) return;
       if (action.kind === "accept") {
         this.commandBuffer = action.newBuffer;
         this.cursorPosition = action.newCursorPosition;
-        await this.redrawCommandLine();
+        this.redrawCommandLine();
       } else {
         // Cycle multi-match list: erase old ghost text, render updated selection
         this.terminal.write(this.completion.eraseGhostText());
@@ -365,7 +365,7 @@ export class BounceApp {
         data +
         this.commandBuffer.slice(this.cursorPosition);
       this.cursorPosition += data.length;
-      await this.redrawCommandLine();
+      this.redrawCommandLine();
     }
   }
 
@@ -438,23 +438,24 @@ export class BounceApp {
     void this.redrawCommandLine();
   }
 
-  private async redrawCommandLine(): Promise<void> {
-    const redrawVersion = ++this.redrawVersion;
+  private redrawCommandLine(): void {
     // Erase multi-match ghost lines below the prompt (single-match inline ghost
     // is on the same line and will be cleared by the \r\x1b[K below)
     this.terminal.write(this.completion.eraseGhostText());
-    // Update completion state for the current buffer and cursor position
-    await this.completion.update(this.commandBuffer, this.cursorPosition);
-    if (redrawVersion !== this.redrawVersion) {
-      return;
-    }
+    // Fire a completion request (results arrive asynchronously via onCompletionUpdate)
+    void this.completion.update(this.commandBuffer, this.cursorPosition);
     // Clear the current line and redraw with cursor at correct position
     this.terminal.write("\r\x1b[K");
     this.terminal.write(`\x1b[32m>\x1b[0m ${this.commandBuffer}`);
     // Move cursor to correct position
     const targetColumn = 3 + this.cursorPosition; // 3 = "> " prompt (including space)
     this.terminal.write(`\r\x1b[${targetColumn}G`);
-    // Render ghost text (saves and restores cursor position)
+    // Render any already-available ghost text; updated later by onCompletionUpdate
+    this.terminal.write(this.completion.ghostText());
+  }
+
+  private onCompletionUpdate(): void {
+    this.terminal.write(this.completion.eraseGhostText());
     this.terminal.write(this.completion.ghostText());
   }
 

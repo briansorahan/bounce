@@ -1,10 +1,7 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult } from "./base.js";
 import type { MidiInputDevice as MidiInputDeviceRecord } from "../../shared/ipc-contract.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
-
-const midiSequenceMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiSequence")?.methods ?? [];
-const midiRecordingHandleMethodHelps = porcelainTypeHelps.find(t => t.name === "MidiRecordingHandle")?.methods ?? [];
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 // Re-export for convenience
 export type { MidiInputDeviceRecord };
@@ -84,6 +81,7 @@ export class MidiDeviceResult extends BounceResult {
 // ---------------------------------------------------------------------------
 // MidiSequenceResult — returned by h.stop() or midi.load()
 // ---------------------------------------------------------------------------
+@replType("MidiSequence", { summary: "A MIDI sequence (recorded or imported)" })
 export class MidiSequenceResult extends BounceResult {
   constructor(
     public readonly id: number,
@@ -103,15 +101,18 @@ export class MidiSequenceResult extends BounceResult {
         `  \x1b[90mseq.stop()\x1b[0m             stop playback`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "MidiSequence", midiSequenceMethodHelps);
+    attachMethodHelpFromRegistry(this, "MidiSequence");
   }
 
+  @describe({ summary: "Play this sequence through an instrument. Returns a MidiSequencePromise.", returns: "MidiSequencePromise" })
+  @param("inst", { summary: "Target instrument to play through.", kind: "typed", expectedType: "InstrumentResult" })
   play(inst: MidiTargetInstrument): MidiSequencePromise {
     return new MidiSequencePromise(
       window.electron.midiStartPlayback(this.id, inst.instrumentId).then(() => this),
     );
   }
 
+  @describe({ summary: "Stop MIDI playback.", returns: "BounceResult" })
   stop(): Promise<BounceResult> {
     return window.electron.midiStopPlayback().then(
       () => new BounceResult("\x1b[90mPlayback stopped.\x1b[0m"),
@@ -175,6 +176,7 @@ export class MidiSequencePromise implements PromiseLike<MidiSequenceResult> {
 // MidiRecordingHandleResult — returned by midi.record(inst) without a duration.
 // Not PromiseLike — stores without blocking the REPL.
 // ---------------------------------------------------------------------------
+@replType("MidiRecordingHandle", { summary: "A handle to an active MIDI recording session" })
 export class MidiRecordingHandleResult extends BounceResult {
   constructor(
     private readonly instrumentName: string,
@@ -187,9 +189,10 @@ export class MidiRecordingHandleResult extends BounceResult {
         `  \x1b[90mh.stop()\x1b[0m  finish recording and get a MidiSequence`,
       ].join("\n"),
     );
-    attachMethodHelp(this, "MidiRecordingHandle", midiRecordingHandleMethodHelps);
+    attachMethodHelpFromRegistry(this, "MidiRecordingHandle");
   }
 
+  @describe({ summary: "Stop recording and return a MidiSequencePromise.", returns: "MidiSequencePromise" })
   stop(): MidiSequencePromise {
     return new MidiSequencePromise(this.stopFn());
   }

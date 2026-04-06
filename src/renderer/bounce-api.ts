@@ -14,9 +14,7 @@ import {
   VisScenePromise,
   VisStackResult,
   VisSceneListResult,
-  SampleNamespace,
   SampleListResult,
-  ProjectNamespace,
   ProjectResult,
   ProjectListResult,
   EnvScopeResult,
@@ -40,20 +38,23 @@ import {
 import { GrainCollection } from "./grain-collection.js";
 import type { RuntimeScopeEntry } from "./runtime-introspection.js";
 import type { NamespaceDeps, SharedState } from "./namespaces/types.js";
-import { buildFsNamespace } from "./namespaces/fs-namespace.js";
-import { buildCorpusNamespace } from "./namespaces/corpus-namespace.js";
-import { buildEnvNamespace } from "./namespaces/env-namespace.js";
-import { buildProjectNamespace } from "./namespaces/project-namespace.js";
+import { FsNamespace } from "./namespaces/fs-namespace.js";
+import { CorpusNamespace } from "./namespaces/corpus-namespace.js";
+import { EnvNamespace } from "./namespaces/env-namespace.js";
+import { ProjectNamespace } from "./namespaces/project-namespace.js";
 import { buildGlobals } from "./namespaces/globals.js";
-import { buildVisNamespace } from "./namespaces/vis-namespace.js";
-import { buildSampleNamespace } from "./namespaces/sample-namespace.js";
-import { buildInstNamespace } from "./namespaces/instrument-namespace.js";
-import { buildMidiNamespace } from "./namespaces/midi-namespace.js";
-import { buildMixerNamespace } from "./namespaces/mixer-namespace.js";
-import { buildTransportNamespace } from "./namespaces/transport-namespace.js";
-import { buildPatNamespace } from "./namespaces/pat-namespace.js";
-import { porcelainTypeHelps } from "./results/porcelain-types.generated.js";
-import { renderTypeHelp, renderMethodHelp } from "./help.js";
+import { VisNamespace } from "./namespaces/vis-namespace.js";
+import { SampleNamespace } from "./namespaces/sample-namespace.js";
+import { InstNamespace } from "./namespaces/instrument-namespace.js";
+import { MidiNamespace } from "./namespaces/midi-namespace.js";
+import { MixerNamespace } from "./namespaces/mixer-namespace.js";
+import { TransportNamespace } from "./namespaces/transport-namespace.js";
+import { PatNamespace } from "./namespaces/pat-namespace.js";
+import { renderDescriptorHelp, renderMethodHelpFromDescriptor, attachNamespaceMethodHelp } from "./help.js";
+import { setHelpRenderer } from "../shared/repl-registry.js";
+import { listTypes } from "../shared/repl-registration.js";
+
+setHelpRenderer(renderDescriptorHelp);
 
 export {
   BounceResult,
@@ -139,40 +140,52 @@ export function buildBounceApi(deps: BounceApiDeps): Record<string, unknown> {
     getSceneManager,
   };
 
-  const { sn, sampleBinder } = buildSampleNamespace(namespaceDeps);
-  const env = buildEnvNamespace(namespaceDeps);
-  const vis = buildVisNamespace(namespaceDeps);
-  const proj = buildProjectNamespace(namespaceDeps);
-  const corpus = buildCorpusNamespace(namespaceDeps, sampleBinder);
-  const fs = buildFsNamespace(namespaceDeps);
-  const inst = buildInstNamespace(namespaceDeps);
-  const { mx } = buildMixerNamespace(namespaceDeps);
-  const { midi } = buildMidiNamespace(namespaceDeps);
-  const { transport, getCurrentBpm } = buildTransportNamespace(namespaceDeps);
-  const { pat } = buildPatNamespace(namespaceDeps);
+  const sn = new SampleNamespace(namespaceDeps);
+  const sampleBinder = sn;
+  const env = new EnvNamespace(namespaceDeps);
+  const vis = new VisNamespace(namespaceDeps);
+  const proj = new ProjectNamespace(namespaceDeps);
+  const corpus = new CorpusNamespace(namespaceDeps, sampleBinder);
+  const fs = new FsNamespace(namespaceDeps);
+  const inst = new InstNamespace(namespaceDeps);
+  const mx = new MixerNamespace(namespaceDeps);
+  const midi = new MidiNamespace(namespaceDeps);
+  const transport = new TransportNamespace(namespaceDeps);
+  const getCurrentBpm = () => transport.getCurrentBpm();
+  const pat = new PatNamespace(namespaceDeps);
   const globals = buildGlobals(namespaceDeps, { sn, env, vis, proj, corpus, fs, inst, mx, midi, transport, pat });
 
   const typeHelpObjects = Object.fromEntries(
-    porcelainTypeHelps.map((th) => {
+    listTypes().map((td) => {
       const methodSubs = Object.fromEntries(
-        (th.methods ?? []).map((m) => {
-          const name = m.signature.split("(")[0];
-          return [name, {
-            help: () => renderMethodHelp(th.name, m),
-            toString: () => renderMethodHelp(th.name, m).toString(),
-          }];
-        }),
+        Object.entries(td.methods)
+          .filter(([, m]) => m.visibility !== "plumbing")
+          .map(([name, m]) => [
+            name,
+            {
+              help: () => renderMethodHelpFromDescriptor(td.name, name, m),
+              toString: () => renderMethodHelpFromDescriptor(td.name, name, m).toString(),
+            },
+          ]),
       );
       return [
-        th.name,
+        td.name,
         {
-          help: () => renderTypeHelp(th),
-          toString: () => renderTypeHelp(th).toString(),
+          help: () => renderDescriptorHelp(td),
+          toString: () => renderDescriptorHelp(td).toString(),
           ...methodSubs,
         },
       ];
     }),
   );
+
+  for (const [ns, name] of [
+    [sn, "sn"], [env, "env"], [vis, "vis"], [proj, "proj"],
+    [corpus, "corpus"], [fs, "fs"], [inst, "inst"], [mx, "mx"],
+    [midi, "midi"], [transport, "transport"], [pat, "pat"],
+  ] as [object, string][]) {
+    attachNamespaceMethodHelp(ns, name);
+  }
 
   const api = {
     sn,

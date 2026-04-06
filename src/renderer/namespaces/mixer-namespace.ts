@@ -1,7 +1,7 @@
 import { BounceResult } from "../bounce-result.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { mxCommands, mxDescription } from "./mx-commands.generated.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { mxCommands } from "./mx-commands.generated.js";
 export { mxCommands } from "./mx-commands.generated.js";
 
 export const mixerCommands = mxCommands;
@@ -60,12 +60,11 @@ function channelSummary(index: number, ch: ChannelState): string {
 // Control classes — extend BounceResult so the REPL displays them correctly
 // ---------------------------------------------------------------------------
 
-class ChannelControl extends BounceResult {
+export class ChannelControl extends BounceResult {
   constructor(private readonly index: number, private readonly state: ChannelState) {
     super(channelSummary(index, state));
   }
 
-  // Override to always reflect current state
   override toString(): string {
     return channelSummary(this.index, this.state);
   }
@@ -141,7 +140,7 @@ class ChannelControl extends BounceResult {
 // Preview channel control
 // ---------------------------------------------------------------------------
 
-class PreviewControl extends BounceResult {
+export class PreviewControl extends BounceResult {
   constructor(private readonly state: ChannelState) {
     super("");
   }
@@ -183,7 +182,7 @@ class PreviewControl extends BounceResult {
 // Master bus control
 // ---------------------------------------------------------------------------
 
-class MasterControl extends BounceResult {
+export class MasterControl extends BounceResult {
   constructor(private readonly state: MasterState) {
     super("");
   }
@@ -222,41 +221,97 @@ class MasterControl extends BounceResult {
 }
 
 // ---------------------------------------------------------------------------
-// Namespace factory
+// Namespace class
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-/**
- * 8-channel mixer
- *
- *   Also available as properties:
- *   mx.preview    preview channel (sample.play / sample.loop)
- *   mx.master     master bus
- *   mx.channels   list all channels with current settings
- * @namespace mx
- */
-export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace } {
-  const channelStates: ChannelState[] = Array.from({ length: NUM_USER_CHANNELS }, defaultChannelState);
-  const previewState: ChannelState = { ...defaultChannelState(), gainDb: 0 };
-  const masterState: MasterState = defaultMasterState();
+@namespace("mx", { summary: "8-channel mixer with channel controls, preview channel, and master bus" })
+export class MixerNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "8-channel mixer with channel controls, preview channel, and master bus";
 
-  const channelControls = channelStates.map((st, i) => new ChannelControl(i, st));
-  const previewControl = new PreviewControl(previewState);
-  const masterControl = new MasterControl(masterState);
+  private readonly channelStates: ChannelState[];
+  private readonly previewState: ChannelState;
+  private readonly masterState: MasterState;
+  private readonly channelControls: ChannelControl[];
+  private readonly previewControl: PreviewControl;
+  private readonly masterControl: MasterControl;
 
-  // Restore persisted mixer state from the DB on startup.
-  function restoreFromDb(): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_deps: NamespaceDeps) {
+    this.channelStates = Array.from({ length: NUM_USER_CHANNELS }, defaultChannelState);
+    this.previewState = { ...defaultChannelState(), gainDb: 0 };
+    this.masterState = defaultMasterState();
+    this.channelControls = this.channelStates.map((st, i) => new ChannelControl(i, st));
+    this.previewControl = new PreviewControl(this.previewState);
+    this.masterControl = new MasterControl(this.masterState);
+
+    // Defer restore until after the app has initialized
+    setTimeout(() => { this.restoreFromDb(); }, 0);
+  }
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
+  }
+
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "Get a ChannelControl for channel n (1–8). All methods (.gain, .pan, .mute, .solo, .attach, .detach) are chainable.",
+    returns: "ChannelControl",
+  })
+  @param("n", { summary: "Channel index, 1–8.", kind: "plain" })
+  ch(n: number): ChannelControl | BounceResult {
+    if (!Number.isInteger(n) || n < 1 || n > NUM_USER_CHANNELS) {
+      return new BounceResult(`\x1b[31mChannel must be an integer 1–${NUM_USER_CHANNELS}\x1b[0m`);
+    }
+    return this.channelControls[n - 1];
+  }
+
+  // ── Getter properties ─────────────────────────────────────────────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  get channels(): BounceResult {
+    const lines = ["\x1b[1mMixer Channels\x1b[0m"];
+    for (let i = 0; i < NUM_USER_CHANNELS; i++) {
+      lines.push(channelSummary(i, this.channelStates[i]));
+    }
+    lines.push(this.previewControl.toString());
+    lines.push(this.masterControl.toString());
+    return new BounceResult(lines.join("\n"));
+  }
+
+  @describe({ summary: "Preview channel control (used by sample.play and sample.loop).", returns: "PreviewControl" })
+  get preview(): PreviewControl {
+    return this.previewControl;
+  }
+
+  @describe({ summary: "Master bus control (gain, mute).", returns: "MasterControl" })
+  get master(): MasterControl {
+    return this.masterControl;
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private restoreFromDb(): void {
     window.electron?.mixerGetState().then(saved => {
       if (!saved) return;
 
       for (const ch of saved.channels) {
         const idx = ch.channel_idx;
         if (idx >= 0 && idx < NUM_USER_CHANNELS) {
-          channelStates[idx].gainDb = ch.gain_db;
-          channelStates[idx].pan = ch.pan;
-          channelStates[idx].mute = ch.mute !== 0;
-          channelStates[idx].solo = ch.solo !== 0;
-          channelStates[idx].attachedInstrumentId = ch.instrument_name;
+          this.channelStates[idx].gainDb = ch.gain_db;
+          this.channelStates[idx].pan = ch.pan;
+          this.channelStates[idx].mute = ch.mute !== 0;
+          this.channelStates[idx].solo = ch.solo !== 0;
+          this.channelStates[idx].attachedInstrumentId = ch.instrument_name;
           window.electron.mixerSetChannelGain(idx, ch.gain_db);
           window.electron.mixerSetChannelPan(idx, ch.pan);
           window.electron.mixerSetChannelMute(idx, ch.mute !== 0);
@@ -265,89 +320,27 @@ export function buildMixerNamespace(_deps: NamespaceDeps): { mx: MixerNamespace 
             window.electron.mixerAttachInstrument(idx, ch.instrument_name);
           }
         } else if (idx === PREVIEW_CHANNEL_IDX) {
-          previewState.gainDb = ch.gain_db;
-          previewState.mute = ch.mute !== 0;
+          this.previewState.gainDb = ch.gain_db;
+          this.previewState.mute = ch.mute !== 0;
           window.electron.mixerSetChannelGain(idx, ch.gain_db);
           window.electron.mixerSetChannelMute(idx, ch.mute !== 0);
         }
       }
 
       if (saved.master) {
-        masterState.gainDb = saved.master.gain_db;
-        masterState.mute = saved.master.mute !== 0;
+        this.masterState.gainDb = saved.master.gain_db;
+        this.masterState.mute = saved.master.mute !== 0;
         window.electron.mixerSetMasterGain(saved.master.gain_db);
         window.electron.mixerSetMasterMute(saved.master.mute !== 0);
       }
     }).catch(() => { /* DB may not be ready yet — silently ignore */ });
   }
-
-  // Defer restore until after the app has initialized
-  setTimeout(restoreFromDb, 0);
-
-  const mx: MixerNamespace = {
-    description: mxDescription,
-    ch: withHelp(
-      /**
-       * Get a ChannelControl for channel n (1–8)
-       *
-       * Return a ChannelControl for the specified channel. All methods are chainable.
-       * Use .gain()/.pan()/.mute()/.solo()/.attach()/.detach() to configure the channel.
-       *
-       * Properties (not commands): mx.preview, mx.master, mx.channels
-       *
-       * @param n Channel index, 1–8.
-       * @example mx.ch(1).gain(-6).pan(-0.2)
-       * @example mx.ch(2).attach(inst).solo()
-       */
-      function ch(n: number): ChannelControl | BounceResult {
-        if (!Number.isInteger(n) || n < 1 || n > NUM_USER_CHANNELS) {
-          return new BounceResult(`\x1b[31mChannel must be an integer 1–${NUM_USER_CHANNELS}\x1b[0m`);
-        }
-        return channelControls[n - 1];
-      },
-      mixerCommands[0],
-    ),
-
-    get channels(): BounceResult {
-      const lines = ["\x1b[1mMixer Channels\x1b[0m"];
-      for (let i = 0; i < NUM_USER_CHANNELS; i++) {
-        lines.push(channelSummary(i, channelStates[i]));
-      }
-      lines.push(previewControl.toString());
-      lines.push(masterControl.toString());
-      return new BounceResult(lines.join("\n"));
-    },
-
-    get preview() {
-      return previewControl;
-    },
-
-    get master() {
-      return masterControl;
-    },
-
-    help: () => renderNamespaceHelp(
-      "mx",
-      mxDescription,
-      mixerCommands,
-    ),
-  };
-
-  return { mx };
 }
 
-// ---------------------------------------------------------------------------
-// Type exports
-// ---------------------------------------------------------------------------
-
-export type { ChannelControl, PreviewControl, MasterControl };
-
-export interface MixerNamespace {
-  description: string;
-  ch(n: number): ChannelControl | BounceResult;
-  readonly channels: BounceResult;
-  readonly preview: PreviewControl;
-  readonly master: MasterControl;
-  help(): BounceResult;
+/** @deprecated Use `new MixerNamespace(deps)` directly. Kept for backward compatibility. */
+export function buildMixerNamespace(deps: NamespaceDeps): { mx: MixerNamespace } {
+  return { mx: new MixerNamespace(deps) };
 }
 
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { mxCommands as mxNamespaceCommands };

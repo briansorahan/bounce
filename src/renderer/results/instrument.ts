@@ -1,5 +1,7 @@
 import { BounceResult, HelpableResult, type HelpFactory } from "./base.js";
+import { replType } from "../../shared/repl-registry.js";
 
+@replType("InstrumentResult", { summary: "A sampler or granular instrument" })
 export class InstrumentResult extends HelpableResult {
   constructor(
     display: string,

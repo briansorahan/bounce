@@ -4,146 +4,145 @@ import {
   BounceResult,
   SampleResult,
 } from "../bounce-result.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
 import type { SampleBinder } from "./sample-namespace.js";
-import { corpusCommands, corpusDescription } from "./corpus-commands.generated.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { corpusCommands } from "./corpus-commands.generated.js";
 export { corpusCommands } from "./corpus-commands.generated.js";
 
-/**
- * KDTree corpus for nearest-neighbor resynthesis
- * @namespace corpus
- */
-export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBinder) {
-  const { terminal, audioManager } = deps;
+@namespace("corpus", { summary: "KDTree corpus for nearest-neighbor resynthesis" })
+export class CorpusNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "KDTree corpus for nearest-neighbor resynthesis";
 
-  function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  private readonly terminal: NamespaceDeps["terminal"];
+  private readonly audioManager: NamespaceDeps["audioManager"];
+
+  constructor(private readonly deps: NamespaceDeps, _sampleBinder: SampleBinder) {
+    this.terminal = deps.terminal;
+    this.audioManager = deps.audioManager;
+  }
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
+  }
+
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "Build a KDTree from onset slices of an audio file. Requires sample.onsets() and sample.slice() first.",
+    returns: "BounceResult",
+  })
+  @param("source", {
+    summary: "Audio source (SampleResult, hash string, or omit to use current audio).",
+    kind: "typed",
+    expectedType: "SampleResult",
+  })
+  @param("featureHashOverride", {
+    summary: "Override the feature hash (advanced use).",
+    kind: "sampleHash",
+  })
+  async build(
+    source?: string | SampleResult | PromiseLike<SampleResult>,
+    featureHashOverride?: string,
+  ): Promise<BounceResult> {
+    let sourceHash: string;
+    let featureHash: string;
+
+    if (typeof source === "string") {
+      sourceHash = source;
+      if (!featureHashOverride) throw new Error("featureHash required when passing sourceHash as string.");
+      featureHash = featureHashOverride;
+    } else {
+      let resolved: SampleResult | undefined;
+      if (source !== undefined) resolved = await this.resolveSample(source as SampleResult | PromiseLike<SampleResult>);
+      const hash = resolved?.hash ?? this.audioManager.getCurrentAudio()?.hash;
+      if (!hash) throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
+      sourceHash = hash;
+
+      if (featureHashOverride) {
+        featureHash = featureHashOverride;
+      } else {
+        const feature = await window.electron.getMostRecentFeature(sourceHash, "onset-slice");
+        if (!feature) throw new Error("No onset-slice feature found. Run sample.onsets() then sample.slice() first.");
+        featureHash = feature.feature_hash;
+      }
+    }
+
+    this.terminal.writeln("\x1b[36mBuilding corpus…\x1b[0m");
+
+    const result = await window.electron.corpusBuild(sourceHash, featureHash);
+
+    return new BounceResult(`\x1b[32mBuilt corpus: ${result.segmentCount} segments, ${result.featureDims}-dim features, KDTree ready\x1b[0m`);
+  }
+
+  @describe({
+    summary: "Find k nearest corpus neighbors for a segment. Returns ranked table of indices and distances.",
+    returns: "BounceResult",
+  })
+  @param("segmentIndex", { summary: "Index of the query segment.", kind: "plain" })
+  @param("k", { summary: "Number of nearest neighbors to return (default: 5).", kind: "plain" })
+  async query(segmentIndex: number, k = 5): Promise<BounceResult> {
+    this.terminal.writeln(`\x1b[36mQuerying corpus for segment ${segmentIndex}, k=${k}…\x1b[0m`);
+
+    const results = await window.electron.corpusQuery(segmentIndex, k);
+
+    const lines: string[] = [
+      `\x1b[1;36mNearest neighbors for segment ${segmentIndex}:\x1b[0m`,
+      `${"Rank".padEnd(6)}${"Index".padEnd(8)}${"Distance".padEnd(12)}`,
+      "─".repeat(26),
+    ];
+    results.forEach((r: { index: number; distance: number }, i: number) => {
+      lines.push(`${String(i + 1).padEnd(6)}${String(r.index).padEnd(8)}${r.distance.toFixed(4)}`);
+    });
+
+    return new BounceResult(lines.join("\n"));
+  }
+
+  @describe({
+    summary: "Concatenate corpus segments by index array and play them back immediately.",
+    returns: "BounceResult",
+  })
+  @param("queryIndices", { summary: "Array of segment indices to concatenate and play.", kind: "plain" })
+  async resynthesize(queryIndices: number[]): Promise<BounceResult> {
+    this.terminal.writeln(`\x1b[36mResynthesizing ${queryIndices.length} segments…\x1b[0m`);
+
+    const { audio, sampleRate } = await window.electron.corpusResynthesize(queryIndices);
+
+    this.audioManager.clearSlices();
+    await this.audioManager.playAudio(audio, sampleRate);
+
+    return new BounceResult(`\x1b[32mResynthesis complete: ${queryIndices.length} segments, ${(audio.length / sampleRate).toFixed(2)}s\x1b[0m`);
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
     return (
       (typeof value === "object" || typeof value === "function") &&
       value !== null &&
-      "then" in value &&
-      typeof value.then === "function"
+      "then" in (value as object) &&
+      typeof (value as { then: unknown }).then === "function"
     );
   }
 
-  async function resolveSample(source: SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
-    return isPromiseLike<SampleResult>(source) ? await source : source;
+  private async resolveSample(source: SampleResult | PromiseLike<SampleResult>): Promise<SampleResult> {
+    return this.isPromiseLike<SampleResult>(source) ? await source : source;
   }
-
-  const corpus = {
-    description: corpusDescription,
-    help: () => renderNamespaceHelp("corpus", corpusDescription, corpusCommands),
-
-    build: withHelp(
-      /**
-       * Build a KDTree from onset slices of an audio file
-       *
-       * Build a KDTree corpus from the onset slices of an audio file.
-       * Requires sample.onsets() and sample.slice() to have been run first.
-       * If source is omitted, uses the currently loaded audio.
-       *
-       * @param source Audio source. Omit to use current audio.
-       * @param featureHashOverride Override the feature hash (advanced use).
-       * @example const samp = sn.read('loop.wav')\ncorpus.build(samp)
-       * @example corpus.build()
-       */
-      async function build(
-        source?: string | SampleResult | PromiseLike<SampleResult>,
-        featureHashOverride?: string,
-      ): Promise<BounceResult> {
-        let sourceHash: string;
-        let featureHash: string;
-
-        if (typeof source === "string") {
-          sourceHash = source;
-          if (!featureHashOverride) throw new Error("featureHash required when passing sourceHash as string.");
-          featureHash = featureHashOverride;
-        } else {
-          let resolved: SampleResult | undefined;
-          if (source !== undefined) resolved = await resolveSample(source as SampleResult | PromiseLike<SampleResult>);
-          const hash = resolved?.hash ?? audioManager.getCurrentAudio()?.hash;
-          if (!hash) throw new Error('No audio loaded. Use sn.read("path/to/file") first.');
-          sourceHash = hash;
-
-          if (featureHashOverride) {
-            featureHash = featureHashOverride;
-          } else {
-            const feature = await window.electron.getMostRecentFeature(sourceHash, "onset-slice");
-            if (!feature) throw new Error("No onset-slice feature found. Run sample.onsets() then sample.slice() first.");
-            featureHash = feature.feature_hash;
-          }
-        }
-
-        terminal.writeln("\x1b[36mBuilding corpus…\x1b[0m");
-
-        const result = await window.electron.corpusBuild(sourceHash, featureHash);
-
-        return new BounceResult(`\x1b[32mBuilt corpus: ${result.segmentCount} segments, ${result.featureDims}-dim features, KDTree ready\x1b[0m`);
-      },
-      corpusCommands[0],
-    ),
-
-    query: withHelp(
-      /**
-       * Find k nearest corpus neighbors for a segment
-       *
-       * Find the k nearest corpus segments to the segment at segmentIndex.
-       * Returns a ranked table of indices and distances.
-       * k defaults to 5.
-       *
-       * @param segmentIndex Index of the query segment.
-       * @param k Number of nearest neighbors to return. Defaults to 5.
-       * @example corpus.query(0)
-       * @example corpus.query(0, 10)
-       */
-      async function query(segmentIndex: number, k = 5): Promise<BounceResult> {
-        terminal.writeln(`\x1b[36mQuerying corpus for segment ${segmentIndex}, k=${k}…\x1b[0m`);
-
-        const results = await window.electron.corpusQuery(segmentIndex, k);
-
-        const lines: string[] = [
-          `\x1b[1;36mNearest neighbors for segment ${segmentIndex}:\x1b[0m`,
-          `${"Rank".padEnd(6)}${"Index".padEnd(8)}${"Distance".padEnd(12)}`,
-          "─".repeat(26),
-        ];
-        results.forEach((r: { index: number; distance: number }, i: number) => {
-          lines.push(`${String(i + 1).padEnd(6)}${String(r.index).padEnd(8)}${r.distance.toFixed(4)}`);
-        });
-
-        const msg = lines.join("\n");
-        return new BounceResult(msg);
-      },
-      corpusCommands[1],
-    ),
-
-    resynthesize: withHelp(
-      /**
-       * Concatenate and play corpus segments by index array
-       *
-       * Concatenate corpus segments specified by index and play them back immediately.
-       * Useful for auditioning nearest-neighbor query results.
-       *
-       * @param queryIndices Array of segment indices to concatenate and play.
-       * @example corpus.resynthesize([0, 3, 7, 2])
-       * @example // Full workflow:\nconst samp = sn.read('loop.wav')\nsamp.onsets()\nsamp.slice()\ncorpus.build(samp)\ncorpus.query(0, 5)\ncorpus.resynthesize([0, 3, 7])
-       */
-      async function resynthesize(queryIndices: number[]): Promise<BounceResult> {
-        terminal.writeln(`\x1b[36mResynthesizing ${queryIndices.length} segments…\x1b[0m`);
-
-        const { audio, sampleRate } = await window.electron.corpusResynthesize(queryIndices);
-
-        audioManager.clearSlices();
-        await audioManager.playAudio(audio, sampleRate);
-
-        const msg = `\x1b[32mResynthesis complete: ${queryIndices.length} segments, ${(audio.length / sampleRate).toFixed(2)}s\x1b[0m`;
-        return new BounceResult(msg);
-      },
-      corpusCommands[2],
-    ),
-  };
-
-  // Suppress unused parameter lint — sampleBinder reserved for future corpus-to-sample binding
-  void sampleBinder;
-
-  return corpus;
 }
+
+/** @deprecated Use `new CorpusNamespace(deps, sampleBinder)` directly. Kept for backward compatibility. */
+export function buildCorpusNamespace(deps: NamespaceDeps, sampleBinder: SampleBinder): CorpusNamespace {
+  return new CorpusNamespace(deps, sampleBinder);
+}
+
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { corpusCommands as corpusNamespaceCommands };

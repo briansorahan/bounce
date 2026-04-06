@@ -1,138 +1,114 @@
-import { BOUNCE_GLOBALS, COMPLETION_HIDDEN_GLOBALS } from "./repl-evaluator.js";
-import { getCallablePropertyNames } from "./runtime-introspection.js";
-import type { SampleHashCompletion } from "../shared/ipc-contract.js";
+import type { PredictionResult } from "../shared/completer.js";
 
 export type CompletionAction =
   | { kind: "accept"; newBuffer: string; newCursorPosition: number }
   | { kind: "redraw" };
 
-type FsPathMethod = "ls" | "la" | "cd" | "walk" | "read";
+const DEBOUNCE_MS = 150;
+const TRIGGER_CHARS = new Set([".", "(", "{"]);
 
-type CompletionContext =
-  | { kind: "global" }
-  | { kind: "method" }
-  | { kind: "path"; prefix: string }
-  | { kind: "hash"; prefix: string; labels: Map<string, string> };
-
+/**
+ * Tab completion powered by the REPL Intelligence Layer via IPC.
+ *
+ * update() sends a debounced completion:request to the main process (or fires
+ * immediately for trigger characters and explicit Tab/Up/Down presses).
+ * When results arrive the onMatchesChanged callback triggers a ghost text
+ * re-render in app.ts without blocking the prompt display.
+ */
 export class TabCompletion {
-  private readonly candidates: string[];
-  private matches: string[] = [];
-  private selectedIndex: number = 0;
-  private ghostLines: number = 0; // number of extra lines rendered below prompt
-  private lastBuffer: string = "";
-  private lastCursorPosition: number = 0;
-  private context: CompletionContext = { kind: "global" };
-  private api: Record<string, unknown> = {};
-  private bindingsProvider: (() => Record<string, unknown>) | null = null;
-  private updateRequestId: number = 0;
+  private matches: PredictionResult[] = [];
+  private selectedIndex = 0;
+  private ghostLines = 0;
+  private lastBuffer = "";
+  private lastCursor = 0;
+  private updateRequestId = 0;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingResolve: (() => void) | null = null;
+  private onMatchesChangedCb: (() => void) | null = null;
 
-  constructor() {
-    this.candidates = [...BOUNCE_GLOBALS].filter((g) => !COMPLETION_HIDDEN_GLOBALS.has(g)).sort();
-  }
+  /** @deprecated No-op — kept for call-site compatibility during Phase 5 migration. */
+  setApi(_api: Record<string, unknown>): void {}
 
-  setApi(api: Record<string, unknown>): void {
-    this.api = api;
-  }
+  /** @deprecated No-op — kept for call-site compatibility during Phase 5 migration. */
+  setBindingsProvider(_provider: () => Record<string, unknown>): void {}
 
-  setBindingsProvider(bindingsProvider: () => Record<string, unknown>): void {
-    this.bindingsProvider = bindingsProvider;
+  /**
+   * Register a callback invoked when IPC results arrive and ghost text should
+   * be refreshed. Called from app.ts constructor.
+   */
+  setOnMatchesChanged(cb: () => void): void {
+    this.onMatchesChangedCb = cb;
   }
 
   get matchCount(): number {
     return this.matches.length;
   }
 
-  async update(buffer: string, cursorPosition: number): Promise<void> {
+  /**
+   * Request completions for the current buffer/cursor position.
+   *
+   * When immediate=true (trigger chars, Tab, Up/Down): fires IPC immediately;
+   * returns a Promise that resolves once results have been applied.
+   *
+   * When immediate=false (normal keystrokes): debounces DEBOUNCE_MS ms;
+   * returns a Promise that resolves after debounce + IPC. The onMatchesChanged
+   * callback fires when results arrive so app.ts can re-render ghost text.
+   */
+  update(buffer: string, cursor: number, immediate = false): Promise<void> {
     this.lastBuffer = buffer;
-    this.lastCursorPosition = cursorPosition;
+    this.lastCursor = cursor;
 
-    const requestId = ++this.updateRequestId;
-
-    if (cursorPosition < buffer.length) {
-      this.applyMatches(requestId, [], { kind: "global" });
-      return;
+    // Cancel any in-flight debounce and resolve its waiting Promise
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    if (this.pendingResolve) {
+      this.pendingResolve();
+      this.pendingResolve = null;
     }
 
-    const text = buffer.slice(0, cursorPosition);
-
-    const hashContext = this.extractHashContext(text);
-    if (hashContext !== null) {
-      const completions = await this.getSampleHashMatches(hashContext.prefix);
-      const labels = new Map<string, string>();
-      const hashes: string[] = [];
-      for (const c of completions) {
-        const label = c.filePath?.split("/").pop() ?? "";
-        labels.set(c.hash, label);
-        hashes.push(c.hash);
-      }
-      this.applyMatches(requestId, hashes, { kind: "hash", prefix: hashContext.prefix, labels });
-      return;
+    // Empty buffer — no completions
+    if (!buffer || cursor === 0) {
+      this.applyResults(++this.updateRequestId, []);
+      return Promise.resolve();
     }
 
-    const pathContext = this.extractFsPathContext(text);
-    if (pathContext !== null) {
-      const matches = await this.getFsPathMatches(pathContext.method, pathContext.prefix);
-      this.applyMatches(requestId, matches, { kind: "path", prefix: pathContext.prefix });
-      return;
+    const lastChar = buffer[cursor - 1];
+    const isTrigger = immediate || (lastChar !== undefined && TRIGGER_CHARS.has(lastChar));
+
+    if (isTrigger) {
+      return this.fireRequest(buffer, cursor);
     }
 
-    const dotMatch = text.match(/([A-Za-z_$][A-Za-z0-9_$]*)\.([A-Za-z_$][A-Za-z0-9_$]*)?$/);
-    if (dotMatch) {
-      const objName = dotMatch[1];
-      const methodPrefix = dotMatch[2] ?? "";
-      const obj = this.getCompletionBindings()[objName];
-      if (obj && (typeof obj === "function" || typeof obj === "object")) {
-        const methods = getCallablePropertyNames(obj)
-          .filter((k) => k.startsWith(methodPrefix))
-          .sort();
-        if (methods.length > 0) {
-          this.applyMatches(requestId, methods, { kind: "method" });
-          return;
-        }
-      }
-    }
-
-    const prefix = this.extractPrefix(text);
-    if (!prefix) {
-      this.applyMatches(requestId, [], { kind: "global" });
-      return;
-    }
-
-    this.applyMatches(
-      requestId,
-      this.candidates.filter((c) => c.startsWith(prefix)),
-      { kind: "global" },
-    );
+    return new Promise<void>((resolve) => {
+      this.pendingResolve = resolve;
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        this.pendingResolve = null;
+        this.fireRequest(this.lastBuffer, this.lastCursor).then(resolve, resolve);
+      }, DEBOUNCE_MS);
+    });
   }
 
   handleTab(): CompletionAction | null {
-    if (this.matches.length === 1) {
-      return this.makeAcceptAction(this.matches[0]);
-    }
-    if (this.matches.length > 1) {
-      return this.cycleSelection(1);
-    }
+    if (this.matches.length === 1) return this.makeAcceptAction(this.matches[0]);
+    if (this.matches.length > 1) return this.cycleSelection(1);
     return null;
   }
 
   handleUp(): CompletionAction | null {
-    if (this.matches.length > 1) {
-      return this.cycleSelection(-1);
-    }
+    if (this.matches.length > 1) return this.cycleSelection(-1);
     return null;
   }
 
   handleDown(): CompletionAction | null {
-    if (this.matches.length > 1) {
-      return this.cycleSelection(1);
-    }
+    if (this.matches.length > 1) return this.cycleSelection(1);
     return null;
   }
 
   handleEnter(): CompletionAction | null {
-    if (this.matches.length > 1) {
-      return this.makeAcceptAction(this.matches[this.selectedIndex]);
-    }
+    if (this.matches.length > 1) return this.makeAcceptAction(this.matches[this.selectedIndex]);
     return null;
   }
 
@@ -143,24 +119,22 @@ export class TabCompletion {
     }
 
     const prefix = this.getActivePrefix();
-    const isStringArg = this.context.kind === "path" || this.context.kind === "hash";
 
     if (this.matches.length === 1) {
-      const suffix = this.matches[0].slice(prefix.length) + (isStringArg ? "" : "()");
+      const match = this.matches[0];
+      const rest = match.label.slice(prefix.length);
+      const suffix = this.needsSuffix(match) ? "()" : "";
       this.ghostLines = 0;
-      return `\x1b7\x1b[90m${suffix}\x1b[0m\x1b8`;
+      return `\x1b7\x1b[90m${rest}${suffix}\x1b[0m\x1b8`;
     }
 
     this.ghostLines = this.matches.length;
     let result = "\x1b7";
     for (let i = 0; i < this.matches.length; i++) {
-      let label: string;
-      if (this.context.kind === "hash") {
-        const meta = this.context.labels.get(this.matches[i]) ?? "";
-        label = meta ? `${this.matches[i]} ${meta}` : this.matches[i];
-      } else {
-        label = this.matches[i] + (isStringArg ? "" : "()");
-      }
+      const match = this.matches[i];
+      const suffix = this.needsSuffix(match) ? "()" : "";
+      const detail = match.detail ? ` ${match.detail}` : "";
+      const label = `${match.label}${suffix}${detail}`;
       if (i === this.selectedIndex) {
         result += `\r\n\x1b[1;36m> ${label}\x1b[0m`;
       } else {
@@ -187,47 +161,56 @@ export class TabCompletion {
     this.selectedIndex = 0;
     this.ghostLines = 0;
     this.lastBuffer = "";
-    this.lastCursorPosition = 0;
-    this.context = { kind: "global" };
-  }
-
-  private getActivePrefix(): string {
-    const text = this.lastBuffer.slice(0, this.lastCursorPosition);
-    if (this.context.kind === "path") {
-      return this.context.prefix;
+    this.lastCursor = 0;
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
-    if (this.context.kind === "hash") {
-      return this.context.prefix;
+    if (this.pendingResolve) {
+      this.pendingResolve();
+      this.pendingResolve = null;
     }
-    if (this.context.kind === "method") {
-      const m = text.match(/\.([A-Za-z_$][A-Za-z0-9_$]*)$/);
-      return m ? m[1] : "";
+  }
+
+  // ── Private ───────────────────────────────────────────────────────────────
+
+  private async fireRequest(buffer: string, cursor: number): Promise<void> {
+    const requestId = ++this.updateRequestId;
+
+    const api = typeof window !== "undefined"
+      ? (window.electron as typeof window.electron & {
+          requestCompletion?: (b: string, c: number, id: number) => Promise<PredictionResult[]>;
+        })
+      : undefined;
+
+    if (!api?.requestCompletion) {
+      this.applyResults(requestId, []);
+      return;
     }
-    return this.extractPrefix(text);
+
+    try {
+      const results = await api.requestCompletion(buffer, cursor, requestId);
+      this.applyResults(requestId, results);
+    } catch {
+      this.applyResults(requestId, []);
+    }
   }
 
-  private extractPrefix(text: string): string {
-    const m = text.match(/[A-Za-z_$][A-Za-z0-9_$]*$/);
-    return m ? m[0] : "";
-  }
+  private applyResults(requestId: number, results: PredictionResult[]): void {
+    if (requestId !== this.updateRequestId) return;
 
-  private getCompletionBindings(): Record<string, unknown> {
-    return this.bindingsProvider ? this.bindingsProvider() : this.api;
-  }
+    const changed =
+      this.matches.length !== results.length ||
+      this.matches.some((m, i) => m.label !== results[i]?.label);
 
-  private makeAcceptAction(fullName: string): CompletionAction {
-    const prefix = this.getActivePrefix();
-    const base = this.lastBuffer.slice(
-      0,
-      this.lastCursorPosition - prefix.length,
-    );
-    const after = this.lastBuffer.slice(this.lastCursorPosition);
-    const isStringArg = this.context.kind === "path" || this.context.kind === "hash";
-    const suffix = isStringArg ? "" : "()";
-    const newBuffer = base + fullName + suffix + after;
-    const newCursorPosition =
-      base.length + fullName.length + (isStringArg ? 0 : 1);
-    return { kind: "accept", newBuffer, newCursorPosition };
+    if (changed || results.length === 0) {
+      this.selectedIndex = 0;
+    } else if (this.selectedIndex >= results.length) {
+      this.selectedIndex = results.length - 1;
+    }
+
+    this.matches = results;
+    this.onMatchesChangedCb?.();
   }
 
   private cycleSelection(delta: number): CompletionAction {
@@ -236,73 +219,37 @@ export class TabCompletion {
     return { kind: "redraw" };
   }
 
-  private applyMatches(
-    requestId: number,
-    matches: string[],
-    context: CompletionContext,
-  ): void {
-    if (requestId !== this.updateRequestId) {
-      return;
-    }
-
-    const matchesChanged =
-      this.matches.length !== matches.length ||
-      this.matches.some((match, index) => match !== matches[index]);
-    const contextChanged =
-      this.context.kind !== context.kind ||
-      (this.context.kind === "path" &&
-        context.kind === "path" &&
-        this.context.prefix !== context.prefix) ||
-      (this.context.kind === "hash" &&
-        context.kind === "hash" &&
-        this.context.prefix !== context.prefix);
-
-    if (matchesChanged || contextChanged) {
-      this.selectedIndex = 0;
-    } else if (matches.length === 0) {
-      this.selectedIndex = 0;
-    } else if (this.selectedIndex >= matches.length) {
-      this.selectedIndex = matches.length - 1;
-    }
-
-    this.matches = matches;
-    this.context = context;
+  private makeAcceptAction(match: PredictionResult): CompletionAction {
+    const prefix = this.getActivePrefix();
+    const insertText = match.insertText ?? match.label;
+    const base = this.lastBuffer.slice(0, this.lastCursor - prefix.length);
+    const after = this.lastBuffer.slice(this.lastCursor);
+    const suffix = this.needsSuffix(match) ? "()" : "";
+    const newBuffer = base + insertText + suffix + after;
+    const newCursorPosition = base.length + insertText.length + (suffix === "()" ? 1 : 0);
+    return { kind: "accept", newBuffer, newCursorPosition };
   }
 
-  private extractFsPathContext(text: string): { method: FsPathMethod; prefix: string } | null {
-    const match = text.match(/\b(?:fs\.(ls|la|cd|walk)|sn\.read)\(\s*(["'])([^"']*)$/);
-    if (!match) {
-      return null;
-    }
-
-    return {
-      method: (match[1] ?? "read") as FsPathMethod,
-      prefix: match[3],
-    };
+  private needsSuffix(match: PredictionResult): boolean {
+    return match.kind === "namespace" || match.kind === "method" || match.kind === "type";
   }
 
-  private extractHashContext(text: string): { prefix: string } | null {
-    const match = text.match(/\bsn\.load\(\s*(["'])([^"']*)$/);
-    if (!match) {
-      return null;
-    }
-
-    return { prefix: match[2] };
-  }
-
-  private async getFsPathMatches(method: FsPathMethod, prefix: string): Promise<string[]> {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    return window.electron.fsCompletePath(method, prefix);
-  }
-
-  private async getSampleHashMatches(prefix: string): Promise<SampleHashCompletion[]> {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    return window.electron.completeSampleHash(prefix);
+  /**
+   * Determine the prefix that the active completion replaces. Must match
+   * makeAcceptAction's slice logic exactly so Tab-accept positions the cursor
+   * correctly.
+   */
+  private getActivePrefix(): string {
+    const text = this.lastBuffer.slice(0, this.lastCursor);
+    // String literal: prefix is the content after the last quote character
+    const strMatch = /['"]([\w./~-]*)$/.exec(text);
+    if (strMatch) return strMatch[1];
+    // Property access: prefix is the identifier after the dot (possibly empty)
+    const dotMatch = /\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(text);
+    if (dotMatch) return dotMatch[1];
+    if (/[A-Za-z_$][A-Za-z0-9_$]*\.$/.test(text)) return "";
+    // Identifier
+    const identMatch = /([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(text);
+    return identMatch ? identMatch[1] : "";
   }
 }

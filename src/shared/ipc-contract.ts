@@ -1,4 +1,15 @@
 // ---------------------------------------------------------------------------
+// Completion types
+// ---------------------------------------------------------------------------
+
+export interface PredictionResult {
+  label: string;
+  insertText?: string;
+  kind: "namespace" | "method" | "type" | "variable" | "filePath" | "sampleHash" | "key";
+  detail?: string;
+}
+
+// ---------------------------------------------------------------------------
 // MIDI types
 // ---------------------------------------------------------------------------
 
@@ -478,6 +489,9 @@ export const IpcChannel = {
   MidiInputEvent: "midi-input-event",
   MidiPlaybackEnded: "midi-playback-ended",
 
+  // Completion (renderer → main, handle)
+  CompletionRequest:     "completion:request",
+
   // App lifecycle (renderer → main, one-way)
   ForceShutdown:         "force-shutdown",
 
@@ -777,6 +791,10 @@ export interface IpcHandleContract {
     request: [];
     response: void;
   };
+  "completion:request": {
+    request: [buffer: string, cursor: number, requestId: number];
+    response: PredictionResult[];
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1048,6 +1066,9 @@ export interface ElectronAPI {
   midiStopPlayback: () => Promise<void>;
   onMidiInputEvent: (callback: (event: MidiEvent) => void) => void;
   onMidiPlaybackEnded: (callback: (data: { sequenceId: number }) => void) => void;
+
+  // Completion
+  requestCompletion: (buffer: string, cursor: number, requestId: number) => Promise<PredictionResult[]>;
 
   // App lifecycle
   forceShutdown: () => void;

@@ -20,6 +20,23 @@ function truncate(input: string, maxLength: number): string {
 const HIDDEN_PROPERTIES = new Set(["toString", "helpFactory"]);
 
 export function getCallablePropertyNames(obj: object): string[] {
+  // Check own instance callable properties first.
+  // After attachNamespaceMethodHelp(), namespace instances have bound public
+  // methods as own instance properties. If any own callable properties exist,
+  // return only those — they represent the intentionally exposed public API.
+  const ownCallable: string[] = [];
+  for (const name of Object.getOwnPropertyNames(obj)) {
+    if (name === "constructor" || HIDDEN_PROPERTIES.has(name)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(obj, name);
+    if (descriptor && typeof descriptor.value === "function") {
+      ownCallable.push(name);
+    }
+  }
+  if (ownCallable.length > 0) {
+    return ownCallable;
+  }
+
+  // No own callable properties: walk the full prototype chain.
   const names = new Set<string>();
   let current: object | null = obj;
 

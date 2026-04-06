@@ -7,6 +7,7 @@ import { CorpusManager } from "./corpus-manager";
 import { SettingsStore } from "./settings-store";
 import { registerAllHandlers } from "./ipc/register";
 import { logBackgroundError } from "./logger";
+import { LanguageServiceManager } from "./language-service-manager";
 
 let dbManager: DatabaseManager | undefined = undefined;
 let settingsStore: SettingsStore | undefined = undefined;
@@ -17,6 +18,11 @@ const corpusManager: CorpusManager = new CorpusManager();
 // ---------------------------------------------------------------------------
 let audioEngineProcess: UtilityProcess | null = null;
 let audioEnginePort: Electron.MessagePortMain | null = null;
+
+// ---------------------------------------------------------------------------
+// Language Service manager
+// ---------------------------------------------------------------------------
+export const languageServiceManager = new LanguageServiceManager();
 
 function shutdownRuntimeResources(): void {
   audioEnginePort?.close();
@@ -33,6 +39,8 @@ function shutdownRuntimeResources(): void {
       try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
     }
   }
+
+  languageServiceManager.shutdown();
 
   if (dbManager) {
     dbManager.close();
@@ -62,6 +70,13 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
 
   startAudioEngineProcess(mainWindow);
+  languageServiceManager.start();
+  languageServiceManager.onReady(() => {
+    const history = dbManager?.getSessionHistory() ?? [];
+    if (history.length > 0) {
+      languageServiceManager.sessionRestore(history);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +177,7 @@ registerAllHandlers({
   corpusManager,
   getAudioEnginePort: () => audioEnginePort,
   getMainWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+  languageServiceManager,
 });
 
 // ---------------------------------------------------------------------------

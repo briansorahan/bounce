@@ -13,8 +13,66 @@ See the brainstorming section for the full description of what each of these ide
 * Freesound Integration
 * Scripts
 * Staging Area
+* Command Line Interface
+* Microtuning
+* Process Architecture
 
 # Brainstorming
+
+## Process Architecture
+
+* Processes should define "services" that expose an IPC interface
+* We already have some services
+  * Main process
+  * Renderer
+  * Audio process
+  * Language service
+* The responsibilities of each service should be as minimal as possible
+* Other services I think we should have already
+  * Completions service
+* Service dependencies form a process graph
+  * This influences how the whole system starts up and shuts down
+  * This influences the structure of the application state
+
+### Main Process
+
+* Event Broker
+* Application State Management and Persistence
+* Process Manager
+
+### Renderer
+
+* Fires events based on user actions
+* Renders application state
+* Visualizations are defined in the state so that the UI can restore itself on app restart
+
+### Audio Process
+
+* Renders audio output to the OS
+* Hosts threads that need to interact with the audio system but can not do this across a process boundary, i.e. using IPC, for performance reasons
+* Provides telemetry for things like sample playback
+
+### Language Service
+
+* LSP service defined by the official typescript language service (open source)
+
+### Completions Service
+
+* Doesn't exist today
+* Depends on the language service
+* Fires auto-complete events that are handled in the renderer
+
+## Microtuning
+
+* Playing instruments with alternate tunings
+* Load scala files
+
+## Command Line Interface
+
+* `bounce` CLI tool
+* Does everything the electron app does
+* Visualizations are not live and clickable
+  * Rendered with the sixel protocol
 
 ## User Configuration
 

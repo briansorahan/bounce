@@ -1,11 +1,8 @@
-import { attachMethodHelp } from "../help.js";
+import { attachMethodHelpFromRegistry } from "../help.js";
 import { BounceResult, HelpableResult, isPromiseLike, type HelpFactory } from "./base.js";
 import type { SliceFeatureResult, NmfFeatureResult, NxFeatureResult } from "./features.js";
 import type { SampleResult } from "./sample.js";
-import { porcelainTypeHelps } from "./porcelain-types.generated.js";
-
-const visSceneMethodHelps = porcelainTypeHelps.find(t => t.name === "VisScene")?.methods ?? [];
-const visStackMethodHelps = porcelainTypeHelps.find(t => t.name === "VisStack")?.methods ?? [];
+import { replType, describe, param } from "../../shared/repl-registry.js";
 
 export interface VisSceneBindings {
   help: HelpFactory;
@@ -26,6 +23,7 @@ export interface VisSceneSummary {
   panelCount: number;
 }
 
+@replType("VisScene", { summary: "A visualization scene for a sample" })
 export class VisSceneResult extends HelpableResult {
   readonly overlays: Array<SliceFeatureResult | NmfFeatureResult | NxFeatureResult> = [];
   readonly panels: NmfFeatureResult[] = [];
@@ -40,7 +38,7 @@ export class VisSceneResult extends HelpableResult {
   ) {
     super("", bindings.help);
     this.titleText = titleText;
-    attachMethodHelp(this, "VisScene", visSceneMethodHelps);
+    attachMethodHelpFromRegistry(this, "VisScene");
   }
 
   override toString(): string {
@@ -60,11 +58,15 @@ export class VisSceneResult extends HelpableResult {
     return this.shownSceneId;
   }
 
+  @describe({ summary: "Set the title text for this scene.", returns: "VisScene" })
+  @param("text", { summary: "Title string to display.", kind: "plain" })
   title(text: string): VisSceneResult {
     this.titleText = text;
     return this;
   }
 
+  @describe({ summary: "Add a feature overlay (slice, NMF, or NX) to this scene.", returns: "VisScene" })
+  @param("feature", { summary: "SliceFeature, NmfFeature, or NxFeature to overlay.", kind: "typed", expectedType: "SliceFeatureResult | NmfFeatureResult | NxFeatureResult" })
   overlay(feature: SliceFeatureResult | NmfFeatureResult | NxFeatureResult | PromiseLike<SliceFeatureResult | NmfFeatureResult | NxFeatureResult>): VisSceneResult {
     if (isPromiseLike<SliceFeatureResult | NmfFeatureResult | NxFeatureResult>(feature)) {
       this.pendingOps.push(Promise.resolve(feature).then((f) => { this.overlays.push(f); }));
@@ -74,6 +76,8 @@ export class VisSceneResult extends HelpableResult {
     return this;
   }
 
+  @describe({ summary: "Add an NMF feature as a separate panel below the main scene.", returns: "VisScene" })
+  @param("feature", { summary: "NmfFeature to display as a panel.", kind: "typed", expectedType: "NmfFeatureResult" })
   panel(feature: NmfFeatureResult | PromiseLike<NmfFeatureResult>): VisSceneResult {
     if (isPromiseLike<NmfFeatureResult>(feature)) {
       this.pendingOps.push(Promise.resolve(feature).then((f) => { this.panels.push(f); }));
@@ -83,10 +87,13 @@ export class VisSceneResult extends HelpableResult {
     return this;
   }
 
+  @describe({ summary: "Render this scene in the terminal visualization panel.", returns: "BounceResult" })
   show(): Promise<BounceResult> {
     return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }
 
+  @describe({ summary: "Record the scene ID after it has been rendered.", visibility: "plumbing" })
+  @param("id", { summary: "Rendered scene identifier.", kind: "plain" })
   markShown(id: string): void {
     this.shownSceneId = id;
   }
@@ -143,13 +150,14 @@ export class VisSceneListResult extends HelpableResult {
   }
 }
 
+@replType("VisStack", { summary: "A stack of visualization scenes" })
 export class VisStackResult extends HelpableResult {
   readonly scenes: VisSceneResult[] = [];
   private readonly pendingOps: Array<Promise<void>> = [];
 
   constructor(private readonly bindings: VisStackBindings) {
     super("", bindings.help);
-    attachMethodHelp(this, "VisStack", visStackMethodHelps);
+    attachMethodHelpFromRegistry(this, "VisStack");
   }
 
   override toString(): string {
@@ -163,20 +171,28 @@ export class VisStackResult extends HelpableResult {
     ].join("\n");
   }
 
+  @describe({ summary: "Add a waveform scene for a sample. Replaced at runtime by vis.stack().", visibility: "plumbing" })
+  @param("sample", { summary: "SampleResult to visualize.", kind: "typed", expectedType: "SampleResult" })
   waveform(_sample: SampleResult): VisStackResult {
     throw new Error("Use vis.stack().waveform(sample) from the vis namespace.");
   }
 
+  @describe({ summary: "Append a pre-built VisScene to this stack.", visibility: "plumbing" })
+  @param("scene", { summary: "VisSceneResult to add.", kind: "typed", expectedType: "VisSceneResult" })
   addScene(scene: VisSceneResult): VisStackResult {
     this.scenes.push(scene);
     return this;
   }
 
+  @describe({ summary: "Set the title of the most recently added scene.", returns: "VisStack" })
+  @param("text", { summary: "Title string to display.", kind: "plain" })
   title(text: string): VisStackResult {
     this.requireLatestScene().title(text);
     return this;
   }
 
+  @describe({ summary: "Add a feature overlay to the most recently added scene.", returns: "VisStack" })
+  @param("feature", { summary: "SliceFeature, NmfFeature, or NxFeature to overlay.", kind: "typed", expectedType: "SliceFeatureResult | NmfFeatureResult | NxFeatureResult" })
   overlay(feature: SliceFeatureResult | NmfFeatureResult | NxFeatureResult | PromiseLike<SliceFeatureResult | NmfFeatureResult | NxFeatureResult>): VisStackResult {
     const latest = this.requireLatestScene();
     if (isPromiseLike<SliceFeatureResult | NmfFeatureResult | NxFeatureResult>(feature)) {
@@ -187,6 +203,8 @@ export class VisStackResult extends HelpableResult {
     return this;
   }
 
+  @describe({ summary: "Add an NMF feature panel to the most recently added scene.", returns: "VisStack" })
+  @param("feature", { summary: "NmfFeature to display as a panel.", kind: "typed", expectedType: "NmfFeatureResult" })
   panel(feature: NmfFeatureResult | PromiseLike<NmfFeatureResult>): VisStackResult {
     const latest = this.requireLatestScene();
     if (isPromiseLike<NmfFeatureResult>(feature)) {
@@ -197,6 +215,7 @@ export class VisStackResult extends HelpableResult {
     return this;
   }
 
+  @describe({ summary: "Render all scenes in this stack in the visualization panel.", returns: "BounceResult" })
   show(): Promise<BounceResult> {
     return Promise.all(this.pendingOps).then(() => this.bindings.show(this));
   }

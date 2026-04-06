@@ -12,6 +12,9 @@ export class WaveformVisualizer {
   private currentSampleRate: number = 0;
   private currentSlices: number[] | null = null;
   private currentNMFData: NMFOverlayData | null = null;
+  // Cached pixel snapshot of the waveform without the playback cursor.
+  // Restored on every cursor update to avoid a full redraw.
+  private waveformImageCache: ImageData | null = null;
 
   constructor(waveformCanvasOrId: string | HTMLCanvasElement) {
     this.waveformCanvas = typeof waveformCanvasOrId === "string"
@@ -47,6 +50,7 @@ export class WaveformVisualizer {
       const rect = this.waveformCanvas.getBoundingClientRect();
       this.waveformCanvas.width = rect.width;
       this.waveformCanvas.height = rect.height;
+      this.waveformImageCache = null;
 
       // Redraw waveform after resize if we have audio data
       if (this.currentAudioData && this.currentSampleRate) {
@@ -64,6 +68,7 @@ export class WaveformVisualizer {
 
   setNMFOverlay(nmfData: NMFOverlayData | null): void {
     this.currentNMFData = nmfData;
+    this.waveformImageCache = null;
     // Redraw to show the overlay
     if (this.currentAudioData && this.currentSampleRate) {
       this.drawWaveform(
@@ -165,6 +170,10 @@ export class WaveformVisualizer {
       this.drawNMFOverlay();
     }
 
+    // Cache pixels before drawing the cursor so rapid cursor updates don't
+    // trigger a full redraw.
+    this.waveformImageCache = ctx.getImageData(0, 0, width, height);
+
     this.drawPlaybackCursor(audioData.length);
   }
 
@@ -261,10 +270,17 @@ export class WaveformVisualizer {
     }
   }
 
-  updatePlaybackCursor(position: number, _totalSamples: number): void {
+  updatePlaybackCursor(position: number, totalSamples: number): void {
     this.playbackCursorPosition = position;
 
-    if (this.currentAudioData && this.currentSampleRate) {
+    if (!this.currentAudioData || !this.currentSampleRate) return;
+
+    if (this.waveformImageCache) {
+      // Fast path: restore cached pixels and paint only the cursor line.
+      this.waveformCtx.putImageData(this.waveformImageCache, 0, 0);
+      this.drawPlaybackCursor(totalSamples);
+    } else {
+      // Cache not yet built — do a full draw (which will build the cache).
       this.drawWaveform(
         this.currentAudioData,
         this.currentSampleRate,

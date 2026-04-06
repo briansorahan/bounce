@@ -14,25 +14,154 @@ import {
   getRuntimePreview,
   getRuntimeTypeLabel,
 } from "../runtime-introspection.js";
-import { renderNamespaceHelp, withHelp } from "../help.js";
 import type { NamespaceDeps } from "./types.js";
-import { envCommands, envDescription } from "./env-commands.generated.js";
+import { namespace, describe, param } from "../../shared/repl-registry.js";
+import { setDevMode, getDevMode } from "../../shared/repl-registration.js";
+import { envCommands } from "./env-commands.generated.js";
 export { envCommands } from "./env-commands.generated.js";
 
-/**
- * Runtime introspection — inspect variables, globals, and functions
- * @namespace env
- */
-export function buildEnvNamespace(deps: NamespaceDeps) {
-  function getApiEntries(): Array<[string, unknown]> {
-    return Object.entries(deps.sharedState.api ?? {});
+@namespace("env", { summary: "Runtime introspection — inspect variables, globals, and functions" })
+export class EnvNamespace {
+  /** Namespace summary — used by the globals help() function. */
+  readonly description = "Runtime introspection — inspect variables, globals, and functions";
+
+  constructor(private readonly deps: NamespaceDeps) {}
+
+  // ── Injected by @namespace decorator — do not implement manually ──────────
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  help(): unknown {
+    // Replaced at class definition time by the @namespace decorator.
+    return undefined;
   }
 
-  function makeEnvEntry(
-    name: string,
-    scope: EnvEntryScope,
-    value: unknown,
-  ): EnvEntrySummary {
+  toString(): string {
+    return String(this.help());
+  }
+
+  // ── Public REPL-facing methods ────────────────────────────────────────────
+
+  @describe({
+    summary: "List user-defined bindings in scope. Each entry shows name, type, callable flag, and preview.",
+    returns: "EnvScopeResult",
+  })
+  vars(): EnvScopeResult {
+    const entries = (this.deps.runtime?.listScopeEntries() ?? [])
+      .map((entry) => this.makeEnvEntry(entry.name, "user", entry.value))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return new EnvScopeResult(
+      this.formatEnvScopeTable("Runtime Variables", entries, "No user-defined variables in scope."),
+      entries,
+      () => this.envScopeHelpText("vars"),
+    );
+  }
+
+  @describe({
+    summary: "List Bounce-provided globals. Each entry shows name, type, callable flag, and preview.",
+    returns: "EnvScopeResult",
+  })
+  globals(): EnvScopeResult {
+    const entries = this.getApiEntries()
+      .map(([name, value]) => this.makeEnvEntry(name, "global", value))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return new EnvScopeResult(
+      this.formatEnvScopeTable("Bounce Globals", entries, "No globals available."),
+      entries,
+      () => this.envScopeHelpText("globals"),
+    );
+  }
+
+  @describe({
+    summary: "Inspect one runtime binding or value. Pass a name string to resolve by name, or pass a value directly.",
+    returns: "EnvInspectionResult",
+  })
+  @param("nameOrValue", {
+    summary: "Variable name string or a direct value to inspect.",
+    kind: "plain",
+  })
+  inspect(nameOrValue: unknown): EnvInspectionResult {
+    const target = this.resolveEnvTarget(nameOrValue);
+    return this.formatEnvInspection(target.name, target.scope, target.value);
+  }
+
+  @describe({
+    summary: "List callable members on a value, or all user-defined functions if no argument given.",
+    returns: "EnvFunctionListResult",
+  })
+  @param("nameOrValue", {
+    summary: "Value or name to inspect. Omit to list all user-defined functions.",
+    kind: "plain",
+  })
+  functions(nameOrValue?: unknown): EnvFunctionListResult {
+    if (nameOrValue === undefined) {
+      const names = (this.deps.runtime?.listScopeEntries() ?? [])
+        .filter(({ value }) => typeof value === "function")
+        .map(({ name }) => name)
+        .sort();
+      const display =
+        names.length === 0
+          ? [
+              "\x1b[1;36mUser-Defined Functions\x1b[0m",
+              "",
+              "\x1b[90mNo user-defined functions in scope.\x1b[0m",
+            ].join("\n")
+          : [
+              "\x1b[1;36mUser-Defined Functions\x1b[0m",
+              "",
+              ...names.map((name) => `  ${name}()`),
+            ].join("\n");
+      return new EnvFunctionListResult(display, "function", names, () => this.envFunctionsHelpText());
+    }
+
+    const target = this.resolveEnvTarget(nameOrValue);
+    const callableMembers =
+      target.value && (typeof target.value === "object" || typeof target.value === "function")
+        ? getCallablePropertyNames(target.value).sort()
+        : [];
+    const targetLabel = target.name ?? getRuntimeTypeLabel(target.value);
+    const display =
+      callableMembers.length === 0
+        ? [
+            `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+            "",
+            "\x1b[90mNo callable members found.\x1b[0m",
+          ].join("\n")
+        : [
+            `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
+            "",
+            ...callableMembers.map((name) => `  ${name}()`),
+          ].join("\n");
+
+    return new EnvFunctionListResult(
+      display,
+      getRuntimeTypeLabel(target.value),
+      callableMembers,
+      () => this.envFunctionsHelpText(),
+    );
+  }
+
+  @describe({
+    summary: "Toggle developer mode to show or hide plumbing commands.",
+    returns: "BounceResult",
+  })
+  @param("toggle", { summary: "True to enable, false to disable. Omit to query current state.", kind: "plain" })
+  dev(toggle?: boolean): BounceResult {
+    if (toggle === undefined) {
+      return new BounceResult(`dev mode: ${getDevMode() ? "on" : "off"}`);
+    }
+    setDevMode(toggle);
+    return new BounceResult(`dev mode: ${toggle ? "on" : "off"}`);
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private getApiEntries(): Array<[string, unknown]> {
+    return Object.entries(this.deps.sharedState.api ?? {});
+  }
+
+  private makeEnvEntry(name: string, scope: EnvEntryScope, value: unknown): EnvEntrySummary {
     return {
       name,
       scope,
@@ -42,11 +171,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     };
   }
 
-  function formatEnvScopeTable(
-    title: string,
-    entries: EnvEntrySummary[],
-    emptyMessage: string,
-  ): string {
+  private formatEnvScopeTable(title: string, entries: EnvEntrySummary[], emptyMessage: string): string {
     if (entries.length === 0) {
       return [`\x1b[1;36m${title}\x1b[0m`, "", `\x1b[90m${emptyMessage}\x1b[0m`].join("\n");
     }
@@ -75,11 +200,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ].join("\n");
   }
 
-  function envHelpText(): BounceResult {
-    return renderNamespaceHelp("env", envDescription, envCommands);
-  }
-
-  function envScopeHelpText(label: "vars" | "globals"): BounceResult {
+  private envScopeHelpText(label: "vars" | "globals"): BounceResult {
     return new BounceResult([
       `\x1b[1;36menv.${label}()\x1b[0m`,
       "",
@@ -93,7 +214,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function envInspectHelpText(): BounceResult {
+  private envInspectHelpText(): BounceResult {
     return new BounceResult([
       "\x1b[1;36menv.inspect(nameOrValue)\x1b[0m",
       "",
@@ -106,7 +227,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function envFunctionsHelpText(): BounceResult {
+  private envFunctionsHelpText(): BounceResult {
     return new BounceResult([
       "\x1b[1;36menv.functions([value])\x1b[0m",
       "",
@@ -120,7 +241,7 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
     ].join("\n"));
   }
 
-  function formatEnvInspection(
+  private formatEnvInspection(
     name: string | undefined,
     scope: EnvInspectScope,
     value: unknown,
@@ -153,174 +274,32 @@ export function buildEnvNamespace(deps: NamespaceDeps) {
       callable,
       preview,
       callableMembers,
-      envInspectHelpText,
+      () => this.envInspectHelpText(),
     );
   }
 
-  function resolveEnvTarget(nameOrValue: unknown): {
+  private resolveEnvTarget(nameOrValue: unknown): {
     name: string | undefined;
     scope: EnvInspectScope;
     value: unknown;
   } {
     if (typeof nameOrValue === "string") {
-      if (deps.runtime?.hasScopeValue(nameOrValue)) {
-        return {
-          name: nameOrValue,
-          scope: "user",
-          value: deps.runtime.getScopeValue(nameOrValue),
-        };
+      if (this.deps.runtime?.hasScopeValue(nameOrValue)) {
+        return { name: nameOrValue, scope: "user", value: this.deps.runtime.getScopeValue(nameOrValue) };
       }
-      const globalEntry = getApiEntries().find(([name]) => name === nameOrValue);
+      const globalEntry = this.getApiEntries().find(([name]) => name === nameOrValue);
       if (globalEntry) {
-        return {
-          name: nameOrValue,
-          scope: "global",
-          value: globalEntry[1],
-        };
+        return { name: nameOrValue, scope: "global", value: globalEntry[1] };
       }
     }
-
-    return {
-      name: undefined,
-      scope: "value",
-      value: nameOrValue,
-    };
+    return { name: undefined, scope: "value", value: nameOrValue };
   }
-
-  const env = {
-    description: envDescription,
-    help(): BounceResult {
-      return envHelpText();
-    },
-
-    vars: withHelp(
-      /**
-       * List user-defined variables in scope
-       *
-       * List user-defined bindings that persist across REPL evaluations.
-       * Each entry shows a name, runtime type label, callable flag, and short preview.
-       *
-       * @example env.vars()
-       */
-      function vars(): EnvScopeResult {
-        const entries = (deps.runtime?.listScopeEntries() ?? [])
-          .map((entry) => makeEnvEntry(entry.name, "user", entry.value))
-          .sort((left, right) => left.name.localeCompare(right.name));
-
-        return new EnvScopeResult(
-          formatEnvScopeTable("Runtime Variables", entries, "No user-defined variables in scope."),
-          entries,
-          () => envScopeHelpText("vars"),
-        );
-      },
-      envCommands[0],
-    ),
-
-    globals: withHelp(
-      /**
-       * List built-in Bounce globals
-       *
-       * List Bounce-provided globals exposed in the current REPL session.
-       * Each entry shows a name, runtime type label, callable flag, and short preview.
-       *
-       * @example env.globals()
-       */
-      function globals(): EnvScopeResult {
-        const entries = getApiEntries()
-          .map(([name, value]) => makeEnvEntry(name, "global", value))
-          .sort((left, right) => left.name.localeCompare(right.name));
-
-        return new EnvScopeResult(
-          formatEnvScopeTable("Bounce Globals", entries, "No globals available."),
-          entries,
-          () => envScopeHelpText("globals"),
-        );
-      },
-      envCommands[1],
-    ),
-
-    inspect: withHelp(
-      /**
-       * Show details for one binding or value
-       *
-       * Inspect one runtime binding or direct value. If you pass a string that
-       * matches a user variable or Bounce global, Bounce resolves it by name first.
-       *
-       * @param nameOrValue Variable name string or a direct value to inspect.
-       * @example env.inspect("sn")
-       * @example env.inspect("samp")
-       * @example env.inspect(sn.current())
-       */
-      function inspect(nameOrValue: unknown): EnvInspectionResult {
-        const target = resolveEnvTarget(nameOrValue);
-        return formatEnvInspection(target.name, target.scope, target.value);
-      },
-      envCommands[2],
-    ),
-
-    functions: withHelp(
-      /**
-       * List callable members on a value, or all user-defined functions
-       *
-       * With no argument: list all user-defined functions in scope.
-       * With an argument: list callable members on that value using the same
-       * callable-property rules as tab completion.
-       *
-       * @param nameOrValue Value or name to inspect. Omit to list user-defined functions.
-       * @example env.functions()
-       * @example env.functions(sn)
-       * @example env.functions("samp")
-       */
-      function functions(nameOrValue?: unknown): EnvFunctionListResult {
-        if (nameOrValue === undefined) {
-          const names = (deps.runtime?.listScopeEntries() ?? [])
-            .filter(({ value }) => typeof value === "function")
-            .map(({ name }) => name)
-            .sort();
-          const display =
-            names.length === 0
-              ? [
-                  "\x1b[1;36mUser-Defined Functions\x1b[0m",
-                  "",
-                  "\x1b[90mNo user-defined functions in scope.\x1b[0m",
-                ].join("\n")
-              : [
-                  "\x1b[1;36mUser-Defined Functions\x1b[0m",
-                  "",
-                  ...names.map((name) => `  ${name}()`),
-                ].join("\n");
-          return new EnvFunctionListResult(display, "function", names, envFunctionsHelpText);
-        }
-
-        const target = resolveEnvTarget(nameOrValue);
-        const callableMembers =
-          target.value && (typeof target.value === "object" || typeof target.value === "function")
-            ? getCallablePropertyNames(target.value).sort()
-            : [];
-        const targetLabel = target.name ?? getRuntimeTypeLabel(target.value);
-        const display =
-          callableMembers.length === 0
-            ? [
-                `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
-                "",
-                "\x1b[90mNo callable members found.\x1b[0m",
-              ].join("\n")
-            : [
-                `\x1b[1;36mCallable Members: ${targetLabel}\x1b[0m`,
-                "",
-                ...callableMembers.map((name) => `  ${name}()`),
-              ].join("\n");
-
-        return new EnvFunctionListResult(
-          display,
-          getRuntimeTypeLabel(target.value),
-          callableMembers,
-          envFunctionsHelpText,
-        );
-      },
-      envCommands[3],
-    ),
-  };
-
-  return env;
 }
+
+/** @deprecated Use `new EnvNamespace(deps)` directly. Kept for backward compatibility. */
+export function buildEnvNamespace(deps: NamespaceDeps): EnvNamespace {
+  return new EnvNamespace(deps);
+}
+
+// Re-export commands array for any consumers of the old JSDoc-generated metadata.
+export { envCommands as envNamespaceCommands };

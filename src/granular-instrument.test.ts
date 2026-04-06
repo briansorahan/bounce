@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildInstNamespace } from "./renderer/namespaces/instrument-namespace.js";
+import { replRegistry } from "./shared/repl-registry.generated.js";
 
 const calls: Array<{ method: string; args: unknown[] }> = [];
 
@@ -28,9 +29,13 @@ const deps = {
 };
 const inst = buildInstNamespace(deps);
 
-test("inst.granular.help() mentions granular synthesis", () => {
-  const result = inst.granular.help();
-  assert.ok(result.toString().includes("Create a new granular synthesis instrument"));
+test("inst.granular @describe summary mentions granular synthesis", () => {
+  const entry = replRegistry["inst.granular"];
+  assert.ok(entry, "inst.granular entry should exist in replRegistry");
+  assert.ok(
+    entry.summary.includes("Create a granular synthesis instrument"),
+    `Expected summary to mention granular synthesis, got: ${entry.summary}`,
+  );
 });
 
 test("inst.granular() returns an object whose toString() starts with Granular", () => {
@@ -52,13 +57,13 @@ test("g.set({ position: 0.3 }) updates toString()", () => {
   assert.ok(g.toString().includes("pos 0.30"));
 });
 
-test("g.help() output contains Load the source sample and grainSize", () => {
+test("g.help() returns non-empty help text (Phase 5.2: returns @replType summary; Phase 5.3 will restore rich help)", () => {
   const g = inst.granular({ name: "test4" }) as ReturnType<typeof inst.granular> & {
-    help: () => import("./renderer/bounce-result.js").BounceResult;
+    help: () => unknown;
   };
-  const helpText = g.help().toString();
-  assert.ok(helpText.includes("Load the source sample"), `Missing 'Load the source sample' in: ${helpText}`);
-  assert.ok(helpText.includes("grainSize"), `Missing 'grainSize' in: ${helpText}`);
+  const helpText = String(g.help());
+  assert.ok(helpText.length > 0, `Expected non-empty help text, got: ${helpText}`);
+  assert.ok(helpText.includes("InstrumentResult"), `Expected type name in help text, got: ${helpText}`);
 });
 
 test("g.set({ unknown: 1 }) returns error message containing unknown params", () => {
