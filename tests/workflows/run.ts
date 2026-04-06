@@ -16,6 +16,9 @@ import { buildWorkflow as buildFilesystemWorkflow } from "./filesystem.workflow"
 import { buildWorkflow as buildAudioFormatsWorkflow } from "./audio-formats.workflow";
 import { buildWorkflow as buildTabCompletionWorkflow } from "./tab-completion.workflow";
 import { buildWorkflow as buildRuntimePersistenceWorkflow } from "./runtime-persistence.workflow";
+import { buildWorkflow as buildInstrumentWorkflow } from "./instrument.workflow";
+import { buildWorkflow as buildMidiWorkflow } from "./midi.workflow";
+import { buildWorkflow as buildMixerWorkflow } from "./mixer.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -28,6 +31,9 @@ async function main() {
     buildAudioFormatsWorkflow(),
     buildTabCompletionWorkflow(),
     buildRuntimePersistenceWorkflow(),
+    buildInstrumentWorkflow(),
+    buildMidiWorkflow(),
+    buildMixerWorkflow(),
     // Register new workflows here as they are created.
   ];
 
