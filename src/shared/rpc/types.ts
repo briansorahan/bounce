@@ -24,9 +24,14 @@ export interface ServiceClient<T extends RpcContract> {
 /**
  * One handler function per method in the contract.
  * Service implementations satisfy this type to provide their business logic.
+ *
+ * The `as string extends K ? never : K` remapping strips the implicit string
+ * index-signature key inherited from RpcContract, leaving only the concrete
+ * named method keys. Without this, classes that `implements ServiceHandlers<T>`
+ * would be required to add `[key: string]: any`, which is too permissive.
  */
 export type ServiceHandlers<T extends RpcContract> = {
-  [K in keyof T]: (params: T[K]["params"]) => Promise<T[K]["result"]>;
+  [K in string & keyof T as string extends K ? never : K]: (params: T[K]["params"]) => Promise<T[K]["result"]>;
 };
 
 /**
@@ -39,7 +44,7 @@ export function createInProcessClient<T extends RpcContract>(
 ): ServiceClient<T> {
   return {
     invoke(method, params) {
-      const handler = handlers[method as keyof T];
+      const handler = (handlers as unknown as Record<string, (p: unknown) => Promise<unknown>>)[method];
       return handler.call(handlers, params) as Promise<T[typeof method]["result"]>;
     },
   };

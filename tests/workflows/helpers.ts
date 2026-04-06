@@ -1,22 +1,27 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { ServiceClient } from "../../src/shared/rpc/types";
-import type { StateRpc } from "../../src/shared/rpc/state.rpc";
-import type { AudioFileRpc } from "../../src/shared/rpc/audio-file.rpc";
+import { createInProcessPair } from "../../src/shared/rpc/connection";
+import { createStateClient } from "../../src/shared/rpc/state.rpc";
+import { createAudioFileClient } from "../../src/shared/rpc/audio-file.rpc";
+import { createFilesystemClient } from "../../src/shared/rpc/filesystem.rpc";
+import type { MessageConnection } from "vscode-jsonrpc";
 import { StateService } from "../../src/electron/services/state";
 import { AudioFileService } from "../../src/electron/services/audio-file";
+import { FilesystemService } from "../../src/electron/services/filesystem";
 import { InMemoryStateStorage } from "./in-memory-storage";
 
 export interface WorkflowServices {
-  stateService: StateService;
-  stateClient: ServiceClient<StateRpc>;
-  audioFileService: AudioFileService;
-  audioFileClient: ServiceClient<AudioFileRpc>;
+  stateClient: ReturnType<typeof createStateClient>;
+  audioFileClient: ReturnType<typeof createAudioFileClient>;
+  filesystemClient: ReturnType<typeof createFilesystemClient>;
 }
 
 /**
  * Boot workflow-test services backed by InMemoryStateStorage.
  * No SQLite, no native addons, no Electron — runs under plain Node (tsx).
+ *
+ * Services communicate over in-process JSON-RPC connections (vscode-jsonrpc)
+ * using an EventEmitter-based transport — no streams, no serialisation overhead.
  */
 export function bootServices(): {
   ctx: WorkflowServices & Record<string, unknown>;
@@ -24,13 +29,42 @@ export function bootServices(): {
 } {
   const storage = new InMemoryStateStorage();
   const stateService = new StateService(storage);
-  const stateClient = stateService.asClient();
+
+  // Wire state service.
+  const statePair = createInProcessPair();
+  stateService.listen(statePair.server);
+  statePair.server.listen();
+  statePair.client.listen();
+  const stateClient = createStateClient(statePair.client);
+
+  // Wire audio file service (depends on stateClient).
   const audioFileService = new AudioFileService(stateClient);
-  const audioFileClient = audioFileService.asClient();
+  const audioFilePair = createInProcessPair();
+  audioFileService.listen(audioFilePair.server);
+  audioFilePair.server.listen();
+  audioFilePair.client.listen();
+  const audioFileClient = createAudioFileClient(audioFilePair.client);
+
+  // Wire filesystem service (depends on stateClient).
+  const filesystemService = new FilesystemService(stateClient);
+  const fsPair = createInProcessPair();
+  filesystemService.listen(fsPair.server);
+  fsPair.server.listen();
+  fsPair.client.listen();
+  const filesystemClient = createFilesystemClient(fsPair.client);
+
+  const connections: MessageConnection[] = [
+    statePair.client, statePair.server,
+    audioFilePair.client, audioFilePair.server,
+    fsPair.client, fsPair.server,
+  ];
 
   return {
-    ctx: { stateService, stateClient, audioFileService, audioFileClient },
-    cleanup: () => stateService.close(),
+    ctx: { stateClient, audioFileClient, filesystemClient },
+    cleanup: () => {
+      for (const conn of connections) conn.dispose();
+      stateService.close();
+    },
   };
 }
 

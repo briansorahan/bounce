@@ -3,6 +3,7 @@ import type {
   SampleListRecord,
   RawSampleMetadata,
   ProjectRecord,
+  ProjectListEntry,
 } from "../../../shared/rpc/state.rpc";
 
 /**
@@ -34,6 +35,10 @@ export interface IStateStorage {
   getRawMetadata(hash: string): RawSampleMetadata | null;
   listSamples(): SampleListRecord[];
   getCwd(): string;
+  setCwd(cwd: string): void;
   getCurrentProject(): ProjectRecord;
+  listProjects(): ProjectListEntry[];
+  loadProject(name: string): ProjectListEntry;
+  removeProject(name: string): { removedName: string; currentProject: ProjectListEntry };
   close(): void;
 }

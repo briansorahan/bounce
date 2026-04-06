@@ -1,3 +1,4 @@
+import { RequestType, ResponseError, MessageConnection } from "vscode-jsonrpc";
 import type { RpcContract } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -39,53 +40,138 @@ export interface ProjectRecord {
   created_at: string;
 }
 
+export interface ProjectListEntry extends ProjectRecord {
+  sample_count: number;
+  feature_count: number;
+  command_count: number;
+  current: boolean;
+}
+
 // ---------------------------------------------------------------------------
-// Contract
-// StateService is the single source of truth for all durable application
-// state. No other service reads from or writes to SQLite directly — all
-// persistence goes through this contract.
+// RpcContract interface (retained for use with the generic ServiceClient<T>
+// type in callers such as AudioFileService that depend on invoke()).
 // ---------------------------------------------------------------------------
 
 export interface StateRpc extends RpcContract {
-  /** Persist a raw (file-backed) sample record. Idempotent on hash. */
   storeRawSample: {
-    params: {
-      hash: string;
-      filePath: string;
-      sampleRate: number;
-      channels: number;
-      duration: number;
-    };
+    params: { hash: string; filePath: string; sampleRate: number; channels: number; duration: number };
     result: void;
   };
-
-  /** Look up a sample by its full SHA-256 hash. */
   getSampleByHash: {
     params: { hash: string };
     result: SampleRecord | null;
   };
-
-  /** Look up the filesystem metadata for a raw sample. */
   getRawMetadata: {
     params: { hash: string };
     result: RawSampleMetadata | null;
   };
-
-  /** List all samples for the current project. */
   listSamples: {
     params: Record<string, never>;
     result: SampleListRecord[];
   };
-
-  /** Current working directory for relative path resolution. */
   getCwd: {
     params: Record<string, never>;
     result: string;
   };
-
-  /** The currently active project. */
   getCurrentProject: {
     params: Record<string, never>;
     result: ProjectRecord;
+  };
+  listProjects: {
+    params: Record<string, never>;
+    result: ProjectListEntry[];
+  };
+  loadProject: {
+    params: { name: string };
+    result: ProjectListEntry;
+  };
+  removeProject: {
+    params: { name: string };
+    result: { removedName: string; currentProject: ProjectListEntry };
+  };
+
+  /** Set the current working directory. Returns the resolved absolute path. */
+  setCwd: {
+    params: { cwd: string };
+    result: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC RequestType objects — one per method.
+// These carry the wire method name and the TypeScript param/result types.
+// ---------------------------------------------------------------------------
+
+type E = ResponseError;
+
+export const StateRequest = {
+  storeRawSample:   new RequestType<StateRpc["storeRawSample"]["params"],   void,                                               E>("state/storeRawSample"),
+  getSampleByHash:  new RequestType<StateRpc["getSampleByHash"]["params"],  SampleRecord | null,                                E>("state/getSampleByHash"),
+  getRawMetadata:   new RequestType<StateRpc["getRawMetadata"]["params"],   RawSampleMetadata | null,                           E>("state/getRawMetadata"),
+  listSamples:      new RequestType<StateRpc["listSamples"]["params"],      SampleListRecord[],                                 E>("state/listSamples"),
+  getCwd:           new RequestType<StateRpc["getCwd"]["params"],           string,                                             E>("state/getCwd"),
+  getCurrentProject:new RequestType<StateRpc["getCurrentProject"]["params"],ProjectRecord,                                      E>("state/getCurrentProject"),
+  listProjects:     new RequestType<StateRpc["listProjects"]["params"],     ProjectListEntry[],                                 E>("state/listProjects"),
+  loadProject:      new RequestType<StateRpc["loadProject"]["params"],      ProjectListEntry,                                   E>("state/loadProject"),
+  removeProject:    new RequestType<StateRpc["removeProject"]["params"],    StateRpc["removeProject"]["result"],                E>("state/removeProject"),
+  setCwd:           new RequestType<StateRpc["setCwd"]["params"],           string,                                             E>("state/setCwd"),
+} as const;
+
+// ---------------------------------------------------------------------------
+// StateHandlers — implemented by StateService.
+// ---------------------------------------------------------------------------
+
+export interface StateHandlers {
+  storeRawSample(params: StateRpc["storeRawSample"]["params"]): Promise<void>;
+  getSampleByHash(params: StateRpc["getSampleByHash"]["params"]): Promise<SampleRecord | null>;
+  getRawMetadata(params: StateRpc["getRawMetadata"]["params"]): Promise<RawSampleMetadata | null>;
+  listSamples(params: StateRpc["listSamples"]["params"]): Promise<SampleListRecord[]>;
+  getCwd(params: StateRpc["getCwd"]["params"]): Promise<string>;
+  getCurrentProject(params: StateRpc["getCurrentProject"]["params"]): Promise<ProjectRecord>;
+  listProjects(params: StateRpc["listProjects"]["params"]): Promise<ProjectListEntry[]>;
+  loadProject(params: StateRpc["loadProject"]["params"]): Promise<ProjectListEntry>;
+  removeProject(params: StateRpc["removeProject"]["params"]): Promise<StateRpc["removeProject"]["result"]>;
+  setCwd(params: StateRpc["setCwd"]["params"]): Promise<string>;
+}
+
+// ---------------------------------------------------------------------------
+// Factory functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Register all StateService handlers on the given connection.
+ * Call `connection.listen()` after this.
+ */
+export function registerStateHandlers(
+  connection: MessageConnection,
+  handlers: StateHandlers,
+): void {
+  for (const [key, reqType] of Object.entries(StateRequest)) {
+    const method = key as keyof StateHandlers;
+    connection.onRequest(reqType as RequestType<unknown, unknown, E>, (params) =>
+      (handlers[method] as (p: unknown) => Promise<unknown>)(params),
+    );
+  }
+}
+
+/**
+ * Wrap a MessageConnection as a typed StateClient.
+ * The returned client has the same `invoke(method, params)` API as
+ * `ServiceClient<StateRpc>` so existing callers need no changes.
+ */
+export function createStateClient(connection: MessageConnection): {
+  invoke<K extends keyof StateRpc & string>(
+    method: K,
+    params: StateRpc[K]["params"],
+  ): Promise<StateRpc[K]["result"]>;
+} {
+  return {
+    invoke(method, params) {
+      const reqType = StateRequest[method as keyof typeof StateRequest];
+      return connection.sendRequest(
+        reqType as RequestType<unknown, StateRpc[typeof method]["result"], E>,
+        params,
+      );
+    },
   };
 }

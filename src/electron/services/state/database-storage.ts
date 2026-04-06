@@ -46,8 +46,34 @@ export class DatabaseStateStorage implements IStateStorage {
     return this.settings.getCwd();
   }
 
+  setCwd(cwd: string): void {
+    this.settings.setCwd(cwd);
+  }
+
   getCurrentProject() {
     return this.db.getCurrentProject();
+  }
+
+  listProjects() {
+    const current = this.db.getCurrentProjectName();
+    return this.db.listProjects().map((p) => ({
+      ...p,
+      current: p.name === current,
+    }));
+  }
+
+  loadProject(name: string) {
+    const project = this.db.loadOrCreateProject(name);
+    return { ...project, current: true };
+  }
+
+  removeProject(name: string) {
+    const currentProject = this.db.removeProject(name);
+    const current = this.db.getCurrentProjectName();
+    return {
+      removedName: name,
+      currentProject: { ...currentProject, current: currentProject.name === current },
+    };
   }
 
   close() {

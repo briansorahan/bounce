@@ -1,6 +1,17 @@
-import type { ServiceHandlers, ServiceClient } from "../../../shared/rpc/types";
-import { createInProcessClient } from "../../../shared/rpc/types";
-import type { StateRpc } from "../../../shared/rpc/state.rpc";
+import type { MessageConnection } from "vscode-jsonrpc";
+import {
+  registerStateHandlers,
+  createStateClient,
+} from "../../../shared/rpc/state.rpc";
+import type {
+  StateHandlers,
+  StateRpc,
+  SampleRecord,
+  SampleListRecord,
+  RawSampleMetadata,
+  ProjectRecord,
+  ProjectListEntry,
+} from "../../../shared/rpc/state.rpc";
 import type { IStateStorage } from "./storage";
 
 /**
@@ -12,9 +23,14 @@ import type { IStateStorage } from "./storage";
  *
  * No Electron imports here. StateService is pure business logic.
  *
- * Constructor dependency: IStateStorage (leaf node — injected by caller).
+ * Usage:
+ *   const { client, server } = createInProcessPair();
+ *   stateService.listen(server);   // registers JSON-RPC handlers
+ *   server.listen();
+ *   client.listen();
+ *   const stateClient = createStateClient(client);
  */
-export class StateService implements ServiceHandlers<StateRpc> {
+export class StateService implements StateHandlers {
   constructor(private storage: IStateStorage) {}
 
   async storeRawSample(params: StateRpc["storeRawSample"]["params"]): Promise<void> {
@@ -27,29 +43,58 @@ export class StateService implements ServiceHandlers<StateRpc> {
     );
   }
 
-  async getSampleByHash(params: StateRpc["getSampleByHash"]["params"]) {
+  async getSampleByHash(params: StateRpc["getSampleByHash"]["params"]): Promise<SampleRecord | null> {
     return this.storage.getSampleByHash(params.hash);
   }
 
-  async getRawMetadata(params: StateRpc["getRawMetadata"]["params"]) {
+  async getRawMetadata(params: StateRpc["getRawMetadata"]["params"]): Promise<RawSampleMetadata | null> {
     return this.storage.getRawMetadata(params.hash);
   }
 
-  async listSamples(_params: Record<string, never>) {
+  async listSamples(_params: Record<string, never>): Promise<SampleListRecord[]> {
     return this.storage.listSamples();
   }
 
-  async getCwd(_params: Record<string, never>) {
+  async getCwd(_params: Record<string, never>): Promise<string> {
     return this.storage.getCwd();
   }
 
-  async getCurrentProject(_params: Record<string, never>) {
+  async setCwd(params: StateRpc["setCwd"]["params"]): Promise<string> {
+    this.storage.setCwd(params.cwd);
+    return params.cwd;
+  }
+
+  async getCurrentProject(_params: Record<string, never>): Promise<ProjectRecord> {
     return this.storage.getCurrentProject();
   }
 
-  /** Expose a type-safe ServiceClient backed by direct in-process calls. */
-  asClient(): ServiceClient<StateRpc> {
-    return createInProcessClient<StateRpc>(this);
+  async listProjects(_params: Record<string, never>): Promise<ProjectListEntry[]> {
+    return this.storage.listProjects();
+  }
+
+  async loadProject(params: StateRpc["loadProject"]["params"]): Promise<ProjectListEntry> {
+    return this.storage.loadProject(params.name);
+  }
+
+  async removeProject(params: StateRpc["removeProject"]["params"]): Promise<StateRpc["removeProject"]["result"]> {
+    return this.storage.removeProject(params.name);
+  }
+
+  /**
+   * Register all handlers on the given JSON-RPC connection.
+   * The caller must call `connection.listen()` after this.
+   */
+  listen(connection: MessageConnection): void {
+    registerStateHandlers(connection, this);
+  }
+
+  /**
+   * Convenience: wire up an in-process client/server pair and return a
+   * typed client. Used by services that depend on StateService and need
+   * a ServiceClient<StateRpc>-compatible handle.
+   */
+  asClient(clientConnection: MessageConnection): ReturnType<typeof createStateClient> {
+    return createStateClient(clientConnection);
   }
 
   close(): void {

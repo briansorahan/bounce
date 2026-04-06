@@ -1,13 +1,21 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as crypto from "crypto";
+import type { MessageConnection } from "vscode-jsonrpc";
 import decode from "audio-decode";
 import { SettingsStore } from "../../settings-store";
 import { AUDIO_EXTENSIONS } from "../../audio-extensions";
 import { BounceError } from "../../../shared/bounce-error.js";
-import type { ServiceHandlers, ServiceClient } from "../../../shared/rpc/types";
-import { createInProcessClient } from "../../../shared/rpc/types";
-import type { AudioFileRpc, ReadAudioFileResult } from "../../../shared/rpc/audio-file.rpc";
+import {
+  registerAudioFileHandlers,
+  createAudioFileClient,
+} from "../../../shared/rpc/audio-file.rpc";
+import type {
+  AudioFileHandlers,
+  AudioFileRpc,
+  ReadAudioFileResult,
+} from "../../../shared/rpc/audio-file.rpc";
+import type { ServiceClient } from "../../../shared/rpc/types";
 import type { StateRpc } from "../../../shared/rpc/state.rpc";
 
 /**
@@ -16,9 +24,9 @@ import type { StateRpc } from "../../../shared/rpc/state.rpc";
  * Stateless except for its dependency on StateService. Never accesses SQLite
  * directly. CPU-light (decode + hash) — runs in the main process.
  *
- * Constructor dependency: StateService (via ServiceClient<StateRpc>).
+ * Constructor dependency: StateService client (ServiceClient<StateRpc>-compatible).
  */
-export class AudioFileService implements ServiceHandlers<AudioFileRpc> {
+export class AudioFileService implements AudioFileHandlers {
   constructor(private state: ServiceClient<StateRpc>) {}
 
   async readAudioFile(params: { filePathOrHash: string }): Promise<ReadAudioFileResult> {
@@ -103,12 +111,20 @@ export class AudioFileService implements ServiceHandlers<AudioFileRpc> {
     }
   }
 
-  async listSamples(_params: Record<string, never>) {
+  async listSamples(_params: Record<string, never>): Promise<AudioFileRpc["listSamples"]["result"]> {
     return this.state.invoke("listSamples", {});
   }
 
-  /** Expose a type-safe ServiceClient backed by direct in-process calls. */
-  asClient(): ServiceClient<AudioFileRpc> {
-    return createInProcessClient<AudioFileRpc>(this);
+  /**
+   * Register all handlers on the given JSON-RPC connection.
+   * The caller must call `connection.listen()` after this.
+   */
+  listen(connection: MessageConnection): void {
+    registerAudioFileHandlers(connection, this);
+  }
+
+  /** Convenience wrapper — returns a typed client over the given connection. */
+  asClient(clientConnection: MessageConnection): ReturnType<typeof createAudioFileClient> {
+    return createAudioFileClient(clientConnection);
   }
 }

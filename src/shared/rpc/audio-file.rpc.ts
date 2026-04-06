@@ -1,3 +1,4 @@
+import { RequestType, ResponseError, MessageConnection } from "vscode-jsonrpc";
 import type { RpcContract } from "./types";
 import type { SampleListRecord } from "./state.rpc";
 
@@ -17,26 +18,76 @@ export interface ReadAudioFileResult {
 }
 
 // ---------------------------------------------------------------------------
-// Contract
-// AudioFileService decodes audio files, computes hashes, and stores samples
-// via StateService. It never touches SQLite directly.
+// RpcContract interface (retained for the generic ServiceClient<T> pattern).
 // ---------------------------------------------------------------------------
 
 export interface AudioFileRpc extends RpcContract {
-  /**
-   * Decode an audio file and store it in the sample database.
-   * `filePathOrHash` may be:
-   *   - An absolute or relative filesystem path to an audio file.
-   *   - A SHA-256 hex prefix (8+ chars) for a previously stored sample.
-   */
   readAudioFile: {
     params: { filePathOrHash: string };
     result: ReadAudioFileResult;
   };
-
-  /** List all samples for the current project (proxied from StateService). */
   listSamples: {
     params: Record<string, never>;
     result: SampleListRecord[];
+  };
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC RequestType objects
+// ---------------------------------------------------------------------------
+
+type E = ResponseError;
+
+export const AudioFileRequest = {
+  readAudioFile: new RequestType<AudioFileRpc["readAudioFile"]["params"], ReadAudioFileResult,  E>("audioFile/readAudioFile"),
+  listSamples:   new RequestType<AudioFileRpc["listSamples"]["params"],   SampleListRecord[],  E>("audioFile/listSamples"),
+} as const;
+
+// ---------------------------------------------------------------------------
+// AudioFileHandlers — implemented by AudioFileService.
+// ---------------------------------------------------------------------------
+
+export interface AudioFileHandlers {
+  readAudioFile(params: AudioFileRpc["readAudioFile"]["params"]): Promise<ReadAudioFileResult>;
+  listSamples(params: AudioFileRpc["listSamples"]["params"]): Promise<SampleListRecord[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Factory functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Register all AudioFileService handlers on the given connection.
+ * Call `connection.listen()` after this.
+ */
+export function registerAudioFileHandlers(
+  connection: MessageConnection,
+  handlers: AudioFileHandlers,
+): void {
+  for (const [key, reqType] of Object.entries(AudioFileRequest)) {
+    const method = key as keyof AudioFileHandlers;
+    connection.onRequest(reqType as RequestType<unknown, unknown, E>, (params) =>
+      (handlers[method] as (p: unknown) => Promise<unknown>)(params),
+    );
+  }
+}
+
+/**
+ * Wrap a MessageConnection as a typed AudioFileClient.
+ */
+export function createAudioFileClient(connection: MessageConnection): {
+  invoke<K extends keyof AudioFileRpc & string>(
+    method: K,
+    params: AudioFileRpc[K]["params"],
+  ): Promise<AudioFileRpc[K]["result"]>;
+} {
+  return {
+    invoke(method, params) {
+      const reqType = AudioFileRequest[method as keyof typeof AudioFileRequest];
+      return connection.sendRequest(
+        reqType as RequestType<unknown, AudioFileRpc[typeof method]["result"], E>,
+        params,
+      );
+    },
   };
 }
