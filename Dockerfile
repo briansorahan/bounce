@@ -16,6 +16,7 @@ COPY binding.gyp \
 COPY native /build/native
 COPY third_party /build/third_party
 COPY scripts /build/scripts
+COPY tests /build/tests
 
 COPY src /build/src
 
@@ -28,5 +29,4 @@ RUN npm ci --ignore-scripts \
     && npm run build:electron \
     && npx playwright install --with-deps chromium
 
-COPY tests /build/tests
 RUN npm test
