@@ -1,6 +1,7 @@
 # Plan: {FEATURE_NAME}
 
 **Spec:** specs/{SLUG}  
+**Beads Parent Issue:** {BEADS_PARENT_ID}  
 **Created:** {DATE}  
 **Status:** [In Progress | Complete]
 
@@ -74,13 +75,47 @@ If not applicable, write "None".
 
 <!-- Potential issues and how to handle them -->
 
-## Implementation Order
+## Task Graph
 
-<!-- Step-by-step sequence for implementing changes -->
+<!-- 
+List every beads issue created for this spec. Create them at the end of planning using bd create (run in parallel for efficiency), then wire up dependencies with bd dep add.
 
-## Estimated Scope
+Each issue description must be fully self-contained: an agent should be able to implement it by reading only the issue description plus the referenced files — without re-reading this spec.
 
-<!-- Rough estimate: Small/Medium/Large -->
+Format: `beads-ID` — Title — brief note on what it does
+-->
+
+| Issue | Title | Depends On |
+|-------|-------|-----------|
+|       |       |           |
+
+```bash
+# Commands used to create issues and dependencies (record for reproducibility)
+```
+
+## Land the Plane Checklist
+
+<!-- 
+Run this in order after all child tasks are closed. Do not skip steps.
+An agent executing implementation work must run this checklist before closing the parent issue.
+-->
+
+```bash
+npm test                    # All unit tests must pass — fix failures before proceeding
+npm run lint                # No lint errors — fix before proceeding
+npm run build:electron      # TypeScript must compile cleanly
+./build.sh                  # Full Dockerized Playwright suite — mandatory, no exceptions
+npm run dev:electron        # Manual smoke test
+```
+
+After all checks pass:
+- [ ] Update `ARCHITECTURE.md` if the process model, IPC protocol, data flows, database schema, native addon surface, or renderer architecture changed
+- [ ] If REPL surface area changed: verify unit and/or Playwright tests cover `help()` and returned-object display
+- [ ] Fill in `## Final Status` in IMPL.md
+- [ ] Set `**Status:** Complete` at the top of IMPL.md
+- [ ] Commit all spec files and implementation
+- [ ] `bd close {BEADS_PARENT_ID}`
+- [ ] `bd dolt push && git push`
 
 ## Plan Consistency Checklist
 

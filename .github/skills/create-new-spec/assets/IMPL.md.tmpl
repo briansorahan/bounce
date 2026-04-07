@@ -1,62 +1,49 @@
 # Implementation: {FEATURE_NAME}
 
 **Spec:** specs/{SLUG}  
+**Beads Parent Issue:** {BEADS_PARENT_ID}  
 **Created:** {DATE}  
 **Status:** [In Progress | Paused | Complete]
+
+## Agent Execution Protocol
+
+> **Read this first.** Follow this loop autonomously — do not wait for the user to say "what's next".
+
+```
+1. bd ready                          # find the next available task for this spec
+2. If nothing ready → bd blocked     # check for blockers; surface to user if unresolvable
+3. bd update <id> --claim            # claim the task
+4. Read the issue description fully before writing any code
+5. Implement the task
+6. npm test                          # MUST pass before closing — fix failures first
+7. npm run lint                      # MUST pass before closing — fix errors first
+8. bd close <id>                     # close the completed task
+9. Go to step 1
+```
+
+When `bd ready` returns nothing, run the **Land the Plane Checklist** in PLAN.md.
 
 ## Context
 
 <!-- Brief summary referencing key points from PLAN.md -->
 
-## Implementation Log
-
-<!-- Chronological notes as implementation progresses -->
-
-### {DATE} - Started Implementation
-
-<!-- What was done -->
-
-### {DATE} - {Milestone}
-
-<!-- Progress updates -->
-
 ## Decisions Made
 
-<!-- Important decisions made during implementation that weren't in the plan -->
+<!-- Important decisions made during implementation that weren't in the plan.
+     Add entries here as they arise — do not wait until the end. -->
 
 ## Deviations from Plan
 
-<!-- Where implementation diverged from plan and why -->
+<!-- Where implementation diverged from plan and why.
+     Add entries here as they arise — do not wait until the end. -->
 
 ## Flaws Discovered in Previous Phases
 
 <!-- Any issues found in RESEARCH.md or PLAN.md during implementation -->
 
-## Issues & TODOs
-
-<!-- Known problems, edge cases, future work -->
-
 ## Testing Results
 
 <!-- Test execution results, including which unit and/or Playwright tests covered REPL help() and returned-object display behavior when applicable -->
-
-## Status Updates
-
-<!-- When pausing work, add concise status here -->
-
-### Last Status: {DATE}
-
-**What's Done:**
-- 
-
-**What's Left:**
-- 
-
-**Next Steps:**
-- 
-
-**Blockers/Notes:**
-- 
 
 ---
 
@@ -69,12 +56,16 @@
 **Summary:**
 
 **Verification:**
-- [ ] Linting passed (`npm run lint`)
-- [ ] TypeScript builds (`npm run build:electron`)
+- [ ] `npm test` passes
+- [ ] `npm run lint` passes
+- [ ] `npm run build:electron` passes
 - [ ] `./build.sh` passes (full Dockerized Playwright suite — mandatory for every spec)
-- [ ] Manual testing complete
+- [ ] Manual smoke test complete
 - [ ] REPL help() coverage verified by unit and/or Playwright tests (if applicable)
 - [ ] REPL returned-object terminal summaries verified by unit and/or Playwright tests (if applicable)
+- [ ] `ARCHITECTURE.md` updated if applicable
+- [ ] Parent issue closed (`bd close {BEADS_PARENT_ID}`)
+- [ ] Changes pushed (`bd dolt push && git push`)
 
 **Known Limitations:**
 

@@ -9,3 +9,8 @@ test-results/
 # Build artifacts for foonathan/memory
 third_party/memory/build/
 third_party/memory/install/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

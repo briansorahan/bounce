@@ -1,11 +1,12 @@
 ---
 name: create-new-spec
-description: Creates specification documents for new features and bug fixes in Bounce. Use when planning non-trivial work that requires research, planning, and implementation tracking. Follows a three-phase workflow (RESEARCH → PLAN → IMPL) with structured templates.
+description: Creates specification documents for new features and bug fixes in Bounce. Use when planning non-trivial work that requires research, planning, and implementation tracking. Follows a three-phase workflow (RESEARCH → PLAN → IMPL) with structured templates, and uses beads for all task tracking.
 license: ISC
 metadata:
   author: briansorahan
-  version: "1.2"
+  version: "2.0"
   created: "2026-02-25"
+  updated: "2026-04-06"
 ---
 
 # Skill: Create New Spec
@@ -13,6 +14,8 @@ metadata:
 ## Purpose
 
 This skill guides the creation of specification documents for new features and significant bug fixes or refactoring in Bounce. The spec workflow ensures thorough research, planning, and implementation tracking for all non-trivial work.
+
+Each spec corresponds to **one parent beads issue** with a graph of child task issues. The parent issue represents the feature as a whole; child issues are the discrete implementation tasks. Task progress is tracked entirely in beads — never in markdown files.
 
 ## When to Use
 
@@ -34,11 +37,11 @@ Use this skill when:
 The spec process has four stages:
 
 1. **RESEARCH** - Gather context, explore prior art, understand constraints
-2. **PLAN** - Design the solution, define architecture, outline implementation
+2. **PLAN** - Design the solution, define architecture, and create the beads task graph
 3. **REVIEW** - Multi-agent review rounds to catch issues before implementation begins
-4. **IMPL** - Document implementation decisions, track progress, note deviations
+4. **IMPL** - Document implementation decisions and deviations; agents execute autonomously via beads
 
-Each stage has its own markdown file, and each file informs every subsequent stage.
+Each stage has its own markdown file. Task tracking lives in beads, not in these files.
 
 ## Required REPL Interface Contract
 
@@ -48,28 +51,34 @@ Whenever the feature adds or changes Bounce REPL surface area, treat the REPL AP
 - Every custom object returned from an evaluated REPL expression should print a useful terminal summary when displayed
 - Returned summaries should highlight the most relevant, workflow-driving properties for that type instead of dumping raw structure
 - Automated coverage should explicitly confirm both `help()` output and returned-object display behavior using unit tests and/or Playwright tests
-- Every global object used to execute commands should offer tab-completion for those commands.
+- Every global object used to execute commands should offer tab-completion for those commands
 
-This requirement should be carried through RESEARCH, PLAN, and IMPL. Do not leave it implicit.
+This requirement must be carried through RESEARCH, PLAN, and IMPL. Do not leave it implicit.
 
 ## Step-by-Step Process
 
-### Step 1: Create Spec Structure
+### Step 1: Create Spec Structure and Parent Issue
 
 ```bash
 # Choose a concise SLUG describing the work (kebab-case)
 SLUG="onset-visualization"  # example
 
-# Create spec directory
+# Create spec directory and copy templates
 mkdir -p specs/$SLUG
-
-# Copy templates from skill assets
 cp .github/skills/create-new-spec/assets/RESEARCH.md.tmpl specs/$SLUG/RESEARCH.md
 cp .github/skills/create-new-spec/assets/PLAN.md.tmpl specs/$SLUG/PLAN.md
 cp .github/skills/create-new-spec/assets/IMPL.md.tmpl specs/$SLUG/IMPL.md
-# REVIEW.md is created during Step 5 (Spec Review Phase) — do not pre-create it
+# REVIEW.md is created during Step 5 — do not pre-create it
 
-# Fill in placeholders (replace {SLUG}, {FEATURE_NAME}, {DATE})
+# Create the parent beads issue
+bd create \
+  --title="[spec] $SLUG" \
+  --description="Parent issue for the $SLUG spec. See specs/$SLUG/ for research, plan, and implementation docs." \
+  --type=feature \
+  --priority=2
+# Note the returned issue ID (e.g. beads-42) — you will need it throughout
+
+# Fill in placeholders in the spec files (replace {SLUG}, {FEATURE_NAME}, {DATE}, {BEADS_PARENT_ID})
 ```
 
 ### Step 2: Create Git Branch
@@ -83,9 +92,8 @@ git checkout -b $SLUG
 
 **File:** `specs/{SLUG}/RESEARCH.md`
 
-Work with Copilot to fill out research documentation:
-- Load context: Tell Copilot to read existing relevant code
-- Collaborate on research questions
+Fill out research documentation:
+- Load context: read existing relevant code
 - Document findings in RESEARCH.md
 - If REPL surface area is involved, identify the user-facing help and display conventions that must remain consistent
 
@@ -95,13 +103,33 @@ Work with Copilot to fill out research documentation:
 
 **File:** `specs/{SLUG}/PLAN.md`
 
-Work with Copilot to create implementation plan:
-- **Context loading:** `@specs/{SLUG}/RESEARCH.md` - Reference research findings
+Create the implementation plan:
+- Reference research findings from RESEARCH.md
 - Design the solution architecture
 - Identify all files that need changes
-- Define testing strategy
-- Set success criteria
+- Define testing strategy and success criteria
 - For REPL-facing features, explicitly document the `help()` surface, returned-object terminal summaries, and which unit and/or Playwright tests will verify them
+
+#### Creating the Beads Task Graph
+
+At the end of the planning phase, decompose the work into discrete beads issues and wire up their dependencies. **This must be done before moving to IMPL.**
+
+```bash
+# Create child issues in parallel (use sub-agents for many issues)
+# Each issue description must be self-contained — enough context to implement without re-reading the spec
+bd create --title="..." --description="..." --type=task --priority=2
+bd create --title="..." --description="..." --type=task --priority=2
+# ... repeat for each task
+
+# Wire up dependencies (task B cannot start until task A is done)
+bd dep add beads-YYY beads-XXX   # beads-YYY depends on beads-XXX
+bd dep add beads-ZZZ beads-YYY   # beads-ZZZ depends on beads-YYY
+
+# Link all child issues to the parent
+bd dep add beads-PARENT beads-LAST-CHILD  # parent closes when last child is done
+```
+
+Record all created issue IDs in the **Task Graph** section of PLAN.md.
 
 **This file is immutable after moving to IMPL phase** (unless critical flaw discovered).
 
@@ -121,7 +149,7 @@ After completing the planning phase, ask the user if they would like to run a sp
    - Evaluate the spec against the **Reviewer Checklist** below
    - Return a structured critique: issues found, questions raised, and specific suggested changes
 
-3. **Collect and present results**: The main agent collects all sub-agent reviews, synthesizes them into a consolidated report (highlighting themes and priority issues), presents the report to the user, and writes/appends it to `specs/{SLUG}/REVIEW.md`.
+3. **Collect and present results**: Collect all sub-agent reviews, synthesize them into a consolidated report (highlighting themes and priority issues), present the report to the user, and write/append it to `specs/{SLUG}/REVIEW.md`.
 
 4. **Apply agreed-upon changes**: Automatically apply all agreed-upon edits to the relevant documents. This may include any spec file (RESEARCH.md, PLAN.md, IMPL.md) or any other project document that needs updating (ARCHITECTURE.md, README.md, etc.). Record every change made — document name, what changed, and rationale — in the **Changes Applied** table in REVIEW.md.
 
@@ -134,7 +162,8 @@ Each sub-agent reviewer must evaluate the spec against all of the following dime
 **Completeness**
 - Are all sections of RESEARCH.md and PLAN.md (and IMPL.md if present) filled in meaningfully?
 - Are open questions answered or explicitly deferred with rationale?
-- Is the implementation order specific enough to execute without ambiguity?
+- Is the task graph specific enough to execute each issue without ambiguity?
+- Does each beads issue description contain enough standalone context to implement without re-reading the full spec?
 
 **Consistency**
 - Do RESEARCH.md and PLAN.md agree on the approach, constraints, and scope?
@@ -164,42 +193,63 @@ Each sub-agent reviewer must evaluate the spec against all of the following dime
 
 **File:** `specs/{SLUG}/IMPL.md`
 
-Work with Copilot to implement and track progress:
-- **Context loading:** `@specs/{SLUG}/PLAN.md` - Reference the plan
-- Document implementation decisions as you code
-- Track deviations from plan (with rationale)
-- Note any discovered issues or TODOs
-- **Add status updates** when pausing work (for resuming later)
-- For REPL-facing features, record whether `help()` and returned-object display behavior match the plan, including any deviations
+IMPL.md is a decision log and deviation record — not a task tracker. All task tracking is in beads.
 
-### Step 7: Verification
+Agents executing implementation work must follow the **Autonomous Execution Loop** documented at the top of IMPL.md:
 
-Before considering work complete:
-- Run linter: `npm run lint`
-- Build TypeScript: `npm run build:electron`
-- **Always run `./build.sh`** — this runs the full Dockerized Playwright suite and is the canonical verification step for every spec, not just those with new Playwright tests. The full suite must pass before marking work complete.
-- Manually test in Electron app: `npm run dev:electron`
-- Verify cross-platform compatibility if possible
-- If REPL surface area changed, verify that unit and/or Playwright tests cover `help()` output and returned-object terminal summaries before closing the work
-- If architecture changed, review `ARCHITECTURE.md` for accuracy (see Step 8)
-- Do not run Playwright directly from the host for verification docs or Copilot guidance; always use `./build.sh`
+1. Run `bd ready` — find the next available task for this spec
+2. If nothing is ready, check `bd blocked` and resolve blockers, or surface the issue to the user
+3. Run `bd update <id> --claim` — claim the task
+4. Read the issue description fully before writing any code
+5. Implement the task
+6. Run `npm test` — **tests must pass before closing any task**
+7. Run `npm run lint` — fix any lint errors before closing any task
+8. Run `bd close <id>` — close the completed task
+9. Return to step 1 and repeat until `bd ready` returns nothing for this spec
+
+When `bd ready` is empty, proceed to Step 7 (Land the Plane).
+
+Document decisions and deviations in IMPL.md as they arise. Do not wait until the end.
+
+### Step 7: Land the Plane
+
+Run this checklist in order after all child tasks are closed. Do not skip steps.
+
+```bash
+npm test                    # All unit tests must pass
+npm run lint                # No lint errors
+npm run build:electron      # TypeScript must compile cleanly
+./build.sh                  # Full Dockerized Playwright suite — mandatory, no exceptions
+npm run dev:electron        # Manual smoke test
+```
+
+If any step fails, fix the issue, re-run from `npm test`, and do not proceed until the full sequence passes cleanly.
+
+Then:
+- If architecture changed, update `ARCHITECTURE.md`
+- If REPL surface area changed, verify unit and/or Playwright tests cover `help()` and returned-object display
+- Fill in the `## Final Status` section of IMPL.md
+- Set `**Status:** Complete` at the top of IMPL.md (required by prune-specs tooling)
+- Commit all spec files and implementation
+- Run `bd close {BEADS_PARENT_ID}` to close the parent issue
+- Run `bd dolt push && git push`
 
 ### Step 8: Completion
 
 Before considering work done:
-- Ensure the `**Status:**` header line at the top of IMPL.md reads `**Status:** Complete` — this is the canonical marker that prune-specs and other tooling use to identify finished work
-- Fill in the `## Final Status` section at the bottom of IMPL.md: completion date, summary, and verification checklist
-- Review `ARCHITECTURE.md` at the repo root and update it if the work changed the process model, IPC protocol, data flows, database schema, native addon surface, or renderer architecture
-- Commit all spec files with implementation
-- Specs remain in repo as documentation
+- `**Status:** Complete` is set in IMPL.md
+- `## Final Status` is filled in
+- `ARCHITECTURE.md` is accurate
+- All spec files are committed
+- Parent beads issue is closed
+- Changes are pushed to remote
 
 ## Handling Flaws in Previous Phases
 
 If during PLAN or IMPL you discover a flaw in a previous phase:
 
-1. **Pause and discuss** with Copilot
-2. **Document the flaw** in the current phase's markdown file
-3. **Decide together** whether to:
+1. **Pause and document** the flaw in the current phase's markdown file
+2. **Decide** whether to:
    - Work around it (document workaround)
    - Update the previous phase file (document why in current file)
    - Start over with new research
@@ -208,29 +258,27 @@ Previous phase files should be treated as immutable except for critical correcti
 
 ## Maintaining Plan Consistency
 
-Whenever any part of a plan is changed (e.g., a requirement is reversed, a constraint is dropped, an approach is revised), **immediately review the entire plan file for contradictions**:
+Whenever any part of a plan is changed, **immediately review the entire plan file for contradictions**:
 
-1. **Identify all sections** that reference the changed topic (search for related keywords)
+1. **Identify all sections** that reference the changed topic
 2. **Remove or update** any content that now contradicts the change
 3. **Do not leave stale content** — a plan with conflicting statements is worse than one that is silent on a topic
 
-This applies equally to PLAN.md and IMPL.md. A common failure mode is adding a new section that reflects the updated decision while leaving an old section with the opposite requirement intact.
+This applies equally to PLAN.md and IMPL.md.
 
 ## Resuming Paused Work
 
 When returning to a spec after a break:
 
-1. Read `specs/{SLUG}/IMPL.md` - look for latest status update
-2. Load that context with Copilot
-3. Review what was done and what's left
-4. Continue implementation
+1. Run `bd list --status=in_progress` and `bd ready` to see current state
+2. Read `specs/{SLUG}/IMPL.md` for context on decisions and deviations
+3. Resume the Autonomous Execution Loop from Step 6
 
 ## Context Management Best Practices
 
-- **Explicit is better:** Always tell Copilot which spec files to load
 - **One phase at a time:** Don't load all three files at once
-- **Reference, don't copy:** Copilot should reference sections, not duplicate content
-- **Keep files focused:** Each file serves one phase only
+- **Reference, don't copy:** Reference sections rather than duplicating content
+- **Keep files focused:** Each file serves one phase only — task tracking belongs in beads
 
 ## Templates
 
@@ -245,13 +293,4 @@ When creating a new spec, copy these templates to `specs/{SLUG}/` and fill in th
 - `{SLUG}` - The kebab-case identifier for this work
 - `{FEATURE_NAME}` - Human-readable name of the feature/fix
 - `{DATE}` - Current date in YYYY-MM-DD format
-
-## Copilot Integration
-
-When working with specs, explicitly tell Copilot:
-- `"Create new spec for {feature}, SLUG: {slug-name}"` - Uses this skill
-- `"Load specs/{SLUG}/RESEARCH.md"` - When starting PLAN phase
-- `"Load specs/{SLUG}/PLAN.md"` - When starting IMPL phase  
-- `"Load specs/{SLUG}/IMPL.md"` - When resuming paused work or coding
-
-This keeps context focused and minimizes token usage.
+- `{BEADS_PARENT_ID}` - The beads issue ID created in Step 1 (e.g. `beads-42`)
