@@ -7,21 +7,30 @@
 
 ## Agent Execution Protocol
 
-> **Read this first.** Follow this loop autonomously — do not wait for the user to say "what's next".
+> **Read this first.** The main agent is the **orchestrator** — it does not write code. It runs waves of parallel sub-agents and verifies after each wave. Follow this loop autonomously without waiting for user prompts.
+
+### Wave Loop
 
 ```
-1. bd ready                          # find the next available task for this spec
-2. If nothing ready → bd blocked     # check for blockers; surface to user if unresolvable
-3. bd update <id> --claim            # claim the task
-4. Read the issue description fully before writing any code
-5. Implement the task
-6. npm test                          # MUST pass before closing — fix failures first
-7. npm run lint                      # MUST pass before closing — fix errors first
-8. bd close <id>                     # close the completed task
+1. bd ready → collect all currently unblocked task IDs for this spec
+2. If empty → run the Land the Plane Checklist in PLAN.md
+3. Spawn one sub-agent per ready task (in parallel)
+      Each sub-agent must:
+        a. bd update <id> --claim
+        b. Read the issue description fully before writing any code
+        c. Implement the task
+        d. Do NOT run tests — the orchestrator runs tests after the wave
+4. Wait for all sub-agents to complete
+5. npm test          ← orchestrator runs this; fix failures before proceeding
+6. npm run lint      ← orchestrator runs this; fix errors before proceeding
+7. If step 5 or 6 fails:
+        a. Spawn a sub-agent to diagnose and fix the failure
+        b. Go to step 5
+8. bd close <all task IDs from this wave>
 9. Go to step 1
 ```
 
-When `bd ready` returns nothing, run the **Land the Plane Checklist** in PLAN.md.
+If a sub-agent in step 3 reports it cannot complete its task (blocker, ambiguity, conflict), the orchestrator must resolve the issue before re-running the wave — do not close a task that was not completed.
 
 ## Context
 

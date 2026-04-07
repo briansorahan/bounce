@@ -195,17 +195,14 @@ Each sub-agent reviewer must evaluate the spec against all of the following dime
 
 IMPL.md is a decision log and deviation record — not a task tracker. All task tracking is in beads.
 
-Agents executing implementation work must follow the **Autonomous Execution Loop** documented at the top of IMPL.md:
+The **Agent Execution Protocol** at the top of IMPL.md defines the autonomous wave loop. The main agent acts as orchestrator — it never writes code directly. It:
 
-1. Run `bd ready` — find the next available task for this spec
-2. If nothing is ready, check `bd blocked` and resolve blockers, or surface the issue to the user
-3. Run `bd update <id> --claim` — claim the task
-4. Read the issue description fully before writing any code
-5. Implement the task
-6. Run `npm test` — **tests must pass before closing any task**
-7. Run `npm run lint` — fix any lint errors before closing any task
-8. Run `bd close <id>` — close the completed task
-9. Return to step 1 and repeat until `bd ready` returns nothing for this spec
+1. Calls `bd ready` to find all currently unblocked tasks
+2. Spawns one sub-agent per task in parallel; each claims and implements (no individual test runs)
+3. After the wave completes, runs `npm test` and `npm run lint`
+4. If either fails, spawns a sub-agent to fix the failure, then re-runs checks
+5. Closes all tasks in the wave with `bd close`
+6. Repeats until `bd ready` returns nothing
 
 When `bd ready` is empty, proceed to Step 7 (Land the Plane).
 
