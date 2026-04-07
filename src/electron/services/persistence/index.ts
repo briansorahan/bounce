@@ -91,7 +91,7 @@ export class PersistenceService {
       }
       case "MixerChannelUpdated": {
         const projectId = this.db.getCurrentProject().id;
-        this.db.saveMixerChannel(projectId, {
+        this.db.saveMixerChannel(projectId, event.channelIdx, {
           gainDb: event.gainDb,
           pan: event.pan,
           mute: event.mute,

@@ -29,11 +29,11 @@ export class DatabaseQueryService implements IQueryService {
   ) {}
 
   async getSampleByHash(hash: string): Promise<SampleRecord | null> {
-    return this.db.getSampleByHash(hash);
+    return this.db.getSampleByHash(hash) ?? null;
   }
 
   async getRawMetadata(hash: string): Promise<RawSampleMetadata | null> {
-    return this.db.getRawMetadata(hash);
+    return this.db.getRawMetadata(hash) ?? null;
   }
 
   async listSamples(): Promise<SampleListRecord[]> {
@@ -50,7 +50,8 @@ export class DatabaseQueryService implements IQueryService {
   }
 
   async listProjects(): Promise<ProjectListEntry[]> {
-    return this.db.listProjectsSummary();
+    const currentName = this.settings.getCurrentProjectName();
+    return this.db.listProjects().map((p) => ({ ...p, current: p.name === currentName }));
   }
 
   async getInstrument(name: string): Promise<InstrumentRecord | null> {
