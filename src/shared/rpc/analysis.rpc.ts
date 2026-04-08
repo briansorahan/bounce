@@ -1,3 +1,4 @@
+import { RequestType, ResponseError, MessageConnection } from "vscode-jsonrpc";
 import type { RpcContract } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,16 @@ export interface BufNMFOptions {
   windowSize?: number;
 }
 
+export interface BufNMFCrossOptions {
+  iterations?: number;
+  fftSize?: number;
+  hopSize?: number;
+  windowSize?: number;
+  timeSparsity?: number;
+  polyphony?: number;
+  continuity?: number;
+}
+
 export interface MFCCOptions {
   numCoeffs?: number;
   numBands?: number;
@@ -59,10 +70,27 @@ export interface OnsetSliceResult {
 }
 
 export interface BufNMFResult {
-  /** Per-component audio data as flat Float32 arrays. */
-  components: number[][];
-  /** Activation matrix (rows = components, cols = frames). */
+  /** Number of components decomposed. */
+  components: number;
+  /** Spectral bases: one array per component (length = fftSize/2 + 1). */
+  bases: number[][];
+  /** Activation envelopes: one array per component. */
   activations: number[][];
+  /** Number of iterations the algorithm actually ran. */
+  iterations: number;
+  /** Whether the algorithm converged before hitting the iteration limit. */
+  converged: boolean;
+}
+
+export interface BufNMFCrossResult {
+  /** Number of components (inherited from source NMF). */
+  components: number;
+  /** Spectral bases adapted to the target audio. */
+  bases: number[][];
+  /** Activation envelopes for the target audio. */
+  activations: number[][];
+  /** Number of iterations run. */
+  iterations: number;
 }
 
 export interface MFCCResult {
@@ -125,5 +153,99 @@ export interface AnalysisRpc extends RpcContract {
       options?: MFCCOptions;
     };
     result: MFCCResult;
+  };
+
+  resynthesize: {
+    params: {
+      audioData: number[];
+      sampleRate: number;
+      bases: number[][];
+      activations: number[][];
+      componentIndex: number;
+    };
+    result: { componentAudio: number[] };
+  };
+
+  bufNMFCross: {
+    params: {
+      targetAudioData: number[];
+      sampleRate: number;
+      sourceBases: number[][];
+      sourceActivations: number[][];
+      options?: BufNMFCrossOptions;
+    };
+    result: BufNMFCrossResult;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// JSON-RPC RequestType objects
+// ---------------------------------------------------------------------------
+
+type E = ResponseError;
+
+export const AnalysisRequest = {
+  onsetSlice:    new RequestType<AnalysisRpc["onsetSlice"]["params"],    OnsetSliceResult,               E>("analysis/onsetSlice"),
+  ampSlice:      new RequestType<AnalysisRpc["ampSlice"]["params"],      OnsetSliceResult,               E>("analysis/ampSlice"),
+  noveltySlice:  new RequestType<AnalysisRpc["noveltySlice"]["params"],  OnsetSliceResult,               E>("analysis/noveltySlice"),
+  transientSlice:new RequestType<AnalysisRpc["transientSlice"]["params"],OnsetSliceResult,               E>("analysis/transientSlice"),
+  bufNMF:        new RequestType<AnalysisRpc["bufNMF"]["params"],        BufNMFResult,                   E>("analysis/bufNMF"),
+  mfcc:          new RequestType<AnalysisRpc["mfcc"]["params"],          MFCCResult,                     E>("analysis/mfcc"),
+  resynthesize:  new RequestType<AnalysisRpc["resynthesize"]["params"],  { componentAudio: number[] },   E>("analysis/resynthesize"),
+  bufNMFCross:   new RequestType<AnalysisRpc["bufNMFCross"]["params"],   BufNMFCrossResult,              E>("analysis/bufNMFCross"),
+} as const;
+
+// ---------------------------------------------------------------------------
+// AnalysisHandlers — implemented by AnalysisService.
+// ---------------------------------------------------------------------------
+
+export interface AnalysisHandlers {
+  onsetSlice(params:     AnalysisRpc["onsetSlice"]["params"]):     Promise<OnsetSliceResult>;
+  ampSlice(params:       AnalysisRpc["ampSlice"]["params"]):       Promise<OnsetSliceResult>;
+  noveltySlice(params:   AnalysisRpc["noveltySlice"]["params"]):   Promise<OnsetSliceResult>;
+  transientSlice(params: AnalysisRpc["transientSlice"]["params"]): Promise<OnsetSliceResult>;
+  bufNMF(params:         AnalysisRpc["bufNMF"]["params"]):         Promise<BufNMFResult>;
+  mfcc(params:           AnalysisRpc["mfcc"]["params"]):           Promise<MFCCResult>;
+  resynthesize(params:   AnalysisRpc["resynthesize"]["params"]):   Promise<{ componentAudio: number[] }>;
+  bufNMFCross(params:    AnalysisRpc["bufNMFCross"]["params"]):    Promise<BufNMFCrossResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Factory functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Register all AnalysisService handlers on the given connection.
+ * Call `connection.listen()` after this.
+ */
+export function registerAnalysisHandlers(
+  connection: MessageConnection,
+  handlers: AnalysisHandlers,
+): void {
+  for (const [key, reqType] of Object.entries(AnalysisRequest)) {
+    const method = key as keyof AnalysisHandlers;
+    connection.onRequest(reqType as RequestType<unknown, unknown, E>, (params) =>
+      (handlers[method] as (p: unknown) => Promise<unknown>)(params),
+    );
+  }
+}
+
+/**
+ * Wrap a MessageConnection as a typed AnalysisClient.
+ */
+export function createAnalysisClient(connection: MessageConnection): {
+  invoke<K extends keyof AnalysisRpc & string>(
+    method: K,
+    params: AnalysisRpc[K]["params"],
+  ): Promise<AnalysisRpc[K]["result"]>;
+} {
+  return {
+    invoke(method, params) {
+      const reqType = AnalysisRequest[method as keyof typeof AnalysisRequest];
+      return connection.sendRequest(
+        reqType as RequestType<unknown, AnalysisRpc[typeof method]["result"], E>,
+        params,
+      );
+    },
   };
 }

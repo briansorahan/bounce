@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { createInProcessPair } from "../../src/shared/rpc/connection";
 import { createAudioFileClient } from "../../src/shared/rpc/audio-file.rpc";
+import { createAnalysisClient } from "../../src/shared/rpc/analysis.rpc";
 import { createFilesystemClient } from "../../src/shared/rpc/filesystem.rpc";
 import { createProjectClient } from "../../src/shared/rpc/project.rpc";
 import { createInstrumentClient } from "../../src/shared/rpc/instrument.rpc";
@@ -11,6 +12,7 @@ import { createReplEnvClient } from "../../src/shared/rpc/repl-env.rpc";
 import type { MessageConnection } from "vscode-jsonrpc";
 import { EventBusImpl } from "../../src/shared/event-bus";
 import { AudioFileService } from "../../src/electron/services/audio-file";
+import { AnalysisService } from "../../src/electron/services/analysis/service";
 import { FilesystemService } from "../../src/electron/services/filesystem";
 import { ProjectService } from "../../src/electron/services/project";
 import { InstrumentService } from "../../src/electron/services/instrument";
@@ -24,6 +26,7 @@ import type { IQueryService } from "../../src/shared/query-interfaces";
 export interface WorkflowServices {
   projectClient: ReturnType<typeof createProjectClient>;
   audioFileClient: ReturnType<typeof createAudioFileClient>;
+  analysisClient: ReturnType<typeof createAnalysisClient>;
   filesystemClient: ReturnType<typeof createFilesystemClient>;
   instrumentClient: ReturnType<typeof createInstrumentClient>;
   midiClient: ReturnType<typeof createMidiClient>;
@@ -64,6 +67,14 @@ export function bootServices(): {
   audioFilePair.server.listen();
   audioFilePair.client.listen();
   const audioFileClient = createAudioFileClient(audioFilePair.client);
+
+  // AnalysisService — pure FluCoMa dispatch, no Electron, no storage.
+  const analysisService = new AnalysisService();
+  const analysisPair = createInProcessPair();
+  analysisService.listen(analysisPair.server);
+  analysisPair.server.listen();
+  analysisPair.client.listen();
+  const analysisClient = createAnalysisClient(analysisPair.client);
 
   // FilesystemService emits CwdChanged events, reads cwd via queryService.
   const filesystemService = new FilesystemService(bus, queryService);
@@ -108,6 +119,7 @@ export function bootServices(): {
   const connections: MessageConnection[] = [
     projectPair.client, projectPair.server,
     audioFilePair.client, audioFilePair.server,
+    analysisPair.client, analysisPair.server,
     fsPair.client, fsPair.server,
     instrumentPair.client, instrumentPair.server,
     midiPair.client, midiPair.server,
@@ -119,6 +131,7 @@ export function bootServices(): {
     ctx: {
       projectClient,
       audioFileClient,
+      analysisClient,
       filesystemClient,
       instrumentClient,
       midiClient,

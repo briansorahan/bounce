@@ -19,6 +19,12 @@ import { buildWorkflow as buildRuntimePersistenceWorkflow } from "./runtime-pers
 import { buildWorkflow as buildInstrumentWorkflow } from "./instrument.workflow";
 import { buildWorkflow as buildMidiWorkflow } from "./midi.workflow";
 import { buildWorkflow as buildMixerWorkflow } from "./mixer.workflow";
+import { buildWorkflow as buildOnsetAnalysisWorkflow } from "./onset-analysis.workflow";
+import { buildWorkflow as buildNmfAnalysisWorkflow } from "./nmf-analysis.workflow";
+import { buildWorkflow as buildNmfSeparationWorkflow } from "./nmf-separation.workflow";
+import { buildWorkflow as buildNmfComponentContextWorkflow } from "./nmf-component-context.workflow";
+import { buildWorkflow as buildNxBasicWorkflow } from "./nx-basic.workflow";
+import { buildWorkflow as buildNxCrossSynthesisWorkflow } from "./nx-cross-synthesis.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -34,6 +40,12 @@ async function main() {
     buildInstrumentWorkflow(),
     buildMidiWorkflow(),
     buildMixerWorkflow(),
+    buildOnsetAnalysisWorkflow(),
+    buildNmfAnalysisWorkflow(),
+    buildNmfSeparationWorkflow(),
+    buildNmfComponentContextWorkflow(),
+    buildNxBasicWorkflow(),
+    buildNxCrossSynthesisWorkflow(),
     // Register new workflows here as they are created.
   ];
 
