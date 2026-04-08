@@ -25,6 +25,10 @@ import { buildWorkflow as buildNmfSeparationWorkflow } from "./nmf-separation.wo
 import { buildWorkflow as buildNmfComponentContextWorkflow } from "./nmf-component-context.workflow";
 import { buildWorkflow as buildNxBasicWorkflow } from "./nx-basic.workflow";
 import { buildWorkflow as buildNxCrossSynthesisWorkflow } from "./nx-cross-synthesis.workflow";
+import { buildWorkflow as buildPlaybackWorkflow } from "./playback.workflow";
+import { buildWorkflow as buildTransportPatternWorkflow } from "./transport-pattern.workflow";
+import { buildWorkflow as buildGranularInstrumentWorkflow } from "./granular-instrument.workflow";
+import { buildWorkflow as buildGranularizeWorkflow } from "./granularize.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -46,6 +50,10 @@ async function main() {
     buildNmfComponentContextWorkflow(),
     buildNxBasicWorkflow(),
     buildNxCrossSynthesisWorkflow(),
+    buildPlaybackWorkflow(),
+    buildTransportPatternWorkflow(),
+    buildGranularInstrumentWorkflow(),
+    buildGranularizeWorkflow(),
     // Register new workflows here as they are created.
   ];
 
