@@ -31,6 +31,9 @@ import { buildWorkflow as buildGranularInstrumentWorkflow } from "./granular-ins
 import { buildWorkflow as buildGranularizeWorkflow } from "./granularize.workflow";
 import { buildWorkflow as buildCommandsWorkflow } from "./commands.workflow";
 import { buildWorkflow as buildPlayComponentThenPlayFullWorkflow } from "./play-component-then-play-full.workflow";
+import { buildWorkflow as buildPorcelainTypesWorkflow } from "./porcelain-types.workflow";
+import { buildWorkflow as buildRuntimeIntrospectionWorkflow } from "./runtime-introspection.workflow";
+import { buildWorkflow as buildTerminalUiWorkflow } from "./terminal-ui.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -58,6 +61,9 @@ async function main() {
     buildGranularizeWorkflow(),
     buildCommandsWorkflow(),
     buildPlayComponentThenPlayFullWorkflow(),
+    buildPorcelainTypesWorkflow(),
+    buildRuntimeIntrospectionWorkflow(),
+    buildTerminalUiWorkflow(),
     // Register new workflows here as they are created.
   ];
 
