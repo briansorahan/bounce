@@ -29,6 +29,8 @@ import { buildWorkflow as buildPlaybackWorkflow } from "./playback.workflow";
 import { buildWorkflow as buildTransportPatternWorkflow } from "./transport-pattern.workflow";
 import { buildWorkflow as buildGranularInstrumentWorkflow } from "./granular-instrument.workflow";
 import { buildWorkflow as buildGranularizeWorkflow } from "./granularize.workflow";
+import { buildWorkflow as buildCommandsWorkflow } from "./commands.workflow";
+import { buildWorkflow as buildPlayComponentThenPlayFullWorkflow } from "./play-component-then-play-full.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -54,6 +56,8 @@ async function main() {
     buildTransportPatternWorkflow(),
     buildGranularInstrumentWorkflow(),
     buildGranularizeWorkflow(),
+    buildCommandsWorkflow(),
+    buildPlayComponentThenPlayFullWorkflow(),
     // Register new workflows here as they are created.
   ];
 
