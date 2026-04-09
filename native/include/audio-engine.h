@@ -14,6 +14,11 @@
 struct ma_device;
 class Instrument;
 
+struct AudioInputDevice {
+    int         index;
+    std::string name;
+};
+
 struct TelemetryEvent {
     enum class Kind { Position, Ended, Tick };
     Kind        kind;
@@ -81,6 +86,16 @@ public:
 
     bool start(bool useNullBackend = false);
     void stop();
+
+    // Audio input enumeration
+    std::vector<AudioInputDevice> listAudioInputs();
+
+    // Recording API
+    // Returns false if already recording.
+    bool startRecording(int deviceIndex, uint32_t sampleRate);
+    // Returns the recorded PCM as interleaved float samples. Returns empty if not recording.
+    std::vector<float> stopRecording();
+    bool isRecording() const;
 
     // Legacy playback API (backward compat — routes through preview channel)
     void play(const std::string& hash, const float* pcm, int numSamples,
@@ -253,6 +268,19 @@ private:
     struct DeviceDeleter { void operator()(ma_device*) const; };
     std::unique_ptr<ma_device, DeviceDeleter> device_;
     bool deviceRunning_ = false;
+
+    // Recording device (capture)
+    struct CaptureDeviceDeleter { void operator()(ma_device*) const; };
+    std::unique_ptr<ma_device, CaptureDeviceDeleter> captureDevice_;
+    bool captureRunning_ = false;
+
+    // Accumulated PCM from capture callback (mutex-protected)
+    std::mutex         recordMutex_;
+    std::vector<float> recordBuffer_;
+    uint32_t           recordChannels_ = 1;
+
+    static void captureCallback(ma_device* device, void* output,
+                                const void* input, unsigned int frameCount);
 
     int sampleRate_ = 44100;
 

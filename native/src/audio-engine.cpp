@@ -23,6 +23,16 @@ void AudioEngine::DeviceDeleter::operator()(ma_device* d) const {
 }
 
 // ---------------------------------------------------------------------------
+// CaptureDeviceDeleter
+// ---------------------------------------------------------------------------
+void AudioEngine::CaptureDeviceDeleter::operator()(ma_device* d) const {
+    if (d) {
+        ma_device_uninit(d);
+        delete d;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Construction / destruction
 // ---------------------------------------------------------------------------
 AudioEngine::AudioEngine() : device_(nullptr) {
@@ -97,6 +107,140 @@ void AudioEngine::stop() {
     // Detach rather than join — avoids blocking if the process is exiting
     // and the thread hasn't woken from its sleep yet.
     if (telemetryThread_.joinable()) telemetryThread_.detach();
+}
+
+// ---------------------------------------------------------------------------
+// listAudioInputs
+// ---------------------------------------------------------------------------
+std::vector<AudioInputDevice> AudioEngine::listAudioInputs() {
+    std::vector<AudioInputDevice> result;
+
+    ma_context ctx;
+    if (ma_context_init(nullptr, 0, nullptr, &ctx) != MA_SUCCESS)
+        return result;
+
+    ma_device_info* captureInfos  = nullptr;
+    ma_uint32       captureCount  = 0;
+    ma_device_info* playbackInfos = nullptr; // required by the API, unused
+    ma_uint32       playbackCount = 0;
+
+    if (ma_context_get_devices(&ctx, &playbackInfos, &playbackCount,
+                                     &captureInfos,  &captureCount) == MA_SUCCESS) {
+        for (ma_uint32 i = 0; i < captureCount; ++i) {
+            result.push_back({ static_cast<int>(i), std::string(captureInfos[i].name) });
+        }
+    }
+
+    ma_context_uninit(&ctx);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// captureCallback — called on miniaudio capture thread
+// ---------------------------------------------------------------------------
+void AudioEngine::captureCallback(ma_device* device, void* /*output*/,
+                                   const void* input, unsigned int frameCount) {
+    auto* self = static_cast<AudioEngine*>(device->pUserData);
+    if (!self || !input) return;
+
+    const float* src     = static_cast<const float*>(input);
+    uint32_t     nCh     = device->capture.channels;
+    size_t       nFloats = static_cast<size_t>(frameCount) * nCh;
+
+    std::lock_guard<std::mutex> lk(self->recordMutex_);
+    self->recordBuffer_.insert(self->recordBuffer_.end(), src, src + nFloats);
+}
+
+// ---------------------------------------------------------------------------
+// startRecording
+// ---------------------------------------------------------------------------
+bool AudioEngine::startRecording(int deviceIndex, uint32_t sampleRate) {
+    if (captureRunning_) return false;
+
+    captureDevice_.reset(new ma_device());
+    ma_device_config cfg = ma_device_config_init(ma_device_type_capture);
+    cfg.capture.format   = ma_format_f32;
+    cfg.capture.channels = 1;
+    cfg.sampleRate       = sampleRate > 0 ? sampleRate : 44100;
+    cfg.dataCallback     = AudioEngine::captureCallback;
+    cfg.pUserData        = this;
+
+    if (deviceIndex >= 0) {
+        ma_context ctx;
+        if (ma_context_init(nullptr, 0, nullptr, &ctx) == MA_SUCCESS) {
+            ma_device_info* captureInfos  = nullptr;
+            ma_uint32       captureCount  = 0;
+            ma_device_info* playbackInfos = nullptr;
+            ma_uint32       playbackCount = 0;
+            if (ma_context_get_devices(&ctx, &playbackInfos, &playbackCount,
+                                             &captureInfos,  &captureCount) == MA_SUCCESS
+                && static_cast<ma_uint32>(deviceIndex) < captureCount) {
+                cfg.capture.pDeviceID = &captureInfos[deviceIndex].id;
+                // captureInfos lifetime is tied to ctx — init device before uninit
+                if (ma_device_init(&ctx, &cfg, captureDevice_.get()) != MA_SUCCESS) {
+                    captureDevice_.reset();
+                    ma_context_uninit(&ctx);
+                    return false;
+                }
+                ma_context_uninit(&ctx);
+            } else {
+                ma_context_uninit(&ctx);
+                // Fall back to default device
+                if (ma_device_init(nullptr, &cfg, captureDevice_.get()) != MA_SUCCESS) {
+                    captureDevice_.reset();
+                    return false;
+                }
+            }
+        } else {
+            // Context init failed — fall back to default
+            if (ma_device_init(nullptr, &cfg, captureDevice_.get()) != MA_SUCCESS) {
+                captureDevice_.reset();
+                return false;
+            }
+        }
+    } else {
+        if (ma_device_init(nullptr, &cfg, captureDevice_.get()) != MA_SUCCESS) {
+            captureDevice_.reset();
+            return false;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(recordMutex_);
+        recordBuffer_.clear();
+        recordChannels_ = captureDevice_->capture.channels;
+    }
+
+    if (ma_device_start(captureDevice_.get()) != MA_SUCCESS) {
+        captureDevice_.reset();
+        return false;
+    }
+
+    captureRunning_ = true;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// stopRecording
+// ---------------------------------------------------------------------------
+std::vector<float> AudioEngine::stopRecording() {
+    if (!captureRunning_) return {};
+
+    ma_device_stop(captureDevice_.get());
+    captureDevice_.reset();
+    captureRunning_ = false;
+
+    std::lock_guard<std::mutex> lk(recordMutex_);
+    std::vector<float> result;
+    result.swap(recordBuffer_);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// isRecording
+// ---------------------------------------------------------------------------
+bool AudioEngine::isRecording() const {
+    return captureRunning_;
 }
 
 // ---------------------------------------------------------------------------
