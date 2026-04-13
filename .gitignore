@@ -10,6 +10,9 @@ test-results/
 third_party/memory/build/
 third_party/memory/install/
 
+# Coverage reports
+coverage/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
