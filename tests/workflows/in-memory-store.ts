@@ -25,6 +25,7 @@ interface ProjectEntry {
 export class InMemoryStore {
   samples = new Map<string, SampleRecord>();
   rawMeta = new Map<string, RawSampleMetadata>();
+  recordings = new Map<string, string>(); // name → hash
   cwd: string = os.homedir();
 
   projects = new Map<string, ProjectEntry>();
@@ -61,6 +62,17 @@ export class InMemoryStore {
       this.samples.set(hash, { id, hash, sample_type: "raw", sample_rate: sampleRate, channels, duration });
       this.rawMeta.set(hash, { sample_id: id, file_path: filePath });
     }
+    this.projects.get(this.currentProjectName)?.sampleHashes.add(hash);
+  }
+
+  addRecording(hash: string, name: string, sampleRate: number, channels: number, duration: number): void {
+    if (!this.samples.has(hash)) {
+      const id = this.nextSampleId++;
+      this.samples.set(hash, { id, hash, sample_type: "raw", sample_rate: sampleRate, channels, duration });
+      // Use the recording name as a display path
+      this.rawMeta.set(hash, { sample_id: id, file_path: name });
+    }
+    this.recordings.set(name, hash);
     this.projects.get(this.currentProjectName)?.sampleHashes.add(hash);
   }
 

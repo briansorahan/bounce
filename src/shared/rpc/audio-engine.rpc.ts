@@ -117,6 +117,22 @@ export interface AudioEngineRpc extends RpcContract {
     params: Record<string, never>;
     result: { instrumentIds: string[] };
   };
+
+  // ---- Audio input enumeration -------------------------------------------
+  listAudioInputs: {
+    params: Record<string, never>;
+    result: { devices: Array<{ index: number; name: string }> };
+  };
+
+  // ---- Recording ----------------------------------------------------------
+  startRecording: {
+    params: { deviceIndex: number; sampleRate?: number };
+    result: void;
+  };
+  stopRecording: {
+    params: Record<string, never>;
+    result: { pcm: number[]; sampleRate: number; channels: number; duration: number };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +162,9 @@ export const AudioEngineRequest = {
   isTransportRunning:   new RequestType<AudioEngineRpc["isTransportRunning"]["params"],   { running: boolean },          E>("audioEngine/isTransportRunning"),
   getPattern:           new RequestType<AudioEngineRpc["getPattern"]["params"],           { stepsJson: string | null },  E>("audioEngine/getPattern"),
   getInstruments:       new RequestType<AudioEngineRpc["getInstruments"]["params"],       { instrumentIds: string[] },   E>("audioEngine/getInstruments"),
+  listAudioInputs:      new RequestType<AudioEngineRpc["listAudioInputs"]["params"],      { devices: Array<{ index: number; name: string }> }, E>("audioEngine/listAudioInputs"),
+  startRecording:       new RequestType<AudioEngineRpc["startRecording"]["params"],       void,                          E>("audioEngine/startRecording"),
+  stopRecording:        new RequestType<AudioEngineRpc["stopRecording"]["params"],        { pcm: number[]; sampleRate: number; channels: number; duration: number }, E>("audioEngine/stopRecording"),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -174,6 +193,9 @@ export interface AudioEngineHandlers {
   isTransportRunning(params:   AudioEngineRpc["isTransportRunning"]["params"]):   Promise<{ running: boolean }>;
   getPattern(params:           AudioEngineRpc["getPattern"]["params"]):           Promise<{ stepsJson: string | null }>;
   getInstruments(params:       AudioEngineRpc["getInstruments"]["params"]):       Promise<{ instrumentIds: string[] }>;
+  listAudioInputs(params:      AudioEngineRpc["listAudioInputs"]["params"]):      Promise<{ devices: Array<{ index: number; name: string }> }>;
+  startRecording(params:       AudioEngineRpc["startRecording"]["params"]):       Promise<void>;
+  stopRecording(params:        AudioEngineRpc["stopRecording"]["params"]):        Promise<{ pcm: number[]; sampleRate: number; channels: number; duration: number }>;
 }
 
 // ---------------------------------------------------------------------------

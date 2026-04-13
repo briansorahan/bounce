@@ -21,6 +21,13 @@ export class MockAudioEngineService implements AudioEngineHandlers {
   private transportRunning = false;
   private patterns = new Map<number, string>();
   private instruments = new Set<string>();
+  private fakeDevices: Array<{ index: number; name: string }> = [
+    { index: 0, name: "Mock Microphone" },
+    { index: 1, name: "Mock Line In" },
+  ];
+  private recordingActive = false;
+  private recordingDeviceIndex = -1;
+  private recordingSampleRate = 44100;
 
   async play(params: AudioEngineRpc["play"]["params"]): Promise<void> {
     this.activeSampleHashes.add(params.sampleHash);
@@ -103,6 +110,35 @@ export class MockAudioEngineService implements AudioEngineHandlers {
 
   async getInstruments(_params: AudioEngineRpc["getInstruments"]["params"]): Promise<{ instrumentIds: string[] }> {
     return { instrumentIds: Array.from(this.instruments) };
+  }
+
+  async listAudioInputs(_params: AudioEngineRpc["listAudioInputs"]["params"]): Promise<{ devices: Array<{ index: number; name: string }> }> {
+    return { devices: [...this.fakeDevices] };
+  }
+
+  async startRecording(params: AudioEngineRpc["startRecording"]["params"]): Promise<void> {
+    if (this.recordingActive) {
+      throw new ResponseError(-32602, "startRecording: already recording");
+    }
+    this.recordingActive = true;
+    this.recordingDeviceIndex = params.deviceIndex;
+    this.recordingSampleRate = params.sampleRate ?? 44100;
+  }
+
+  async stopRecording(_params: AudioEngineRpc["stopRecording"]["params"]): Promise<{ pcm: number[]; sampleRate: number; channels: number; duration: number }> {
+    if (!this.recordingActive) {
+      throw new ResponseError(-32602, "stopRecording: not currently recording");
+    }
+    this.recordingActive = false;
+    // Return a short burst of silence (0.1s at the requested sample rate)
+    const nFrames = Math.round(this.recordingSampleRate * 0.1);
+    const pcm = new Array<number>(nFrames).fill(0);
+    return {
+      pcm,
+      sampleRate: this.recordingSampleRate,
+      channels: 1,
+      duration: nFrames / this.recordingSampleRate,
+    };
   }
 
   listen(connection: MessageConnection): void {

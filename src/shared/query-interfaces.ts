@@ -22,6 +22,7 @@ export interface ISampleQuery {
   getSampleByHash(hash: string): Promise<SampleRecord | null>;
   getRawMetadata(hash: string): Promise<RawSampleMetadata | null>;
   listSamples(): Promise<SampleListRecord[]>;
+  getSampleByRecordingName(name: string): Promise<SampleRecord | null>;
 }
 
 export interface ICwdQuery {

@@ -134,6 +134,8 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       duration: number,
       overwrite: boolean,
     ) => {
+      // TODO(bounce-audiofile-store-recording): Delegate to audioFileClient.invoke("storeRecording", ...)
+      // once AudioFileService is wired into main.ts. See src/electron/services/audio-file/index.ts.
       if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
 
       const existing = deps.dbManager.getSampleByRecordingName(name);
