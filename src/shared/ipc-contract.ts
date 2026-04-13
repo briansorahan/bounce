@@ -504,6 +504,11 @@ export const IpcChannel = {
   // Transport telemetry (main → renderer)
   TransportTick:         "transport-tick",
   AudioDeviceInfo:       "audio-device-info",
+
+  // Recording (renderer → main, invoke)
+  ListAudioInputs:  "list-audio-inputs",
+  StartRecording:   "start-recording",
+  StopRecording:    "stop-recording",
 } as const;
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel];
@@ -795,6 +800,21 @@ export interface IpcHandleContract {
     request: [buffer: string, cursor: number, requestId: number];
     response: PredictionResult[];
   };
+  // Recording
+  "list-audio-inputs": {
+    request: [];
+    response: Array<{ index: number; name: string; deviceId: string }>;
+  };
+  "start-recording": {
+    request: [deviceIndex: number, sampleRate?: number];
+    response: void;
+  };
+  "stop-recording": {
+    request: [name: string, sampleRate: number, channels: number, overwrite?: boolean];
+    response:
+      | { status: "ok"; hash: string; id?: number; sampleRate: number; channels: number; duration: number; filePath: string }
+      | { status: "exists" };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1081,4 +1101,12 @@ export interface ElectronAPI {
   transportClearPattern: (channelIndex: number) => void;
   onTransportTick: (cb: (data: TransportTickData) => void) => void;
   onAudioDeviceInfo: (cb: (data: AudioDeviceInfoData) => void) => void;
+
+  // Recording (native audio engine)
+  listAudioInputs: () => Promise<Array<{ index: number; name: string; deviceId: string }>>;
+  startRecording: (deviceIndex: number, sampleRate?: number) => Promise<void>;
+  stopRecording: (name: string, sampleRate: number, channels: number, overwrite?: boolean) => Promise<
+    | { status: "ok"; hash: string; id?: number; sampleRate: number; channels: number; duration: number; filePath: string }
+    | { status: "exists" }
+  >;
 }

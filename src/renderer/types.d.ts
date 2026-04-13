@@ -411,5 +411,12 @@ interface Window {
     transportClearPattern(channelIndex: number): void;
     onTransportTick(cb: (data: import('../shared/ipc-contract').TransportTickData) => void): void;
     onAudioDeviceInfo(cb: (data: import('../shared/ipc-contract').AudioDeviceInfoData) => void): void;
+    // Recording (native audio engine)
+    listAudioInputs(): Promise<Array<{ index: number; name: string; deviceId: string }>>;
+    startRecording(deviceIndex: number, sampleRate?: number): Promise<void>;
+    stopRecording(name: string, sampleRate: number, channels: number, overwrite?: boolean): Promise<
+      | { status: "ok"; hash: string; id?: number; sampleRate: number; channels: number; duration: number; filePath: string }
+      | { status: "exists" }
+    >;
   };
 }
