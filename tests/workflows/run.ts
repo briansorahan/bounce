@@ -34,6 +34,7 @@ import { buildWorkflow as buildPlayComponentThenPlayFullWorkflow } from "./play-
 import { buildWorkflow as buildPorcelainTypesWorkflow } from "./porcelain-types.workflow";
 import { buildWorkflow as buildRuntimeIntrospectionWorkflow } from "./runtime-introspection.workflow";
 import { buildWorkflow as buildTerminalUiWorkflow } from "./terminal-ui.workflow";
+import { buildWorkflow as buildRecordingWorkflow } from "./recording.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -64,6 +65,7 @@ async function main() {
     buildPorcelainTypesWorkflow(),
     buildRuntimeIntrospectionWorkflow(),
     buildTerminalUiWorkflow(),
+    buildRecordingWorkflow(),
     // Register new workflows here as they are created.
   ];
 
