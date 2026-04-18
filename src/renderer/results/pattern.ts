@@ -6,13 +6,13 @@ import { replType, describe, param } from "../../shared/repl-registry.js";
 
 @replType("Pattern", { summary: "A compiled X0X step-sequencer pattern" })
 export class PatternResult extends BounceResult {
-  private readonly notation: string;
-  private readonly compiled: CompiledPattern;
+  readonly #notation: string;
+  readonly #compiled: CompiledPattern;
 
   constructor(notation: string, compiled: CompiledPattern) {
     super(""); // overridden by toString()
-    this.notation = notation;
-    this.compiled = compiled;
+    this.#notation = notation;
+    this.#compiled = compiled;
     attachMethodHelpFromRegistry(this, "Pattern");
   }
 
@@ -22,16 +22,16 @@ export class PatternResult extends BounceResult {
     if (channel < 1 || channel > 8) {
       return new BounceResult(`\x1b[31mChannel must be 1–8 (got ${channel})\x1b[0m`);
     }
-    this.compiled.channelIndex = channel - 1; // convert to 0-indexed
-    const stepsJson = JSON.stringify(this.compiled.steps);
+    this.#compiled.channelIndex = channel - 1; // convert to 0-indexed
+    const stepsJson = JSON.stringify(this.#compiled.steps);
     window.electron.transportSetPattern(channel - 1, stepsJson);
     return new BounceResult(`PatternResult playing on channel ${channel}  bar: next`);
   }
 
   @describe({ summary: "Stop the pattern on its mixer channel.", returns: "BounceResult" })
   stop(): BounceResult {
-    if (this.compiled.channelIndex >= 0) {
-      window.electron.transportClearPattern(this.compiled.channelIndex);
+    if (this.#compiled.channelIndex >= 0) {
+      window.electron.transportClearPattern(this.#compiled.channelIndex);
     }
     return new BounceResult("PatternResult stopped");
   }
@@ -60,7 +60,7 @@ export class PatternResult extends BounceResult {
     const noteNames = new Map<number, string>();
 
     for (let step = 0; step < 16; step++) {
-      for (const ev of this.compiled.steps[step].events) {
+      for (const ev of this.#compiled.steps[step].events) {
         if (!noteEvents.has(ev.note)) {
           noteEvents.set(ev.note, Array(16).fill("."));
           noteNames.set(ev.note, midiToNoteName(ev.note));
