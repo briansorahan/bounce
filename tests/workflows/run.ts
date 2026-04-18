@@ -19,6 +19,22 @@ import { buildWorkflow as buildRuntimePersistenceWorkflow } from "./runtime-pers
 import { buildWorkflow as buildInstrumentWorkflow } from "./instrument.workflow";
 import { buildWorkflow as buildMidiWorkflow } from "./midi.workflow";
 import { buildWorkflow as buildMixerWorkflow } from "./mixer.workflow";
+import { buildWorkflow as buildOnsetAnalysisWorkflow } from "./onset-analysis.workflow";
+import { buildWorkflow as buildNmfAnalysisWorkflow } from "./nmf-analysis.workflow";
+import { buildWorkflow as buildNmfSeparationWorkflow } from "./nmf-separation.workflow";
+import { buildWorkflow as buildNmfComponentContextWorkflow } from "./nmf-component-context.workflow";
+import { buildWorkflow as buildNxBasicWorkflow } from "./nx-basic.workflow";
+import { buildWorkflow as buildNxCrossSynthesisWorkflow } from "./nx-cross-synthesis.workflow";
+import { buildWorkflow as buildPlaybackWorkflow } from "./playback.workflow";
+import { buildWorkflow as buildTransportPatternWorkflow } from "./transport-pattern.workflow";
+import { buildWorkflow as buildGranularInstrumentWorkflow } from "./granular-instrument.workflow";
+import { buildWorkflow as buildGranularizeWorkflow } from "./granularize.workflow";
+import { buildWorkflow as buildCommandsWorkflow } from "./commands.workflow";
+import { buildWorkflow as buildPlayComponentThenPlayFullWorkflow } from "./play-component-then-play-full.workflow";
+import { buildWorkflow as buildPorcelainTypesWorkflow } from "./porcelain-types.workflow";
+import { buildWorkflow as buildRuntimeIntrospectionWorkflow } from "./runtime-introspection.workflow";
+import { buildWorkflow as buildTerminalUiWorkflow } from "./terminal-ui.workflow";
+import { buildWorkflow as buildRecordingWorkflow } from "./recording.workflow";
 
 async function main() {
   let exitCode = 0;
@@ -34,6 +50,22 @@ async function main() {
     buildInstrumentWorkflow(),
     buildMidiWorkflow(),
     buildMixerWorkflow(),
+    buildOnsetAnalysisWorkflow(),
+    buildNmfAnalysisWorkflow(),
+    buildNmfSeparationWorkflow(),
+    buildNmfComponentContextWorkflow(),
+    buildNxBasicWorkflow(),
+    buildNxCrossSynthesisWorkflow(),
+    buildPlaybackWorkflow(),
+    buildTransportPatternWorkflow(),
+    buildGranularInstrumentWorkflow(),
+    buildGranularizeWorkflow(),
+    buildCommandsWorkflow(),
+    buildPlayComponentThenPlayFullWorkflow(),
+    buildPorcelainTypesWorkflow(),
+    buildRuntimeIntrospectionWorkflow(),
+    buildTerminalUiWorkflow(),
+    buildRecordingWorkflow(),
     // Register new workflows here as they are created.
   ];
 

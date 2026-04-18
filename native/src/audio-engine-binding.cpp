@@ -54,6 +54,14 @@ private:
     Napi::Value OnTransportTick(const Napi::CallbackInfo& info);
     Napi::Value OnDeviceInfo(const Napi::CallbackInfo& info);
 
+    // Audio input enumeration
+    Napi::Value ListAudioInputs(const Napi::CallbackInfo& info);
+
+    // Recording API
+    Napi::Value StartRecording(const Napi::CallbackInfo& info);
+    Napi::Value StopRecording(const Napi::CallbackInfo& info);
+    Napi::Value IsRecording(const Napi::CallbackInfo& info);
+
     std::unique_ptr<AudioEngine> engine_;
 
     // Threadsafe functions for telemetry callbacks
@@ -99,6 +107,12 @@ Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("transportClearPattern",   &AudioEngineWrapper::TransportClearPattern),
         InstanceMethod("onTransportTick",         &AudioEngineWrapper::OnTransportTick),
         InstanceMethod("onDeviceInfo",            &AudioEngineWrapper::OnDeviceInfo),
+        // Audio input enumeration
+        InstanceMethod("listAudioInputs",         &AudioEngineWrapper::ListAudioInputs),
+        // Recording API
+        InstanceMethod("startRecording",          &AudioEngineWrapper::StartRecording),
+        InstanceMethod("stopRecording",           &AudioEngineWrapper::StopRecording),
+        InstanceMethod("isRecording",             &AudioEngineWrapper::IsRecording),
     });
 
     Napi::FunctionReference* ctor = new Napi::FunctionReference();
@@ -625,6 +639,58 @@ Napi::Value AudioEngineWrapper::OnDeviceInfo(const Napi::CallbackInfo& info) {
         });
     });
     return env.Undefined();
+}
+
+// ---------------------------------------------------------------------------
+// ListAudioInputs
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::ListAudioInputs(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    auto devices = engine_->listAudioInputs();
+
+    Napi::Array arr = Napi::Array::New(env, devices.size());
+    for (size_t i = 0; i < devices.size(); ++i) {
+        Napi::Object obj = Napi::Object::New(env);
+        obj.Set("index", Napi::Number::New(env, devices[i].index));
+        obj.Set("name",  Napi::String::New(env, devices[i].name));
+        arr[i] = obj;
+    }
+    return arr;
+}
+
+// ---------------------------------------------------------------------------
+// StartRecording / StopRecording / IsRecording
+// ---------------------------------------------------------------------------
+Napi::Value AudioEngineWrapper::StartRecording(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    int      deviceIndex = (info.Length() > 0 && info[0].IsNumber())
+                           ? info[0].As<Napi::Number>().Int32Value() : -1;
+    uint32_t sampleRate  = (info.Length() > 1 && info[1].IsNumber())
+                           ? static_cast<uint32_t>(info[1].As<Napi::Number>().Uint32Value()) : 44100;
+
+    bool ok = engine_->startRecording(deviceIndex, sampleRate);
+    if (!ok) {
+        Napi::Error::New(env, "startRecording: already recording or device open failed")
+            .ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    return env.Undefined();
+}
+
+Napi::Value AudioEngineWrapper::StopRecording(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    std::vector<float> pcm = engine_->stopRecording();
+
+    if (pcm.empty())
+        return Napi::Float32Array::New(env, 0);
+
+    Napi::Float32Array arr = Napi::Float32Array::New(env, pcm.size());
+    std::copy(pcm.begin(), pcm.end(), arr.Data());
+    return arr;
+}
+
+Napi::Value AudioEngineWrapper::IsRecording(const Napi::CallbackInfo& info) {
+    return Napi::Boolean::New(info.Env(), engine_->isRecording());
 }
 
 // ---------------------------------------------------------------------------

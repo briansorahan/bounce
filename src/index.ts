@@ -11,6 +11,8 @@ export type { SpectralShapeOptions, SpectralShapeResult } from "./spectral-shape
 export { Normalization } from "./normalization";
 export { KDTree } from "./kdtree";
 export type { KNNResult } from "./kdtree";
+export { BufNMFCross } from "./electron/BufNMFCross";
+export type { BufNMFCrossOptions, BufNMFCrossResult } from "./electron/BufNMFCross";
 
 // Load the native addon
 const addon = require("../build/Release/flucoma_native.node");
@@ -112,6 +114,19 @@ export class BufNMF {
     activations: number[][];
   } {
     return this._native.process(audioBuffer, sampleRate);
+  }
+
+  /**
+   * Resynthesize a single NMF component back to audio.
+   */
+  resynthesize(
+    audioBuffer: Float32Array | Float64Array,
+    sampleRate: number,
+    bases: number[][],
+    activations: number[][],
+    componentIndex: number,
+  ): Float32Array {
+    return this._native.resynthesize(audioBuffer, sampleRate, bases, activations, componentIndex);
   }
 }
 

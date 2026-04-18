@@ -85,6 +85,15 @@ export type ReplEnvSavedEvent = {
   entries: Array<{ name: string; kind: "json" | "function"; value: string }>;
 };
 
+export type RecordingStoredEvent = {
+  type: "RecordingStored";
+  hash: string;
+  name: string;
+  sampleRate: number;
+  channels: number;
+  duration: number;
+};
+
 export type DomainEvent =
   | SampleLoadedEvent
   | CwdChangedEvent
@@ -97,7 +106,8 @@ export type DomainEvent =
   | MidiSequenceDeletedEvent
   | MixerChannelUpdatedEvent
   | MixerMasterUpdatedEvent
-  | ReplEnvSavedEvent;
+  | ReplEnvSavedEvent
+  | RecordingStoredEvent;
 
 // ---------------------------------------------------------------------------
 // EventBus interface + synchronous in-process implementation.

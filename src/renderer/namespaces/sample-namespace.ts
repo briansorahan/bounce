@@ -144,7 +144,7 @@ export class SampleNamespace implements SampleBinder {
     }
     const d = devs[index];
     return new AudioDeviceResult(index, d.deviceId, d.label, 1, {
-      record: (sampleId, opts) => this.recordSample(d.deviceId, d.label, sampleId, opts),
+      record: (sampleId, opts) => this.recordSample(index, d.label, sampleId, opts),
     });
   }
 
@@ -1292,22 +1292,21 @@ export class SampleNamespace implements SampleBinder {
   }
 
   private async getAudioInputs(): Promise<AudioInputDevice[]> {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((t) => t.stop());
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices
-      .filter((d) => d.kind === "audioinput")
-      .map((d) => ({ deviceId: d.deviceId, label: d.label, groupId: d.groupId }));
+    const devices = await window.electron.listAudioInputs();
+    return devices.map((d) => ({ deviceId: d.deviceId, label: d.name, groupId: "" }));
   }
 
   private recordSample(
-    deviceId: string,
+    deviceIndex: number,
     deviceLabel: string,
     sampleId: string,
     opts?: RecordOptions,
   ): Promise<RecordingHandleResult> | SamplePromise {
+    const SAMPLE_RATE = 44100;
+    const CHANNELS = 1;
+
     const pipeline = async (): Promise<{
-      recorder: MediaRecorder;
+      stop: () => Promise<SampleResult>;
       storagePromise: Promise<SampleResult>;
     }> => {
       const existing = await window.electron.getSampleByName(sampleId);
@@ -1317,87 +1316,58 @@ export class SampleNamespace implements SampleBinder {
         );
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: { exact: deviceId },
-          echoCancellation: false,
-          noiseSuppression: false,
-        } as MediaTrackConstraints,
+      await window.electron.startRecording(deviceIndex, SAMPLE_RATE);
+
+      let resolveStorage!: (s: SampleResult) => void;
+      let rejectStorage!: (err: unknown) => void;
+      const storagePromise = new Promise<SampleResult>((res, rej) => {
+        resolveStorage = res;
+        rejectStorage = rej;
       });
 
-      const chunks: Blob[] = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
+      const stop = async (): Promise<SampleResult> => {
+        try {
+          const result = await window.electron.stopRecording(
+            sampleId,
+            SAMPLE_RATE,
+            CHANNELS,
+            opts?.overwrite ?? false,
+          );
+          if (result.status === "exists") {
+            throw new Error(`SampleResult '${sampleId}' already exists.`);
+          }
+          const sample = this.bindSample({
+            hash: result.hash,
+            filePath: sampleId,
+            sampleRate: SAMPLE_RATE,
+            channels: CHANNELS,
+            duration: result.duration,
+            id: result.id,
+          });
+          resolveStorage(sample);
+          return sample;
+        } catch (err) {
+          rejectStorage(err);
+          throw err;
+        }
       };
 
-      const storagePromise = new Promise<SampleResult>((resolve, reject) => {
-        recorder.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          const blob = new Blob(chunks, { type: recorder.mimeType });
-          blob
-            .arrayBuffer()
-            .then((ab) => {
-              const audioCtx = new AudioContext();
-              return audioCtx.decodeAudioData(ab).then((decoded) => {
-                audioCtx.close();
-                return decoded;
-              });
-            })
-            .then(async (decoded) => {
-              const channelData = decoded.getChannelData(0);
-              const sr = decoded.sampleRate;
-              const ch = decoded.numberOfChannels;
-              const dur = channelData.length / sr;
-
-              const result = await window.electron.storeRecording(
-                sampleId,
-                Array.from(channelData),
-                sr,
-                ch,
-                dur,
-                opts?.overwrite ?? false,
-              );
-
-              if (result.status === "exists") {
-                throw new Error(`SampleResult '${sampleId}' already exists.`);
-              }
-
-              resolve(
-                this.bindSample({
-                  hash: result.hash!,
-                  filePath: sampleId,
-                  sampleRate: sr,
-                  channels: ch,
-                  duration: dur,
-                  id: result.id,
-                }),
-              );
-            })
-            .catch(reject);
-        };
-      });
-
-      recorder.start();
-      return { recorder, storagePromise };
+      return { stop, storagePromise };
     };
 
     if (opts?.duration !== undefined) {
       const duration = opts.duration;
       return new SamplePromise(
-        pipeline().then(({ recorder, storagePromise }) => {
-          setTimeout(() => recorder.stop(), duration * 1000);
+        pipeline().then(async ({ stop, storagePromise }) => {
+          setTimeout(() => { stop().catch(() => {}); }, duration * 1000);
           return storagePromise;
         }),
       );
     }
 
     return pipeline().then(
-      ({ recorder, storagePromise }) =>
-        new RecordingHandleResult(deviceLabel, () => recorder.stop(), storagePromise),
+      ({ stop, storagePromise }) =>
+        new RecordingHandleResult(deviceLabel, () => { stop().catch(() => {}); }, storagePromise),
     );
   }
 }

@@ -118,6 +118,29 @@ export class AudioFileService implements AudioFileHandlers {
     return this.sampleQuery.listSamples();
   }
 
+  async storeRecording(params: AudioFileRpc["storeRecording"]["params"]): Promise<{ status: "ok" | "exists"; hash?: string; id?: number }> {
+    const { name, pcm, sampleRate, channels, duration, overwrite } = params;
+    const existing = await this.sampleQuery.getSampleByRecordingName(name);
+    if (existing && !overwrite) {
+      return { status: "exists" };
+    }
+
+    const pcmBuffer = Buffer.from(new Float32Array(pcm).buffer);
+    const hash = crypto.createHash("sha256").update(pcmBuffer).digest("hex");
+
+    this.bus.emit([{
+      type: "RecordingStored" as const,
+      hash,
+      name,
+      sampleRate,
+      channels,
+      duration,
+    }]);
+
+    const sample = await this.sampleQuery.getSampleByHash(hash);
+    return { status: "ok", hash, id: sample?.id };
+  }
+
   listen(connection: MessageConnection): void {
     registerAudioFileHandlers(connection, this);
   }

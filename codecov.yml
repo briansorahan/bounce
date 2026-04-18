@@ -1,0 +1,75 @@
+coverage:
+  precision: 2
+  round: down
+  status:
+    project:
+      default:
+        target: 75%
+        threshold: 1%     # allow 1% drift before failing
+    patch:
+      default:
+        target: 75%       # new code in PRs must also be 80% covered
+        threshold: 5%     # a little more lenient on small patches
+
+ignore:
+  # ── Electron main process ───────────────────────────────────────────────
+  # These require a live Electron instance (ipcMain, BrowserWindow, etc.)
+  - "src/electron/main.ts"
+  - "src/electron/preload.ts"
+  - "src/electron/register.ts"
+  - "src/electron/ipc/**"
+  - "src/electron/audio-resolver.ts"
+  - "src/electron/corpus-manager.ts"
+  - "src/electron/database.ts"
+  - "src/electron/language-service-manager.ts"
+  - "src/electron/process.ts"
+  - "src/electron/repl-intelligence.ts"
+  - "src/electron/services/persistence/**"
+  - "src/electron/services/query/**"
+  - "src/electron/completers/**"
+
+  # ── Renderer — requires Electron window, IPC bridge, Canvas, xterm.js ──
+  - "src/renderer/app.ts"
+  - "src/renderer/bounce-api.ts"
+  - "src/renderer/audio-context.ts"
+  - "src/renderer/repl-evaluator.ts"
+  - "src/renderer/repl-handlers.ts"
+  - "src/renderer/globals.ts"
+  - "src/renderer/waveform-visualizer.ts"
+  - "src/renderer/nmf-visualizer.ts"
+  - "src/renderer/onset-slice-visualizer.ts"
+  - "src/renderer/visualization-scene-manager.ts"
+  - "src/renderer/visualization-manager.ts"
+  - "src/renderer/mixer-meters.ts"
+  - "src/renderer/status-line.ts"
+  - "src/renderer/terminal.ts"
+  # Namespace objects all depend on window.electron IPC; see Category 4 in
+  # specs/coverage/IMPL.md for the IPC-mock infrastructure needed to test them.
+  - "src/renderer/namespaces/**"
+
+  # ── Utility sub-processes ────────────────────────────────────────────────
+  # Separate Electron sub-processes; require the full Electron runtime.
+  - "src/utility/**"
+
+  # ── Shared type-declaration-only files ──────────────────────────────────
+  # No executable runtime statements — coverage is meaningless.
+  - "src/shared/ipc-contract.ts"
+  - "src/shared/completion-context.ts"
+  - "src/shared/domain-types.ts"
+  - "src/shared/completer.ts"
+  - "src/shared/query-interfaces.ts"
+  - "src/shared/audio-engine-protocol.ts"
+  - "src/shared/types.ts"
+
+  # ── Auto-generated files ─────────────────────────────────────────────────
+  - "src/**/*.generated.ts"
+
+  # ── Source-map attribution issues ────────────────────────────────────────
+  # Files that use BOTH legacy TypeScript decorators (@replType, @describe, etc.)
+  # AND native private fields (#x) trigger an esbuild source-map misalignment:
+  # the helpers for the decorator transform and the private-field accessor
+  # transform are combined in a way that makes c8 attribute V8 bytecode offsets
+  # to wrong TypeScript source lines. V8 function-coverage data shows 100% of
+  # functions covered in these files; the line-level numbers are unreliable.
+  - "src/renderer/results/pattern.ts"
+  - "src/renderer/results/instrument.ts"

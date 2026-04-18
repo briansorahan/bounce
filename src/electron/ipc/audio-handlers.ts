@@ -11,6 +11,55 @@ import { BounceError } from "../../shared/bounce-error.js";
 import { resolveAudioData } from "../audio-resolver";
 import type { HandlerDeps } from "./register";
 
+// ---------------------------------------------------------------------------
+// Request-response correlation for audio engine utility process messages
+// ---------------------------------------------------------------------------
+
+let _nextRequestId = 1;
+type PendingRequest = {
+  resolve: (data: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+const _pendingRequests = new Map<number, PendingRequest>();
+let _responseListenerAttached = false;
+
+function attachAudioEngineResponseListener(port: Electron.MessagePortMain): void {
+  if (_responseListenerAttached) return;
+  _responseListenerAttached = true;
+  port.on("message", (event) => {
+    const data = event.data as { type: string; requestId?: number; [key: string]: unknown };
+    if (data.requestId === undefined) return;
+    const pending = _pendingRequests.get(data.requestId);
+    if (!pending) return;
+    _pendingRequests.delete(data.requestId);
+    clearTimeout(pending.timer);
+    pending.resolve(data);
+  });
+}
+
+function invokeAudioEngine(
+  port: Electron.MessagePortMain,
+  type: string,
+  data: Record<string, unknown> = {},
+  timeoutMs = 5000,
+): Promise<Record<string, unknown>> {
+  attachAudioEngineResponseListener(port);
+  return new Promise((resolve, reject) => {
+    const requestId = _nextRequestId++;
+    const timer = setTimeout(() => {
+      _pendingRequests.delete(requestId);
+      reject(new Error(`Audio engine request "${type}" timed out`));
+    }, timeoutMs);
+    _pendingRequests.set(requestId, {
+      resolve: (d) => resolve(d as Record<string, unknown>),
+      reject,
+      timer,
+    });
+    port.postMessage({ type, requestId, ...data });
+  });
+}
+
 /** Resolve a path against the stored cwd, expanding ~ and handling relative paths. */
 function resolvePath(settingsStore: SettingsStore | undefined, inputPath: string): string {
   const expanded = SettingsStore.expandHome(inputPath);
@@ -134,6 +183,8 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
       duration: number,
       overwrite: boolean,
     ) => {
+      // TODO(bounce-audiofile-store-recording): Delegate to audioFileClient.invoke("storeRecording", ...)
+      // once AudioFileService is wired into main.ts. See src/electron/services/audio-file/index.ts.
       if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
 
       const existing = deps.dbManager.getSampleByRecordingName(name);
@@ -360,5 +411,56 @@ export function registerAudioHandlers(deps: HandlerDeps): void {
     const instrument = deps.dbManager.getInstrument(instrumentName);
     if (!instrument) return [];
     return deps.dbManager.getInstrumentSamples(instrument.id);
+  });
+
+  // ---- Recording IPC handlers (request-response via audio engine) ----
+
+  ipcMain.handle("list-audio-inputs", async () => {
+    const port = getAudioEnginePort();
+    if (!port) throw new BounceError("AUDIO_ENGINE_NOT_READY", "Audio engine not available");
+    const result = await invokeAudioEngine(port, "list-audio-inputs");
+    const rawDevices = (result.devices as Array<{ index: number; name: string }>) ?? [];
+    return rawDevices.map((d) => ({
+      index: d.index,
+      name: d.name,
+      deviceId: String(d.index),
+    }));
+  });
+
+  ipcMain.handle("start-recording", async (_event, deviceIndex: number, sampleRate = 44100) => {
+    const port = getAudioEnginePort();
+    if (!port) throw new BounceError("AUDIO_ENGINE_NOT_READY", "Audio engine not available");
+    const result = await invokeAudioEngine(port, "start-recording", { deviceIndex, sampleRate });
+    if (!result.ok) {
+      throw new BounceError("RECORDING_START_FAILED", String(result.error ?? "Failed to start recording"));
+    }
+  });
+
+  ipcMain.handle("stop-recording", async (_event, name: string, sampleRate: number, channels: number, overwrite = false) => {
+    if (!deps.dbManager) throw new BounceError("AUDIO_DB_NOT_READY", "Database not initialised");
+    const port = getAudioEnginePort();
+    if (!port) throw new BounceError("AUDIO_ENGINE_NOT_READY", "Audio engine not available");
+    const result = await invokeAudioEngine(port, "stop-recording", {}, 30000);
+    const pcmArray = result.pcm as Float32Array;
+    const duration = pcmArray.length / sampleRate;
+
+    const existing = deps.dbManager.getSampleByRecordingName(name);
+    if (existing && !overwrite) {
+      return { status: "exists" as const };
+    }
+
+    const audioDataBuffer = Buffer.from(pcmArray.buffer);
+    const hash = crypto.createHash("sha256").update(audioDataBuffer).digest("hex");
+    deps.dbManager.storeRecordedSample(hash, name, audioDataBuffer, sampleRate, channels, duration);
+    const stored = deps.dbManager.getSampleByHash(hash);
+    return {
+      status: "ok" as const,
+      hash,
+      id: stored?.id,
+      sampleRate,
+      channels,
+      duration,
+      filePath: name,
+    };
   });
 }

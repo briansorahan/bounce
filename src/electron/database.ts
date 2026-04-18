@@ -3,6 +3,7 @@ import { app } from "electron";
 import * as path from "path";
 import * as crypto from "crypto";
 import type { MidiEvent, MidiSequenceRecord } from "../shared/ipc-contract";
+import { computeGrains } from "./services/granularize";
 
 export interface DebugLogEntry {
   id: number;
@@ -1047,88 +1048,30 @@ export class DatabaseManager {
       );
     }
 
-    const grainSizeMs = options.grainSize ?? 20;
-    const hopSizeMs = options.hopSize ?? grainSizeMs;
-    const startTimeMs = options.startTime ?? 0;
-    const endTimeMs = options.endTime ?? sample.duration * 1000;
-    const jitter = options.jitter ?? 0;
-    const silenceThresholdDb = options.silenceThreshold ?? -60;
-
     const { sample_rate: sampleRate, channels } = sample;
 
-    const grainSizeSamples = Math.round((grainSizeMs * sampleRate) / 1000);
-    const hopSizeSamples = Math.round((hopSizeMs * sampleRate) / 1000);
-    const startSample = Math.round((startTimeMs * sampleRate) / 1000);
-    const totalFrames = sourceAudio.length;
-    const endSample = Math.min(
-      Math.round((endTimeMs * sampleRate) / 1000),
-      totalFrames,
-    );
+    // Delegate pure computation to GranularizeService (no storage).
+    const { grainHashes, featureHash, grainDuration, grainStartPositions } = computeGrains({
+      sourceHash: sample.hash,
+      audioData: sourceAudio,
+      sampleRate,
+      duration: sample.duration,
+      options,
+    });
 
-    // Compute grain start positions (in samples/frames)
-    const grainStartPositions: number[] = [];
-    let pos = startSample;
-    while (pos + grainSizeSamples <= endSample) {
-      if (jitter > 0) {
-        const maxOffset = Math.round(jitter * hopSizeSamples);
-        const offset = Math.round((Math.random() * 2 - 1) * maxOffset);
-        const jitteredPos = Math.max(
-          startSample,
-          Math.min(endSample - grainSizeSamples, pos + offset),
-        );
-        grainStartPositions.push(jitteredPos);
-      } else {
-        grainStartPositions.push(pos);
-      }
-      pos += hopSizeSamples;
-    }
-
-    // Store grain start positions as the feature, preserving all options for reproducibility
+    // Store grain positions as the feature (storage stays here in DatabaseManager).
     this.storeFeature(
       sample.hash,
       "granularize",
       grainStartPositions,
       options as FeatureOptions,
     );
-    const featureHash = this.computeFeatureHash(
-      "granularize",
-      grainStartPositions,
-      options as FeatureOptions,
-    );
 
-    // Convert dBFS silence threshold to linear RMS
-    const silenceThresholdLinear =
-      silenceThresholdDb === -Infinity
-        ? 0
-        : Math.pow(10, silenceThresholdDb / 20);
-
-    const grainDuration = grainSizeSamples / sampleRate;
-    const grainHashes: Array<string | null> = [];
-
-    for (let i = 0; i < grainStartPositions.length; i++) {
-      const start = grainStartPositions[i];
-      const grainAudio = sourceAudio.slice(start, start + grainSizeSamples);
-
-      // Compute RMS and skip silent grains
-      let sumSq = 0;
-      for (let j = 0; j < grainAudio.length; j++) {
-        sumSq += grainAudio[j] * grainAudio[j];
+    // Create derived sample metadata rows for non-silent grains.
+    for (let i = 0; i < grainHashes.length; i++) {
+      if (grainHashes[i] !== null) {
+        this.createDerivedSample(sample.hash, featureHash, i, sampleRate, channels, grainDuration);
       }
-      const rms = Math.sqrt(sumSq / grainAudio.length);
-      if (rms < silenceThresholdLinear) {
-        grainHashes.push(null);
-        continue;
-      }
-
-      const hash = this.createDerivedSample(
-        sample.hash,
-        featureHash,
-        i,
-        sampleRate,
-        channels,
-        grainDuration,
-      );
-      grainHashes.push(hash);
     }
 
     return { grainHashes, featureHash, sampleRate, grainDuration };

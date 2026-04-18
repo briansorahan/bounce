@@ -269,6 +269,14 @@ const api: ElectronAPI = {
   onAudioDeviceInfo: (cb: (data: AudioDeviceInfoData) => void) => {
     ipcRenderer.on("audio-device-info", (_e, data: AudioDeviceInfoData) => cb(data));
   },
+
+  // Recording (native audio engine)
+  listAudioInputs: (): Promise<Array<{ index: number; name: string; deviceId: string }>> =>
+    ipcRenderer.invoke("list-audio-inputs"),
+  startRecording: (deviceIndex: number, sampleRate?: number): Promise<void> =>
+    ipcRenderer.invoke("start-recording", deviceIndex, sampleRate),
+  stopRecording: (name: string, sampleRate: number, channels: number, overwrite?: boolean) =>
+    ipcRenderer.invoke("stop-recording", name, sampleRate, channels, overwrite),
 };
 
 contextBridge.exposeInMainWorld("electron", api);

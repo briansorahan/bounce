@@ -65,6 +65,11 @@ interface AudioEngineNative {
   transportClearPattern(channelIndex: number): void;
   onTransportTick(cb: (absoluteTick: number, bar: number, beat: number, step: number) => void): void;
   onDeviceInfo(cb: (sampleRate: number, bufferSize: number) => void): void;
+  // Recording API
+  listAudioInputs(): Array<{ index: number; name: string }>;
+  startRecording(deviceIndex: number, sampleRate: number): void;
+  stopRecording(): Float32Array;
+  isRecording(): boolean;
 }
 
 // Obtain the MessagePort transferred from the main process.
@@ -136,6 +141,9 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
     // Transport fields
     bpm?: number;
     stepsJson?: string;
+    // Request-response correlation
+    requestId?: number;
+    deviceIndex?: number;
   }}) => {
     const data = msg.data;
 
@@ -254,6 +262,35 @@ parentPort.once("message", (event: Electron.MessageEvent) => {
       case "transport-clear-pattern":
         if (engine && data.channelIndex !== undefined) engine.transportClearPattern(data.channelIndex);
         break;
+      case "list-audio-inputs": {
+        const devices = engine ? engine.listAudioInputs() : [];
+        port!.postMessage({ type: "list-audio-inputs-result", requestId: data.requestId, devices });
+        break;
+      }
+      case "start-recording": {
+        if (engine && data.deviceIndex !== undefined) {
+          const sr = data.sampleRate ?? 44100;
+          try {
+            engine.startRecording(data.deviceIndex, sr);
+            port!.postMessage({ type: "start-recording-result", requestId: data.requestId, ok: true });
+          } catch (err) {
+            port!.postMessage({ type: "start-recording-result", requestId: data.requestId, ok: false, error: String(err) });
+          }
+        }
+        break;
+      }
+      case "stop-recording": {
+        if (engine) {
+          const pcm = engine.stopRecording();
+          port!.postMessage(
+            { type: "stop-recording-result", requestId: data.requestId, pcm },
+            [pcm.buffer as ArrayBuffer],
+          );
+        } else {
+          port!.postMessage({ type: "stop-recording-result", requestId: data.requestId, pcm: new Float32Array(0) });
+        }
+        break;
+      }
       default:
         console.warn(`[audio-engine-process] Unknown message type: ${data.type}`);
     }

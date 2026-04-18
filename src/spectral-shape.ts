@@ -33,10 +33,10 @@ export interface SpectralShapeResult {
 }
 
 export class SpectralShapeFeature {
-  private _native: NativeSpectralShapeFeature;
+  #native: NativeSpectralShapeFeature;
 
   constructor(options?: SpectralShapeOptions) {
-    this._native = new addon.SpectralShapeFeature(options || {});
+    this.#native = new addon.SpectralShapeFeature(options || {});
   }
 
   /**
@@ -45,7 +45,7 @@ export class SpectralShapeFeature {
    * the 7 descriptors across all frames.
    */
   process(audioBuffer: Float32Array | Float64Array): SpectralShapeResult {
-    const raw: number[] = this._native.process(audioBuffer);
+    const raw: number[] = this.#native.process(audioBuffer);
     return {
       centroid: raw[0],
       spread:   raw[1],
@@ -59,6 +59,6 @@ export class SpectralShapeFeature {
 
   /** Reset internal STFT state. */
   reset(): void {
-    this._native.reset();
+    this.#native.reset();
   }
 }

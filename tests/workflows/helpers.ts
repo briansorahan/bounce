@@ -2,21 +2,27 @@ import * as fs from "fs";
 import * as path from "path";
 import { createInProcessPair } from "../../src/shared/rpc/connection";
 import { createAudioFileClient } from "../../src/shared/rpc/audio-file.rpc";
+import { createAnalysisClient } from "../../src/shared/rpc/analysis.rpc";
 import { createFilesystemClient } from "../../src/shared/rpc/filesystem.rpc";
 import { createProjectClient } from "../../src/shared/rpc/project.rpc";
 import { createInstrumentClient } from "../../src/shared/rpc/instrument.rpc";
 import { createMidiClient } from "../../src/shared/rpc/midi.rpc";
 import { createMixerClient } from "../../src/shared/rpc/mixer.rpc";
 import { createReplEnvClient } from "../../src/shared/rpc/repl-env.rpc";
+import { createAudioEngineClient } from "../../src/shared/rpc/audio-engine.rpc";
+import { createGranularizeClient } from "../../src/shared/rpc/granularize.rpc";
 import type { MessageConnection } from "vscode-jsonrpc";
 import { EventBusImpl } from "../../src/shared/event-bus";
 import { AudioFileService } from "../../src/electron/services/audio-file";
+import { AnalysisService } from "../../src/electron/services/analysis/service";
 import { FilesystemService } from "../../src/electron/services/filesystem";
 import { ProjectService } from "../../src/electron/services/project";
 import { InstrumentService } from "../../src/electron/services/instrument";
 import { MidiService } from "../../src/electron/services/midi";
 import { MixerService } from "../../src/electron/services/mixer";
 import { ReplEnvService } from "../../src/electron/services/repl-env";
+import { MockAudioEngineService } from "./mock-audio-engine";
+import { GranularizeService } from "../../src/electron/services/granularize";
 import { InMemoryStore } from "./in-memory-store";
 import { InMemoryPersistenceService, InMemoryQueryService } from "./in-memory-query-service";
 import type { IQueryService } from "../../src/shared/query-interfaces";
@@ -24,11 +30,14 @@ import type { IQueryService } from "../../src/shared/query-interfaces";
 export interface WorkflowServices {
   projectClient: ReturnType<typeof createProjectClient>;
   audioFileClient: ReturnType<typeof createAudioFileClient>;
+  analysisClient: ReturnType<typeof createAnalysisClient>;
   filesystemClient: ReturnType<typeof createFilesystemClient>;
   instrumentClient: ReturnType<typeof createInstrumentClient>;
   midiClient: ReturnType<typeof createMidiClient>;
   mixerClient: ReturnType<typeof createMixerClient>;
   replEnvClient: ReturnType<typeof createReplEnvClient>;
+  audioEngineClient: ReturnType<typeof createAudioEngineClient>;
+  granularizeClient: ReturnType<typeof createGranularizeClient>;
   queryService: IQueryService;
 }
 
@@ -64,6 +73,14 @@ export function bootServices(): {
   audioFilePair.server.listen();
   audioFilePair.client.listen();
   const audioFileClient = createAudioFileClient(audioFilePair.client);
+
+  // AnalysisService — pure FluCoMa dispatch, no Electron, no storage.
+  const analysisService = new AnalysisService();
+  const analysisPair = createInProcessPair();
+  analysisService.listen(analysisPair.server);
+  analysisPair.server.listen();
+  analysisPair.client.listen();
+  const analysisClient = createAnalysisClient(analysisPair.client);
 
   // FilesystemService emits CwdChanged events, reads cwd via queryService.
   const filesystemService = new FilesystemService(bus, queryService);
@@ -105,25 +122,47 @@ export function bootServices(): {
   replEnvPair.client.listen();
   const replEnvClient = createReplEnvClient(replEnvPair.client);
 
+  // GranularizeService — pure computation, no database.
+  const granularizeService = new GranularizeService();
+  const granularizePair = createInProcessPair();
+  granularizeService.listen(granularizePair.server);
+  granularizePair.server.listen();
+  granularizePair.client.listen();
+  const granularizeClient = createGranularizeClient(granularizePair.client);
+
+  // MockAudioEngineService — pure TypeScript mock, no native addon.
+  const audioEngineService = new MockAudioEngineService();
+  const audioEnginePair = createInProcessPair();
+  audioEngineService.listen(audioEnginePair.server);
+  audioEnginePair.server.listen();
+  audioEnginePair.client.listen();
+  const audioEngineClient = createAudioEngineClient(audioEnginePair.client);
+
   const connections: MessageConnection[] = [
     projectPair.client, projectPair.server,
     audioFilePair.client, audioFilePair.server,
+    analysisPair.client, analysisPair.server,
     fsPair.client, fsPair.server,
     instrumentPair.client, instrumentPair.server,
     midiPair.client, midiPair.server,
     mixerPair.client, mixerPair.server,
     replEnvPair.client, replEnvPair.server,
+    audioEnginePair.client, audioEnginePair.server,
+    granularizePair.client, granularizePair.server,
   ];
 
   return {
     ctx: {
       projectClient,
       audioFileClient,
+      analysisClient,
       filesystemClient,
       instrumentClient,
       midiClient,
       mixerClient,
       replEnvClient,
+      audioEngineClient,
+      granularizeClient,
       queryService,
     },
     cleanup: () => {

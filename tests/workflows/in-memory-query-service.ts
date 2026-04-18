@@ -76,6 +76,9 @@ export class InMemoryPersistenceService {
       case "ReplEnvSaved":
         this.store.replEnvEntries = event.entries.map((e) => ({ ...e }));
         break;
+      case "RecordingStored":
+        this.store.addRecording(event.hash, event.name, event.sampleRate, event.channels, event.duration);
+        break;
     }
   }
 }
@@ -141,5 +144,11 @@ export class InMemoryQueryService implements IQueryService {
 
   async getReplEnv(): Promise<ReplEnvEntry[]> {
     return [...this.store.replEnvEntries];
+  }
+
+  async getSampleByRecordingName(name: string): Promise<SampleRecord | null> {
+    const hash = this.store.recordings.get(name);
+    if (!hash) return null;
+    return this.store.samples.get(hash) ?? null;
   }
 }

@@ -17,22 +17,33 @@ export class InstrumentResult extends HelpableResult {
 }
 
 export class InstrumentListResult extends BounceResult {
+  readonly #instruments: Array<{
+    name: string;
+    kind: string;
+    sampleCount: number;
+  }>;
+
   constructor(
     display: string,
-    public readonly instruments: Array<{
+    instruments: Array<{
       name: string;
       kind: string;
       sampleCount: number;
     }>,
   ) {
     super(display);
+    this.#instruments = instruments;
+  }
+
+  get instruments(): Array<{ name: string; kind: string; sampleCount: number }> {
+    return this.#instruments;
   }
 
   get length(): number {
-    return this.instruments.length;
+    return this.#instruments.length;
   }
 
   [Symbol.iterator](): Iterator<{ name: string; kind: string; sampleCount: number }> {
-    return this.instruments[Symbol.iterator]();
+    return this.#instruments[Symbol.iterator]();
   }
 }

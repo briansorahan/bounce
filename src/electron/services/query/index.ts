@@ -40,6 +40,10 @@ export class DatabaseQueryService implements IQueryService {
     return this.db.listSamples();
   }
 
+  async getSampleByRecordingName(name: string): Promise<SampleRecord | null> {
+    return this.db.getSampleByRecordingName(name) ?? null;
+  }
+
   async getCwd(): Promise<string> {
     return this.settings.getCwd();
   }

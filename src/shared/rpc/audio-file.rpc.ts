@@ -30,6 +30,10 @@ export interface AudioFileRpc extends RpcContract {
     params: Record<string, never>;
     result: SampleListRecord[];
   };
+  storeRecording: {
+    params: { name: string; pcm: number[]; sampleRate: number; channels: number; duration: number; overwrite: boolean };
+    result: { status: "ok" | "exists"; hash?: string; id?: number };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -39,8 +43,9 @@ export interface AudioFileRpc extends RpcContract {
 type E = ResponseError;
 
 export const AudioFileRequest = {
-  readAudioFile: new RequestType<AudioFileRpc["readAudioFile"]["params"], ReadAudioFileResult,  E>("audioFile/readAudioFile"),
-  listSamples:   new RequestType<AudioFileRpc["listSamples"]["params"],   SampleListRecord[],  E>("audioFile/listSamples"),
+  readAudioFile:   new RequestType<AudioFileRpc["readAudioFile"]["params"],   ReadAudioFileResult,  E>("audioFile/readAudioFile"),
+  listSamples:     new RequestType<AudioFileRpc["listSamples"]["params"],     SampleListRecord[],  E>("audioFile/listSamples"),
+  storeRecording:  new RequestType<AudioFileRpc["storeRecording"]["params"],  { status: "ok" | "exists"; hash?: string; id?: number }, E>("audioFile/storeRecording"),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -50,6 +55,7 @@ export const AudioFileRequest = {
 export interface AudioFileHandlers {
   readAudioFile(params: AudioFileRpc["readAudioFile"]["params"]): Promise<ReadAudioFileResult>;
   listSamples(params: AudioFileRpc["listSamples"]["params"]): Promise<SampleListRecord[]>;
+  storeRecording(params: AudioFileRpc["storeRecording"]["params"]): Promise<{ status: "ok" | "exists"; hash?: string; id?: number }>;
 }
 
 // ---------------------------------------------------------------------------
