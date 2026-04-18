@@ -3,10 +3,10 @@ import type { Normalization as NativeNormalization } from "./native";
 const addon = require("../build/Release/flucoma_native.node");
 
 export class Normalization {
-  private _native: NativeNormalization;
+  #native: NativeNormalization;
 
   constructor() {
-    this._native = new addon.Normalization();
+    this.#native = new addon.Normalization();
   }
 
   /**
@@ -17,7 +17,7 @@ export class Normalization {
    * @param max   Target range maximum (default 1)
    */
   fit(data: number[][], min = 0, max = 1): void {
-    this._native.fit(data, min, max);
+    this.#native.fit(data, min, max);
   }
 
   /**
@@ -25,7 +25,7 @@ export class Normalization {
    * @returns Normalized matrix of the same shape
    */
   transform(data: number[][]): number[][] {
-    return this._native.transform(data);
+    return this.#native.transform(data);
   }
 
   /**
@@ -33,11 +33,11 @@ export class Normalization {
    * @returns Normalized vector of the same length
    */
   transformFrame(frame: number[]): number[] {
-    return this._native.transformFrame(frame);
+    return this.#native.transformFrame(frame);
   }
 
   /** Reset the scaler — must call fit() again before transforming. */
   clear(): void {
-    this._native.clear();
+    this.#native.clear();
   }
 }

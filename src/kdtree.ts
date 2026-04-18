@@ -10,10 +10,10 @@ export interface KNNResult {
 }
 
 export class KDTree {
-  private _native: NativeKDTree;
+  #native: NativeKDTree;
 
   constructor() {
-    this._native = new addon.KDTree();
+    this.#native = new addon.KDTree();
   }
 
   /**
@@ -23,7 +23,7 @@ export class KDTree {
    * @param point Feature vector
    */
   addPoint(id: string, point: number[]): void {
-    this._native.addPoint(id, point);
+    this.#native.addPoint(id, point);
   }
 
   /**
@@ -36,16 +36,16 @@ export class KDTree {
    * @returns Array of { id, distance } sorted by distance ascending
    */
   kNearest(point: number[], k: number, radius = 0): KNNResult[] {
-    return this._native.kNearest(point, k, radius);
+    return this.#native.kNearest(point, k, radius);
   }
 
   /** Number of points currently in the tree. */
   size(): number {
-    return this._native.size();
+    return this.#native.size();
   }
 
   /** Remove all points and reset the tree. */
   clear(): void {
-    this._native.clear();
+    this.#native.clear();
   }
 }
