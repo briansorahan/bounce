@@ -27,6 +27,11 @@ ignore:
   - "src/electron/services/persistence/**"
   - "src/electron/services/query/**"
   - "src/electron/completers/**"
+  - "src/electron/BufNMF.ts"
+  - "src/electron/BufNMFCross.ts"
+  - "src/electron/logger.ts"
+  - "src/electron/audio-extensions.ts"
+  - "src/electron/ipc-types.ts"
 
   # ── Renderer — requires Electron window, IPC bridge, Canvas, xterm.js ──
   - "src/renderer/app.ts"
@@ -43,6 +48,8 @@ ignore:
   - "src/renderer/mixer-meters.ts"
   - "src/renderer/status-line.ts"
   - "src/renderer/terminal.ts"
+  - "src/renderer/main.ts"
+  - "src/renderer/bounce-result.ts"
   # Namespace objects all depend on window.electron IPC; see Category 4 in
   # specs/coverage/IMPL.md for the IPC-mock infrastructure needed to test them.
   - "src/renderer/namespaces/**"
@@ -51,7 +58,7 @@ ignore:
   # Separate Electron sub-processes; require the full Electron runtime.
   - "src/utility/**"
 
-  # ── Shared type-declaration-only files ──────────────────────────────────
+  # ── Type-declaration-only / pure re-export files ────────────────────────
   # No executable runtime statements — coverage is meaningless.
   - "src/shared/ipc-contract.ts"
   - "src/shared/completion-context.ts"
@@ -60,6 +67,8 @@ ignore:
   - "src/shared/query-interfaces.ts"
   - "src/shared/audio-engine-protocol.ts"
   - "src/shared/types.ts"
+  - "src/renderer/opts-docs.ts"
+  - "src/renderer/results/index.ts"
 
   # ── Auto-generated files ─────────────────────────────────────────────────
   - "src/**/*.generated.ts"
