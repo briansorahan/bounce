@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,7 +18,7 @@ function withTempDb(fn: (dbPath: string) => void): void {
   }
 }
 
-async function main() {
+test("database projects", () => {
   withTempDb((dbPath) => {
     const db = new DatabaseManager(dbPath);
 
@@ -71,9 +72,4 @@ async function main() {
 
     db.close();
   });
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
 });

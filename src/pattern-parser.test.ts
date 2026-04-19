@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import * as assert from "assert";
 import { parseMidiNote, velocityFromChar, parsePattern } from "./renderer/pattern-parser.js";
 
@@ -5,7 +6,7 @@ import { parseMidiNote, velocityFromChar, parsePattern } from "./renderer/patter
 // parseMidiNote
 // ---------------------------------------------------------------------------
 
-function testParseMidiNote() {
+test("parseMidiNote", () => {
   assert.strictEqual(parseMidiNote("c4"), 60, "c4 → 60");
   assert.strictEqual(parseMidiNote("C4"), 60, "C4 → 60 (case insensitive)");
   assert.strictEqual(parseMidiNote("c'4"), 61, "c'4 → 61 (C#4)");
@@ -31,15 +32,13 @@ function testParseMidiNote() {
   assert.throws(() => parseMidiNote("4c"), /Invalid note name/, "wrong order throws");
   assert.throws(() => parseMidiNote("cc4"), /Invalid note name/, "double letter throws");
   assert.throws(() => parseMidiNote(""), /Invalid note name/, "empty string throws");
-
-  console.log("  parseMidiNote: all tests passed");
-}
+});
 
 // ---------------------------------------------------------------------------
 // velocityFromChar
 // ---------------------------------------------------------------------------
 
-function testVelocityFromChar() {
+test("velocityFromChar", () => {
   // Boundary values
   assert.strictEqual(velocityFromChar("a"), 1, "a → 1 (minimum)");
   assert.strictEqual(velocityFromChar("Z"), 127, "Z → 127 (maximum)");
@@ -64,15 +63,13 @@ function testVelocityFromChar() {
   assert.throws(() => velocityFromChar("1"), /Invalid velocity character/, "digit throws");
   assert.throws(() => velocityFromChar(" "), /Invalid velocity character/, "space throws");
   assert.throws(() => velocityFromChar("!"), /Invalid velocity character/, "! throws");
-
-  console.log("  velocityFromChar: all tests passed");
-}
+});
 
 // ---------------------------------------------------------------------------
 // parsePattern
 // ---------------------------------------------------------------------------
 
-function testParsePattern() {
+test("parsePattern", () => {
   // Empty string → 16 empty steps
   const empty = parsePattern("");
   assert.strictEqual(empty.steps.length, 16, "empty string → 16 steps");
@@ -154,20 +151,4 @@ function testParsePattern() {
     /Invalid velocity character/,
     "invalid velocity char throws",
   );
-
-  console.log("  parsePattern: all tests passed");
-}
-
-// ---------------------------------------------------------------------------
-// Run all tests
-// ---------------------------------------------------------------------------
-
-function main() {
-  console.log("pattern-parser tests");
-  testParseMidiNote();
-  testVelocityFromChar();
-  testParsePattern();
-  console.log("All pattern-parser tests passed ✓");
-}
-
-main();
+});

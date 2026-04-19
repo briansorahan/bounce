@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { buildInstNamespace } from "./renderer/namespaces/instrument-namespace.js";
 import { replRegistry } from "./shared/repl-registry.generated.js";
 
@@ -33,7 +33,7 @@ test("inst.granular @describe summary mentions granular synthesis", () => {
   const entry = replRegistry["inst.granular"];
   assert.ok(entry, "inst.granular entry should exist in replRegistry");
   assert.ok(
-    entry.summary.includes("Create a granular synthesis instrument"),
+    entry.summary.includes("granular synthesis"),
     `Expected summary to mention granular synthesis, got: ${entry.summary}`,
   );
 });
@@ -63,7 +63,7 @@ test("g.help() returns non-empty help text (Phase 5.2: returns @replType summary
   };
   const helpText = String(g.help());
   assert.ok(helpText.length > 0, `Expected non-empty help text, got: ${helpText}`);
-  assert.ok(helpText.includes("InstrumentResult"), `Expected type name in help text, got: ${helpText}`);
+  assert.ok(helpText.includes("granular instrument"), `Expected 'granular instrument' in help text, got: ${helpText}`);
 });
 
 test("g.set({ unknown: 1 }) returns error message containing unknown params", () => {

@@ -5,6 +5,7 @@
  * register fixtures freely without cross-file pollution.
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   registerNamespace,
@@ -73,36 +74,30 @@ registerType(featureType);
 // getNamespace
 // ---------------------------------------------------------------------------
 
-{
-  console.log("getNamespace...");
+test("getNamespace", () => {
   const ns = getNamespace("fs");
   assert.ok(ns !== undefined, "getNamespace returns registered namespace");
   assert.equal(ns!.name, "fs", "name matches");
   assert.equal(ns!.summary, "Filesystem operations", "summary matches");
   assert.equal(getNamespace("nonexistent"), undefined, "returns undefined for unknown name");
-  console.log("  ✓ getNamespace");
-}
+});
 
 // ---------------------------------------------------------------------------
 // getType
 // ---------------------------------------------------------------------------
 
-{
-  console.log("getType...");
+test("getType", () => {
   const t = getType("SampleResult");
   assert.ok(t !== undefined, "getType returns registered type");
   assert.equal(t!.name, "SampleResult", "name matches");
   assert.equal(getType("Unknown"), undefined, "returns undefined for unknown type");
-  console.log("  ✓ getType");
-}
+});
 
 // ---------------------------------------------------------------------------
 // listNamespaces
 // ---------------------------------------------------------------------------
 
-{
-  console.log("listNamespaces...");
-
+test("listNamespaces", () => {
   const all = listNamespaces();
   const names = all.map(n => n.name);
   assert.ok(names.includes("fs"), "listNamespaces includes fs");
@@ -117,30 +112,24 @@ registerType(featureType);
   const plumbing = listNamespaces("plumbing");
   assert.ok(plumbing.every(n => n.visibility === "plumbing"), "filtered to plumbing only");
   assert.ok(plumbing.some(n => n.name === "_internal"), "plumbing includes _internal");
-
-  console.log("  ✓ listNamespaces");
-}
+});
 
 // ---------------------------------------------------------------------------
 // listTypes
 // ---------------------------------------------------------------------------
 
-{
-  console.log("listTypes...");
+test("listTypes", () => {
   const types = listTypes();
   const names = types.map(t => t.name);
   assert.ok(names.includes("SampleResult"), "listTypes includes SampleResult");
   assert.ok(names.includes("FeatureResult"), "listTypes includes FeatureResult");
-  console.log("  ✓ listTypes");
-}
+});
 
 // ---------------------------------------------------------------------------
 // getNamespaceNames
 // ---------------------------------------------------------------------------
 
-{
-  console.log("getNamespaceNames...");
-
+test("getNamespaceNames", () => {
   // Default: porcelain only
   const porcelainNames = getNamespaceNames();
   assert.ok(porcelainNames.includes("fs"), "includes fs");
@@ -150,24 +139,16 @@ registerType(featureType);
   // includePlumbing = true
   const allNames = getNamespaceNames(true);
   assert.ok(allNames.includes("_internal"), "includes plumbing when requested");
-
-  console.log("  ✓ getNamespaceNames");
-}
+});
 
 // ---------------------------------------------------------------------------
 // setDevMode / getDevMode
 // ---------------------------------------------------------------------------
 
-{
-  console.log("setDevMode / getDevMode...");
-
+test("setDevMode / getDevMode", () => {
   assert.equal(getDevMode(), false, "devMode starts false");
   setDevMode(true);
   assert.equal(getDevMode(), true, "setDevMode(true) is reflected");
   setDevMode(false);
   assert.equal(getDevMode(), false, "setDevMode(false) resets");
-
-  console.log("  ✓ setDevMode / getDevMode");
-}
-
-console.log("\nAll repl-registration tests passed.");
+});

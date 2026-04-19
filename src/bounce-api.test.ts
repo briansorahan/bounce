@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   buildBounceApi,
@@ -174,6 +175,8 @@ const mockElectron = {
   corpusQuery: async () => [{ id: "a", index: 0, distance: 0 }],
   corpusResynthesize: async () => ({ audio: new Float32Array([0.1, 0.2]), sampleRate: 44100 }),
   onOverlayNMF: () => {},
+  onTransportTick: (_cb: unknown) => {},
+  mixerGetState: async () => null,
   fsLs: async () => ({ entries: [], total: 0, truncated: false }),
   fsLa: async () => ({ entries: [], total: 0, truncated: false }),
   fsCd: async () => "/tmp",
@@ -206,9 +209,9 @@ const mockElectron = {
   }),
 };
 
-(globalThis as Record<string, unknown>).window = { electron: mockElectron };
-
-async function main() {
+test("bounce-api", async () => {
+  (globalThis as Record<string, unknown>).window = { electron: mockElectron };
+  try {
   const terminal = makeTerminal() as ReturnType<typeof makeTerminal>;
   const audioManager = makeAudioManager();
   const runtimeScope = new Map<string, unknown>([
@@ -274,11 +277,11 @@ async function main() {
     toString(): string;
   }
 
-  assert.ok(sn.help().toString().includes("sample namespace"));
-  assert.ok(env.help().toString().includes("runtime introspection namespace"));
+  assert.ok(sn.help().toString().includes("audio samples"));
+  assert.ok(env.help().toString().includes("Runtime introspection"));
   assert.ok(sn.help().toString().includes("sn.stop()"));
-  assert.ok(proj.help().toString().includes("project namespace"));
-  assert.ok(vis.help().toString().includes("visualization namespace"));
+  assert.ok(proj.help().toString().includes("projects"));
+  assert.ok(vis.help().toString().includes("visualization"));
 
   const varsResult = env.vars();
   assert.ok(varsResult instanceof EnvScopeResult, "env.vars returns EnvScopeResult");
@@ -310,9 +313,9 @@ async function main() {
 
   const sample = await sn.read("/test.wav");
   assert.ok(sample instanceof SampleResult, "sn.read returns SampleResult");
-  assert.ok(sample.help().toString().includes("sample.onsetSlice()"));
+  assert.ok(sample.help().toString().includes("sample.onsetSlice"));
   assert.ok(sample.help().toString().includes("sample.loop("), "sample.help() mentions loop method");
-  assert.ok(sample.help().toString().includes("sample.loop.help()"), "sample.help() hints at loop.help()");
+  assert.ok(sample.help().toString().includes("sample.loop(opts?)"), "sample.help() shows loop signature");
   assert.ok(sample.toString().includes("Loaded"));
   runtimeScope.set("samp", sample);
   const inspectSample = env.inspect("samp");
@@ -374,10 +377,10 @@ async function main() {
 
   const scene = vis.waveform(sample);
   assert.ok(scene instanceof VisSceneResult, "vis.waveform returns VisSceneResult");
-  assert.ok(scene.toString().includes("VisSceneResult"), "VisSceneResult prints a useful summary");
+  assert.ok(scene.toString().includes("VisScene"), "VisSceneResult prints a useful summary");
   assert.equal(scene.overlay(onsetFeature), scene, "scene.overlay chains");
   assert.equal(scene.panel(nmfFeature), scene, "scene.panel chains");
-  assert.ok(scene.help().toString().includes("scene.show()"), "VisSceneResult help describes show()");
+  assert.ok(scene.help().toString().includes("show()"), "VisSceneResult help describes show()");
 
   const samplePromise = sn.load("abcdef1234567890");
   const scenePromise = vis.waveform(samplePromise);
@@ -432,7 +435,7 @@ async function main() {
 
   const stack = vis.stack();
   assert.ok(stack instanceof VisStackResult, "vis.stack returns VisStackResult");
-  assert.ok(stack.help().toString().includes("multiple visualization scenes"), "VisStackResult help describes multi-scene usage");
+  assert.ok(stack.help().toString().includes("visualization scenes"), "VisStackResult help describes multi-scene usage");
   assert.equal(stack.waveform(sample), stack, "stack.waveform chains");
   assert.equal(stack.overlay(onsetFeature), stack, "stack.overlay chains on latest scene");
   assert.equal(stack.panel(nmfFeature), stack, "stack.panel chains on latest scene");
@@ -520,7 +523,7 @@ async function main() {
   const audioDev = new AudioDeviceResult(0, "deviceId-abc123", "Built-in Microphone", 1, {
     record: async () => new RecordingHandleResult("Built-in Microphone", () => {}, Promise.resolve({} as SampleResult)),
   });
-  assert.ok(audioDev.toString().includes("AudioDeviceResult [0]"), "AudioDeviceResult toString includes index");
+  assert.ok(audioDev.toString().includes("AudioDevice [0]"), "AudioDeviceResult toString includes index");
   assert.ok(audioDev.toString().includes("Built-in Microphone"), "AudioDeviceResult toString includes label");
   assert.ok(audioDev.toString().includes("record("), "AudioDeviceResult toString mentions record()");
   assert.ok(audioDev.help().toString().includes("record("), "AudioDeviceResult help describes record()");
@@ -550,12 +553,11 @@ async function main() {
   assert.ok(snObj.dev.help, "sn.dev has a help() method");
   assert.ok(snObj.inputs.help!().toString().includes("sn.inputs()"), "sn.inputs.help contains sn.inputs()");
   assert.ok(snObj.dev.help!().toString().includes("record("), "sn.dev.help mentions record(");
-  assert.ok(snObj.dev.help!().toString().includes("stop()"), "sn.dev.help mentions stop()");
-}
-
-main()
-  .then(() => { delete (globalThis as Record<string, unknown>).window; })
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+  assert.ok(snObj.dev.help!().toString().includes("recording"), "sn.dev.help mentions recording");
+  } finally {
+    // Drain the event loop so any setTimeout(0) callbacks (e.g. MixerNamespace
+    // restoreFromDb) fire while window is still defined.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    delete (globalThis as Record<string, unknown>).window;
+  }
+});

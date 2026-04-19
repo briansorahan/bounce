@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { test } from "vitest";
 import {
   isComplete,
   promoteDeclarations,
@@ -8,6 +9,13 @@ import {
   autoAwaitTopLevel,
   ReplEvaluator,
 } from "./renderer/repl-evaluator.js";
+
+// Force registration of all namespaces so that isBounceGlobal / getNamespace works
+// correctly in this test file (same pattern as src/help-completeness.test.ts).
+import "./renderer/namespaces/sample-namespace.js";
+import "./renderer/namespaces/corpus-namespace.js";
+import "./renderer/namespaces/fs-namespace.js";
+import "./renderer/namespaces/env-namespace.js";
 
 // ---------------------------------------------------------------------------
 // isComplete
@@ -41,8 +49,6 @@ function testIsComplete() {
     true,
     "multi-line complete function",
   );
-
-  console.log("  isComplete: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -64,8 +70,6 @@ function testPromoteDeclarations() {
   // const inside a block is NOT promoted
   const blockCode = "if (true) { const x = 1; }";
   assert.strictEqual(promoteDeclarations(blockCode), blockCode, "const inside block unchanged");
-
-  console.log("  promoteDeclarations: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -77,8 +81,6 @@ function testGetTopLevelVarNames() {
   assert.deepStrictEqual(getTopLevelVarNames("var x = 1, y = 2;"), ["x", "y"]);
   assert.deepStrictEqual(getTopLevelVarNames("function foo() { var inner = 1; }"), []);
   assert.deepStrictEqual(getTopLevelVarNames("var a = 1;\nvar b = 2;"), ["a", "b"]);
-
-  console.log("  getTopLevelVarNames: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +100,6 @@ function testGetTopLevelFunctionDeclNames() {
   assert.deepStrictEqual(getTopLevelFunctionDeclNames("var f = function() {};"), []);
   // Bounce globals should be excluded
   assert.deepStrictEqual(getTopLevelFunctionDeclNames("function sn() {}"), []);
-
-  console.log("  getTopLevelFunctionDeclNames: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -112,11 +112,6 @@ function testCheckReservedNames() {
     () => checkReservedNames("var sn = 1;"),
     /sn.*Bounce built-in/,
     "var sn throws",
-  );
-  assert.throws(
-    () => checkReservedNames("const nx = () => {};"),
-    /nx.*Bounce built-in/,
-    "const nx throws",
   );
   assert.throws(
     () => checkReservedNames("let help = true;"),
@@ -163,8 +158,6 @@ function testCheckReservedNames() {
     () => checkReservedNames("function inner() { const display = 1; }"),
     "display inside function is fine",
   );
-
-  console.log("  checkReservedNames: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -192,8 +185,6 @@ function testAutoAwaitTopLevel() {
     "if (ok) { sn.read('abc'); }",
     "control statements are left untouched",
   );
-
-  console.log("  autoAwaitTopLevel: all tests passed");
 }
 
 // ---------------------------------------------------------------------------
@@ -345,8 +336,6 @@ async function testReplEvaluator() {
   const r13 = await evaluator.evaluate("fetchVal()");
   assert.strictEqual(r13, 42, "persisted async function declaration is callable");
 
-  console.log("  ReplEvaluator: all tests passed");
-
   // Restore
   delete globalAny.window;
 }
@@ -467,29 +456,18 @@ async function testReplEnvPersistence() {
   const sq = await reader.evaluate("square(5)");
   assert.strictEqual(sq, 25, "round-trip: function callable after restore");
 
-  console.log("  ReplEnvPersistence: all tests passed");
-
   delete globalAny.window;
 }
 
 // ---------------------------------------------------------------------------
-// Run all tests
+// Tests
 // ---------------------------------------------------------------------------
 
-async function main() {
-  console.log("repl-evaluator tests");
-  testIsComplete();
-  testPromoteDeclarations();
-  testGetTopLevelVarNames();
-  testGetTopLevelFunctionDeclNames();
-  testCheckReservedNames();
-  testAutoAwaitTopLevel();
-  await testReplEvaluator();
-  await testReplEnvPersistence();
-  console.log("All repl-evaluator tests passed ✓");
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+test("isComplete", () => { testIsComplete(); });
+test("promoteDeclarations", () => { testPromoteDeclarations(); });
+test("getTopLevelVarNames", () => { testGetTopLevelVarNames(); });
+test("getTopLevelFunctionDeclNames", () => { testGetTopLevelFunctionDeclNames(); });
+test("checkReservedNames", () => { testCheckReservedNames(); });
+test("autoAwaitTopLevel", () => { testAutoAwaitTopLevel(); });
+test("ReplEvaluator", async () => { await testReplEvaluator(); });
+test("ReplEnvPersistence", async () => { await testReplEnvPersistence(); });

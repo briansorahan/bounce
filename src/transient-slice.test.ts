@@ -1,6 +1,6 @@
 import { TransientSlice } from "./index.js";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 test("TransientSlice default construction", () => {
   const slicer = new TransientSlice();

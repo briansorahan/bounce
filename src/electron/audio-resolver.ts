@@ -107,6 +107,7 @@ async function resolveDerived(
 
   switch (feature.feature_type) {
     case "onset":
+    case "onset-slice":
     case "granularize": {
       const positions = JSON.parse(feature.feature_data) as number[];
       return resolveSliceOrGrain(source, positions, link.index_order, feature.feature_type, sampleRate);
@@ -132,7 +133,7 @@ function resolveSliceOrGrain(
   featureType: string,
   _sampleRate: number,
 ): Promise<ResolvedAudio> {
-  if (featureType === "onset") {
+  if (featureType === "onset" || featureType === "onset-slice") {
     if (index >= positions.length - 1) {
       throw new Error(`Slice index ${index} out of range (${positions.length - 1} slices)`);
     }

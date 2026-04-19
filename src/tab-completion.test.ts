@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { afterAll, test } from "vitest";
 import { TabCompletion } from "./renderer/tab-completion.js";
 import type { PredictionResult } from "./shared/completer.js";
 
@@ -306,61 +307,33 @@ async function testEraseGhostTextClearsLines() {
   assert.ok(erased.includes("\x1b[2K"));
 }
 
-// ── Runner ─────────────────────────────────────────────────────────────────
+// ── Tests ──────────────────────────────────────────────────────────────────
 
-const tests: Array<[string, () => Promise<void>]> = [
-  ["idle on empty buffer", testIdleOnEmptyBuffer],
-  ["no requestCompletion yields no matches", testNoRequestCompletionYieldsNoMatches],
-  ["single match namespace", testSingleMatchNamespace],
-  ["multi match", testMultiMatch],
-  ["ghostText single match contains suffix", testGhostTextSingleMatchContainsSuffix],
-  ["ghostText multi match contains candidates", testGhostTextMultiMatchContainsCandidates],
-  ["reset clears state", testResetClearsState],
-  ["handleTab cycles multi match", testHandleTabCyclesMultiMatch],
-  ["handleEnter accepts selected", testHandleEnterAcceptsSelected],
-  ["dot completion accept inserts suffix", testDotCompletionAcceptInsertsSuffix],
-  ["dot completion partial accept", testDotCompletionPartialAccept],
-  ["file path completion no suffix", testFilePathCompletionNoSuffix],
-  ["file path nested completion multi match", testFilePathNestedCompletionMultiMatch],
-  ["sample hash completion detail", testSampleHashCompletionDetail],
-  ["sample hash accept inserts hash", testSampleHashAcceptInsertsHash],
-  ["variable kind no suffix", testVariableKindNoSuffix],
-  ["insertText overrides label", testInsertTextOverridesLabel],
-  ["handleTab null when no matches", testHandleTabNullWhenNoMatches],
-  ["handleUp null when single match", testHandleUpNullWhenSingleMatch],
-  ["handleUp cycles multi match", testHandleUpCyclesMultiMatch],
-  ["handleDown cycles multi match", testHandleDownCyclesMultiMatch],
-  ["setApi is no-op", testSetApiIsNoOp],
-  ["setBindingsProvider is no-op", testSetBindingsProviderIsNoOp],
-  ["onMatchesChanged callback fires", testOnMatchesChangedCallbackFires],
-  ["eraseGhostText clears lines", testEraseGhostTextClearsLines],
-];
+// Restore global window after all tests to prevent cross-suite pollution.
+afterAll(() => { delete (globalThis as Record<string, unknown>).window; });
 
-async function main() {
-  let passed = 0;
-  let failed = 0;
-
-  for (const [name, fn] of tests) {
-    try {
-      await fn();
-      passed++;
-    } catch (err) {
-      failed++;
-      console.error(`FAIL: ${name}`);
-      console.error(err);
-    }
-  }
-
-  // Clean up global mock
-  delete (globalThis as Record<string, unknown>).window;
-
-  if (failed > 0) {
-    console.error(`\n${failed} test(s) failed, ${passed} passed`);
-    process.exit(1);
-  }
-}
-
-main().catch((err) => {
-  console.error("Unexpected error:", err);
-  process.exit(1);
-});
+test("idle on empty buffer", testIdleOnEmptyBuffer);
+test("no requestCompletion yields no matches", testNoRequestCompletionYieldsNoMatches);
+test("single match namespace", testSingleMatchNamespace);
+test("multi match", testMultiMatch);
+test("ghostText single match contains suffix", testGhostTextSingleMatchContainsSuffix);
+test("ghostText multi match contains candidates", testGhostTextMultiMatchContainsCandidates);
+test("reset clears state", testResetClearsState);
+test("handleTab cycles multi match", testHandleTabCyclesMultiMatch);
+test("handleEnter accepts selected", testHandleEnterAcceptsSelected);
+test("dot completion accept inserts suffix", testDotCompletionAcceptInsertsSuffix);
+test("dot completion partial accept", testDotCompletionPartialAccept);
+test("file path completion no suffix", testFilePathCompletionNoSuffix);
+test("file path nested completion multi match", testFilePathNestedCompletionMultiMatch);
+test("sample hash completion detail", testSampleHashCompletionDetail);
+test("sample hash accept inserts hash", testSampleHashAcceptInsertsHash);
+test("variable kind no suffix", testVariableKindNoSuffix);
+test("insertText overrides label", testInsertTextOverridesLabel);
+test("handleTab null when no matches", testHandleTabNullWhenNoMatches);
+test("handleUp null when single match", testHandleUpNullWhenSingleMatch);
+test("handleUp cycles multi match", testHandleUpCyclesMultiMatch);
+test("handleDown cycles multi match", testHandleDownCyclesMultiMatch);
+test("setApi is no-op", testSetApiIsNoOp);
+test("setBindingsProvider is no-op", testSetBindingsProviderIsNoOp);
+test("onMatchesChanged callback fires", testOnMatchesChangedCallbackFires);
+test("eraseGhostText clears lines", testEraseGhostTextClearsLines);

@@ -4,6 +4,7 @@
  * Requires the native flucoma_native addon — runs as part of npm test.
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { Normalization } from "./normalization";
 
@@ -19,9 +20,7 @@ function makeMatrix(rows: number[][]): number[][] {
 // fit() + transform()
 // ---------------------------------------------------------------------------
 
-{
-  console.log("Normalization fit + transform...");
-
+test("fit + transform", () => {
   const norm = new Normalization();
 
   // 3 samples × 2 features
@@ -47,17 +46,13 @@ function makeMatrix(rows: number[][]): number[][] {
   assert.ok(Math.abs(result[0][1] - 0.0) < 1e-6, "col1 row0 → 0.0");
   assert.ok(Math.abs(result[2][1] - 0.5) < 1e-6, "col1 row2 → 0.5");
   assert.ok(Math.abs(result[1][1] - 1.0) < 1e-6, "col1 row1 → 1.0");
-
-  console.log("  ✓ fit + transform");
-}
+});
 
 // ---------------------------------------------------------------------------
 // Custom target range
 // ---------------------------------------------------------------------------
 
-{
-  console.log("Normalization custom range...");
-
+test("custom range", () => {
   const norm = new Normalization();
   norm.fit([[0], [100]], -1, 1);
   const result = norm.transform([[0], [50], [100]]);
@@ -65,17 +60,13 @@ function makeMatrix(rows: number[][]): number[][] {
   assert.ok(Math.abs(result[0][0] - (-1.0)) < 1e-6, "0 → -1 in [-1,1] range");
   assert.ok(Math.abs(result[1][0] - 0.0)   < 1e-6, "50 → 0 in [-1,1] range");
   assert.ok(Math.abs(result[2][0] - 1.0)   < 1e-6, "100 → 1 in [-1,1] range");
-
-  console.log("  ✓ custom range");
-}
+});
 
 // ---------------------------------------------------------------------------
 // transformFrame()
 // ---------------------------------------------------------------------------
 
-{
-  console.log("Normalization transformFrame...");
-
+test("transformFrame", () => {
   const norm = new Normalization();
   norm.fit([[0, 0], [10, 100]]);
 
@@ -83,17 +74,13 @@ function makeMatrix(rows: number[][]): number[][] {
   assert.equal(frame.length, 2, "transformFrame returns vector of same length");
   assert.ok(Math.abs(frame[0] - 0.5) < 1e-6, "col0 midpoint → 0.5");
   assert.ok(Math.abs(frame[1] - 0.5) < 1e-6, "col1 midpoint → 0.5");
-
-  console.log("  ✓ transformFrame");
-}
+});
 
 // ---------------------------------------------------------------------------
 // clear() resets state
 // ---------------------------------------------------------------------------
 
-{
-  console.log("Normalization clear...");
-
+test("clear", () => {
   const norm = new Normalization();
   norm.fit([[0], [10]]);
 
@@ -107,8 +94,4 @@ function makeMatrix(rows: number[][]): number[][] {
   norm.fit([[0], [20]]);
   const after = norm.transformFrame([10]);
   assert.ok(Math.abs(after[0] - 0.5) < 1e-6, "re-fitted correctly after clear");
-
-  console.log("  ✓ clear");
-}
-
-console.log("\nAll normalization tests passed.");
+});

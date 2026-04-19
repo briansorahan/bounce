@@ -1,35 +1,7 @@
-/**
- * Workflow: terminal-ui
- *
- * Verifies that the Bounce REPL surface is fully registered at the module
- * level — all expected namespaces and result types have been decorated and
- * written into repl-registration's in-memory maps.
- *
- * This is the workflow-layer proxy for "is the terminal UI ready to serve
- * commands?". The Playwright spec (tests/terminal-ui.spec.ts) checks that
- * the Electron window and #terminal DOM element are present; that remains
- * covered there.
- *
- * Approach: import every renderer namespace and result file to trigger their
- * @namespace / @replType decorator registrations, then query
- * listNamespaces() and listTypes() to assert completeness.
- *
- * No constructors are called. No window, no Electron, no IPC.
- * Decorators run at class-definition time as pure in-memory writes.
- *
- * Checks:
- *   - All expected namespaces are registered: sn, env, vis, fs, corpus,
- *     inst, midi, pat, proj, mx, transport
- *   - All expected REPL types are registered: Sample, SliceFeature,
- *     NmfFeature, NxFeature, MfccFeature, Pattern, AudioDevice,
- *     RecordingHandle, VisScene, VisStack, InstrumentResult,
- *     MidiRecordingHandle
- *   - Every registered namespace has a non-empty summary
- *   - Every registered type has a non-empty summary
- */
-
+import { describe, it, beforeAll, afterAll } from "vitest";
 import * as assert from "assert/strict";
-import { createWorkflow } from "./types";
+import { bootServices } from "./helpers";
+import type { WorkflowServices } from "./helpers";
 import { listNamespaces, listTypes } from "../../src/shared/repl-registration";
 
 // Import all namespace files to trigger @namespace decorator registration.
@@ -64,13 +36,20 @@ const EXPECTED_TYPES = [
   "InstrumentResult", "MidiRecordingHandle",
 ] as const;
 
-export function buildWorkflow() {
-  const wf = createWorkflow("terminal-ui");
+describe("terminal-ui", () => {
+  let services: WorkflowServices;
+  let cleanup: () => void;
 
-  // ---- Namespaces ----------------------------------------------------------
+  beforeAll(() => {
+    const booted = bootServices();
+    services = booted.ctx;
+    cleanup = booted.cleanup;
+  });
+
+  afterAll(() => cleanup?.());
 
   for (const name of EXPECTED_NAMESPACES) {
-    wf.check(`namespace-${name}-is-registered`, () => {
+    it(`namespace-${name}-is-registered`, () => {
       const all = listNamespaces().map((n) => n.name);
       assert.ok(
         all.includes(name),
@@ -79,7 +58,7 @@ export function buildWorkflow() {
     });
   }
 
-  wf.check("all-namespaces-have-non-empty-summary", () => {
+  it("all-namespaces-have-non-empty-summary", () => {
     for (const ns of listNamespaces()) {
       assert.ok(
         ns.summary.length > 0,
@@ -88,10 +67,8 @@ export function buildWorkflow() {
     }
   });
 
-  // ---- REPL types ----------------------------------------------------------
-
   for (const name of EXPECTED_TYPES) {
-    wf.check(`type-${name}-is-registered`, () => {
+    it(`type-${name}-is-registered`, () => {
       const all = listTypes().map((t) => t.name);
       assert.ok(
         all.includes(name),
@@ -100,7 +77,7 @@ export function buildWorkflow() {
     });
   }
 
-  wf.check("all-types-have-non-empty-summary", () => {
+  it("all-types-have-non-empty-summary", () => {
     for (const t of listTypes()) {
       assert.ok(
         t.summary.length > 0,
@@ -108,6 +85,4 @@ export function buildWorkflow() {
       );
     }
   });
-
-  return wf.build();
-}
+});
