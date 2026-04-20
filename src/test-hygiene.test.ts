@@ -9,6 +9,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
+import { test } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -222,8 +223,7 @@ function main() {
   const violations = runRules(rules);
 
   if (violations.length === 0) {
-    console.log("test-hygiene: all rules passed");
-    process.exit(0);
+    return;
   }
 
   console.error(`\ntest-hygiene: ${violations.length} violation(s) found\n`);
@@ -251,7 +251,7 @@ function main() {
     "Add a // flaky-ok: <reason> comment to exempt intentional uses.\n"
   );
 
-  process.exit(1);
+  throw new Error(`test-hygiene: ${violations.length} violation(s) found`);
 }
 
-main();
+test("test-hygiene: all rules pass", () => { main(); });

@@ -4,6 +4,7 @@
  * No Electron dependency — pure TypeScript result objects.
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { BounceResult, HelpableResult, FeatureResult, defaultHelp } from "./renderer/results/base.js";
 import { InstrumentResult, InstrumentListResult } from "./renderer/results/instrument.js";
@@ -12,27 +13,25 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
 // BounceResult
 // ---------------------------------------------------------------------------
 
-{
+test("BounceResult.toString", () => {
   const r = new BounceResult("hello \x1b[32mworld\x1b[0m");
   assert.equal(r.toString(), "hello \x1b[32mworld\x1b[0m", "toString returns displayText");
-  console.log("BounceResult.toString: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // defaultHelp
 // ---------------------------------------------------------------------------
 
-{
+test("defaultHelp", () => {
   const r = defaultHelp("myNs");
   assert.ok(r.toString().includes("myNs"), "defaultHelp includes the name");
-  console.log("defaultHelp: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // HelpableResult
 // ---------------------------------------------------------------------------
 
-{
+test("HelpableResult", () => {
   let helpCalled = false;
   const factory = () => {
     helpCalled = true;
@@ -44,14 +43,13 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
   const helpResult = r.help();
   assert.ok(helpCalled, "helpFactory was called");
   assert.equal(helpResult.toString(), "help text", "help() returns factory result");
-  console.log("HelpableResult: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // FeatureResult — source as SampleResult (object with .hash)
 // ---------------------------------------------------------------------------
 
-{
+test("FeatureResult (source as object)", () => {
   const mockSample = { hash: "abc123" } as Parameters<typeof FeatureResult.prototype.toString>[never] & { hash: string };
 
   const r = new FeatureResult(
@@ -68,14 +66,13 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
   assert.equal(r.featureHash, "featureHash1", "featureHash stored");
   assert.equal(r.featureType, "onsetSlice", "featureType stored");
   assert.deepEqual(r.options, { threshold: 0.5 }, "options stored");
-  console.log("FeatureResult (source as object): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // FeatureResult — source as hash string
 // ---------------------------------------------------------------------------
 
-{
+test("FeatureResult (source as string)", () => {
   const r = new FeatureResult(
     "display text",
     "hashOnlyString",
@@ -86,25 +83,23 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
 
   assert.equal(r.source, undefined, "source is undefined when passed a string");
   assert.equal(r.sourceHash, "hashOnlyString", "sourceHash is the string itself");
-  console.log("FeatureResult (source as string): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // FeatureResult — custom helpFactory
 // ---------------------------------------------------------------------------
 
-{
+test("FeatureResult (custom helpFactory)", () => {
   const customHelp = () => new BounceResult("custom help");
   const r = new FeatureResult("x", "hash", "fh", "nmf", {}, customHelp);
   assert.equal(r.help().toString(), "custom help", "custom helpFactory is used");
-  console.log("FeatureResult (custom helpFactory): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // InstrumentResult
 // ---------------------------------------------------------------------------
 
-{
+test("InstrumentResult", () => {
   const helpFactory = () => new BounceResult("instrument help");
   const r = new InstrumentResult(
     "Drum Kit (sampler, 8 samples)",
@@ -123,14 +118,13 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
   assert.equal(r.polyphony, 8, "polyphony stored");
   assert.equal(r.sampleCount, 4, "sampleCount stored");
   assert.equal(r.help().toString(), "instrument help", "help() uses factory");
-  console.log("InstrumentResult: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // InstrumentListResult — length
 // ---------------------------------------------------------------------------
 
-{
+test("InstrumentListResult.length", () => {
   const instruments = [
     { name: "Drum Kit", kind: "sampler", sampleCount: 4 },
     { name: "Pad", kind: "granular", sampleCount: 2 },
@@ -139,14 +133,13 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
 
   assert.equal(r.toString(), "2 instruments", "toString correct");
   assert.equal(r.length, 2, "length returns instrument count");
-  console.log("InstrumentListResult.length: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // InstrumentListResult — Symbol.iterator
 // ---------------------------------------------------------------------------
 
-{
+test("InstrumentListResult[Symbol.iterator]", () => {
   const instruments = [
     { name: "Kit", kind: "sampler", sampleCount: 1 },
     { name: "Synth", kind: "granular", sampleCount: 3 },
@@ -161,19 +154,15 @@ import { InstrumentResult, InstrumentListResult } from "./renderer/results/instr
   assert.equal(collected.length, 2, "iterator yields all items");
   assert.equal(collected[0].name, "Kit", "first item correct");
   assert.equal(collected[1].name, "Synth", "second item correct");
-  console.log("InstrumentListResult[Symbol.iterator]: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // InstrumentListResult — empty
 // ---------------------------------------------------------------------------
 
-{
+test("InstrumentListResult (empty)", () => {
   const r = new InstrumentListResult("no instruments", []);
   assert.equal(r.length, 0, "empty list has length 0");
   const items: unknown[] = [...r];
   assert.equal(items.length, 0, "empty iterator yields nothing");
-  console.log("InstrumentListResult (empty): ✓");
-}
-
-console.log("\nAll results-display tests passed.");
+});

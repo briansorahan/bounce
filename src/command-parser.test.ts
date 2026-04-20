@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import * as assert from "assert";
 
 class CommandParser {
@@ -24,7 +25,7 @@ class CommandParser {
   }
 }
 
-async function testCommandParsing() {
+test("command parsing", async () => {
   const parser = new CommandParser();
 
   // Test simple command with no args
@@ -73,9 +74,9 @@ async function testCommandParsing() {
   const whitespace = parser.parseCommand("   ");
   assert.strictEqual(whitespace?.name, "");
   assert.strictEqual(whitespace?.args.length, 0);
-}
+});
 
-async function testFileExtensionValidation() {
+test("file extension validation", async () => {
   const supportedExtensions = [
     ".wav",
     ".mp3",
@@ -114,15 +115,4 @@ async function testFileExtensionValidation() {
   // Test paths with directories
   assert.strictEqual(isSupported("/path/to/file.wav"), true);
   assert.strictEqual(isSupported("/path.with.dots/file.mp3"), true);
-}
-
-async function main() {
-  await testCommandParsing();
-  await testFileExtensionValidation();
-  process.exit(0);
-}
-
-main().catch((error) => {
-  console.error("Test failed:", error);
-  process.exit(1);
 });

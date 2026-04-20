@@ -4,6 +4,7 @@
  * Covers BounceError construction, serialize(), and deserialize().
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { BounceError } from "./shared/bounce-error.js";
 
@@ -11,9 +12,7 @@ import { BounceError } from "./shared/bounce-error.js";
 // Construction
 // ---------------------------------------------------------------------------
 
-{
-  console.log("BounceError construction...");
-
+test("construction", () => {
   const err = new BounceError("NOT_FOUND", "Sample not found");
   assert.equal(err.name, "BounceError", "name is BounceError");
   assert.equal(err.code, "NOT_FOUND", "code is set");
@@ -23,17 +22,13 @@ import { BounceError } from "./shared/bounce-error.js";
 
   const errWithDetails = new BounceError("IO_ERROR", "Read failed", { path: "/tmp/x.wav", errno: 2 });
   assert.deepEqual(errWithDetails.details, { path: "/tmp/x.wav", errno: 2 }, "details is stored");
-
-  console.log("  ✓ construction");
-}
+});
 
 // ---------------------------------------------------------------------------
 // serialize()
 // ---------------------------------------------------------------------------
 
-{
-  console.log("BounceError.serialize()...");
-
+test("serialize()", () => {
   const err = new BounceError("PARSE_ERROR", "Bad format");
   const s = err.serialize();
   assert.equal(s.name, "BounceError", "serialized name");
@@ -44,17 +39,13 @@ import { BounceError } from "./shared/bounce-error.js";
   const errWithDetails = new BounceError("DB_ERROR", "Query failed", { table: "samples" });
   const s2 = errWithDetails.serialize();
   assert.deepEqual(s2.details, { table: "samples" }, "serialized details present when set");
-
-  console.log("  ✓ serialize");
-}
+});
 
 // ---------------------------------------------------------------------------
 // deserialize()
 // ---------------------------------------------------------------------------
 
-{
-  console.log("BounceError.deserialize()...");
-
+test("deserialize()", () => {
   // Round-trip: no details
   const original = new BounceError("TIMEOUT", "Operation timed out");
   const roundTripped = BounceError.deserialize(original.serialize());
@@ -81,8 +72,4 @@ import { BounceError } from "./shared/bounce-error.js";
   assert.equal(fromWire.code, "WIRE_ERROR", "deserialized from plain object");
   assert.equal(fromWire.message, "From the wire", "deserialized message from wire");
   assert.deepEqual(fromWire.details, { source: "ipc" }, "deserialized details from wire");
-
-  console.log("  ✓ deserialize");
-}
-
-console.log("\nAll bounce-error tests passed.");
+});

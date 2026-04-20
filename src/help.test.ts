@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   type CommandHelp,
@@ -11,7 +12,7 @@ import {
 
 // --- renderNamespaceHelp ---
 
-{
+test("renderNamespaceHelp", () => {
   const commands: CommandHelp[] = [
     { name: "foo", signature: "ns.foo(x)", summary: "Do foo things" },
     { name: "bar", signature: "ns.bar()", summary: "Do bar things" },
@@ -26,11 +27,11 @@ import {
   assert.ok(text.includes("ns.bar()"), "bar signature appears");
   assert.ok(text.includes("Do bar things"), "bar summary appears");
   assert.ok(!text.includes("ns.<cmd>.help()"), "footer no longer mentions per-command help");
-}
+});
 
 // --- renderCommandHelp ---
 
-{
+test("renderCommandHelp", () => {
   const cmd: CommandHelp = {
     name: "read",
     signature: "sn.read(path)",
@@ -49,11 +50,11 @@ import {
   assert.ok(text.includes("path"), "param name appears");
   assert.ok(text.includes("File path"), "param description appears");
   assert.ok(text.includes('sn.read("kick.wav")'), "example appears");
-}
+});
 
 // --- renderCommandHelp with minimal fields ---
 
-{
+test("renderCommandHelp with minimal fields", () => {
   const cmd: CommandHelp = {
     name: "stop",
     signature: "transport.stop()",
@@ -65,11 +66,11 @@ import {
   assert.ok(text.includes("transport.stop()"), "signature appears");
   assert.ok(text.includes("Stop the clock"), "summary used as description");
   assert.ok(!text.includes("Examples"), "no examples section when none provided");
-}
+});
 
 // --- renderCommandHelp with optional params ---
 
-{
+test("renderCommandHelp with optional params", () => {
   const cmd: CommandHelp = {
     name: "bpm",
     signature: "transport.bpm(value?)",
@@ -80,11 +81,11 @@ import {
   };
   const text = renderCommandHelp(cmd).toString();
   assert.ok(text.includes("(optional)"), "optional param is marked");
-}
+});
 
 // --- renderCommandHelp with returns field ---
 
-{
+test("renderCommandHelp with returns field", () => {
   const cmd: CommandHelp = {
     name: "read",
     signature: "sn.read(path)",
@@ -98,11 +99,11 @@ import {
   const text = renderCommandHelp(cmd).toString();
   assert.ok(text.includes("Returns:"), "returns label appears");
   assert.ok(text.includes("Sample"), "return type name appears");
-}
+});
 
 // --- renderCommandHelp omits returns when not set ---
 
-{
+test("renderCommandHelp omits returns when not set", () => {
   const cmd: CommandHelp = {
     name: "stop",
     signature: "sn.stop()",
@@ -110,11 +111,11 @@ import {
   };
   const text = renderCommandHelp(cmd).toString();
   assert.ok(!text.includes("Returns:"), "no returns section when field is absent");
-}
+});
 
 // --- withHelp ---
 
-{
+test("withHelp", () => {
   const fn = (x: number) => x * 2;
   const meta: CommandHelp = {
     name: "double",
@@ -128,11 +129,11 @@ import {
   const helpText = enhanced.help().toString();
   assert.ok(helpText.includes("double(x)"), "help contains signature");
   assert.ok(helpText.includes("Double a number"), "help contains summary");
-}
+});
 
 // --- renderMethodHelp ---
 
-{
+test("renderMethodHelp", () => {
   const method: TypeMethodHelp = {
     signature: "play()",
     summary: "Play the sample from the beginning → Sample",
@@ -140,11 +141,11 @@ import {
   const text = renderMethodHelp("Sample", method).toString();
   assert.ok(text.includes("Sample.play()"), "method help shows TypeName.signature");
   assert.ok(text.includes("Play the sample"), "method help shows summary");
-}
+});
 
 // --- attachMethodHelp ---
 
-{
+test("attachMethodHelp", () => {
   const obj = {
     play: () => "played",
     stop: () => "stopped",
@@ -171,9 +172,7 @@ import {
     "existing",
     "pre-existing .help() is preserved",
   );
-}
-
-console.log("help.test.ts: all tests passed");
+});
 
 // ---------------------------------------------------------------------------
 // renderTypeHelp
@@ -189,7 +188,7 @@ import {
 import type { NamespaceDescriptor, TypeDescriptor } from "./shared/repl-registry.js";
 import { registerNamespace, registerType, setDevMode } from "./shared/repl-registration.js";
 
-{
+test("renderTypeHelp", () => {
   const typeHelp = {
     name: "Sample",
     summary: "An audio sample",
@@ -213,22 +212,20 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   assert.ok(text.includes("(readonly)"), "readonly flag appears");
   assert.ok(text.includes("play()"), "method signature appears");
   assert.ok(text.includes("Play the sample"), "method summary appears");
-  console.log("renderTypeHelp: ✓");
-}
+});
 
-{
+test("renderTypeHelp (minimal)", () => {
   // Without description, properties, or methods
   const text = renderTypeHelp({ name: "Bare", summary: "Minimal type" }).toString();
   assert.ok(text.includes("Bare"), "name appears for minimal type");
   assert.ok(text.includes("Minimal type"), "summary appears for minimal type");
-  console.log("renderTypeHelp (minimal): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // renderMethodHelpFromDescriptor
 // ---------------------------------------------------------------------------
 
-{
+test("renderMethodHelpFromDescriptor", () => {
   const method = {
     summary: "Play the sample",
     visibility: "porcelain" as const,
@@ -243,22 +240,20 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   assert.ok(text.includes("Play the sample"), "summary appears");
   assert.ok(text.includes("channel"), "param name appears");
   assert.ok(text.includes("SamplePromise"), "returns appears");
-  console.log("renderMethodHelpFromDescriptor: ✓");
-}
+});
 
-{
+test("renderMethodHelpFromDescriptor (no params)", () => {
   // No params, no returns
   const method = { summary: "Stop", visibility: "porcelain" as const, params: [] };
   const text = renderMethodHelpFromDescriptor("Sample", "stop", method).toString();
   assert.ok(text.includes("Sample.stop()"), "no-param signature");
-  console.log("renderMethodHelpFromDescriptor (no params): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // renderDescriptorHelp — namespace descriptor
 // ---------------------------------------------------------------------------
 
-{
+test("renderDescriptorHelp (namespace)", () => {
   const ns: NamespaceDescriptor = {
     name: "sn",
     summary: "Sample namespace",
@@ -280,15 +275,13 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   const devText = renderDescriptorHelp(ns).toString();
   assert.ok(devText.includes("sn.list()"), "plumbing method shown in dev mode");
   setDevMode(false);
-
-  console.log("renderDescriptorHelp (namespace): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // renderDescriptorHelp — type descriptor
 // ---------------------------------------------------------------------------
 
-{
+test("renderDescriptorHelp (type)", () => {
   const td: TypeDescriptor = {
     name: "SampleResult",
     summary: "A loaded sample",
@@ -304,14 +297,13 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   assert.ok(text.includes("s.play(opts)"), "instanceName prefix on method with params");
   assert.ok(text.includes("s.stop()"), "instanceName prefix on no-param method");
   assert.ok(text.includes("s.play.help()"), "hint for methods with params");
-  console.log("renderDescriptorHelp (type): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // attachMethodHelpFromRegistry
 // ---------------------------------------------------------------------------
 
-{
+test("attachMethodHelpFromRegistry", () => {
   // Register a test type; use a unique name to avoid polluting global registry
   const typeName = "TestResultType_Help";
   registerType({
@@ -336,15 +328,13 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
 
   const hiddenFn = instance.hidden as unknown as { help?: () => unknown };
   assert.equal(typeof hiddenFn.help, "undefined", "plumbing method skipped");
-
-  console.log("attachMethodHelpFromRegistry: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // attachNamespaceMethodHelp
 // ---------------------------------------------------------------------------
 
-{
+test("attachNamespaceMethodHelp", () => {
   const nsName = "TestNs_Help";
   registerNamespace({
     name: nsName,
@@ -369,15 +359,13 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
 
   const plumbFn = ns.plumb as unknown as { help?: () => unknown };
   assert.equal(typeof plumbFn.help, "undefined", "plumbing namespace method skipped");
-
-  console.log("attachNamespaceMethodHelp: ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // renderCommandHelp — nested param properties (sub-properties branch)
 // ---------------------------------------------------------------------------
 
-{
+test("renderCommandHelp (nested properties + returns + examples)", () => {
   const cmd = {
     name: "analyze",
     signature: "sn.analyze(opts)",
@@ -404,14 +392,13 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   assert.ok(text.includes("(required)"), "required sub-property flag");
   assert.ok(text.includes("SliceFeatureResult"), "returns appears");
   assert.ok(text.includes("sn.analyze({ threshold: 0.5 })"), "example appears");
-  console.log("renderCommandHelp (nested properties + returns + examples): ✓");
-}
+});
 
 // ---------------------------------------------------------------------------
 // renderMethodHelp — nested sub-properties + returns
 // ---------------------------------------------------------------------------
 
-{
+test("renderMethodHelp (nested + returns)", () => {
   const method = {
     signature: "analyze(opts)",
     summary: "Run analysis",
@@ -432,7 +419,4 @@ import { registerNamespace, registerType, setDevMode } from "./shared/repl-regis
   const text = renderMethodHelp("Sample", method).toString();
   assert.ok(text.includes("fftSize"), "sub-property appears in method help");
   assert.ok(text.includes("SliceFeatureResult"), "returns appears in method help");
-  console.log("renderMethodHelp (nested + returns): ✓");
-}
-
-console.log("help.test.ts (extended): all tests passed");
+});

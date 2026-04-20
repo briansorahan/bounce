@@ -4,6 +4,7 @@
  * Requires the native flucoma_native addon — runs as part of npm test.
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { KDTree } from "./kdtree";
 
@@ -11,9 +12,7 @@ import { KDTree } from "./kdtree";
 // addPoint + size
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree addPoint + size...");
-
+test("addPoint + size", () => {
   const tree = new KDTree();
   assert.equal(tree.size(), 0, "empty tree has size 0");
 
@@ -23,17 +22,13 @@ import { KDTree } from "./kdtree";
   tree.addPoint("b", [0, 1]);
   tree.addPoint("c", [1, 1]);
   assert.equal(tree.size(), 3, "size tracks all added points");
-
-  console.log("  ✓ addPoint + size");
-}
+});
 
 // ---------------------------------------------------------------------------
 // kNearest — basic nearest-neighbour lookup
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree kNearest...");
-
+test("kNearest basic", () => {
   const tree = new KDTree();
   tree.addPoint("origin",    [0, 0]);
   tree.addPoint("close",     [0.1, 0.1]);
@@ -53,34 +48,26 @@ import { KDTree } from "./kdtree";
   for (const r of results) {
     assert.ok(r.distance >= 0, `distance for '${r.id}' is non-negative`);
   }
-
-  console.log("  ✓ kNearest basic");
-}
+});
 
 // ---------------------------------------------------------------------------
 // kNearest — k larger than number of points returns all points
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree kNearest k > size...");
-
+test("kNearest k > size", () => {
   const tree = new KDTree();
   tree.addPoint("p1", [1, 0]);
   tree.addPoint("p2", [2, 0]);
 
   const results = tree.kNearest([0, 0], 10);
   assert.equal(results.length, 2, "returns only as many results as points in tree");
-
-  console.log("  ✓ kNearest k > size");
-}
+});
 
 // ---------------------------------------------------------------------------
 // kNearest — with radius constraint
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree kNearest with radius...");
-
+test("kNearest with radius", () => {
   const tree = new KDTree();
   tree.addPoint("near",  [1, 0]);   // distance 1 from query
   tree.addPoint("far",   [10, 0]);  // distance 10 from query
@@ -89,17 +76,13 @@ import { KDTree } from "./kdtree";
   assert.ok(results.every(r => r.distance <= 2), "all results within radius");
   assert.ok(results.some(r => r.id === "near"), "near point included");
   assert.ok(!results.some(r => r.id === "far"), "far point excluded by radius");
-
-  console.log("  ✓ kNearest with radius");
-}
+});
 
 // ---------------------------------------------------------------------------
 // clear() resets tree
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree clear...");
-
+test("clear", () => {
   const tree = new KDTree();
   tree.addPoint("p1", [1, 0]);
   tree.addPoint("p2", [2, 0]);
@@ -113,17 +96,13 @@ import { KDTree } from "./kdtree";
   assert.equal(tree.size(), 1, "can add points after clear");
   const results = tree.kNearest([0, 0], 1);
   assert.equal(results[0].id, "new", "new point is found after clear + reinsert");
-
-  console.log("  ✓ clear");
-}
+});
 
 // ---------------------------------------------------------------------------
 // kNearest — correct distance ordering across dimensions
 // ---------------------------------------------------------------------------
 
-{
-  console.log("KDTree multi-dimensional ordering...");
-
+test("multi-dimensional ordering", () => {
   const tree = new KDTree();
   // 3D points
   tree.addPoint("closest",  [1, 0, 0]);  // dist ≈ 1
@@ -134,8 +113,4 @@ import { KDTree } from "./kdtree";
   assert.equal(results[0].id, "closest",  "closest is first");
   assert.equal(results[1].id, "middle",   "middle is second");
   assert.equal(results[2].id, "furthest", "furthest is third");
-
-  console.log("  ✓ multi-dimensional ordering");
-}
-
-console.log("\nAll kdtree tests passed.");
+});

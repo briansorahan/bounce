@@ -8,6 +8,7 @@
  */
 
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import ts from "typescript";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -148,33 +149,19 @@ function testBounceApiCompleteness(): number {
 }
 
 // ---------------------------------------------------------------------------
-// Runner
+// Tests
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+test("every namespace source file has a @namespace tag", () => {
   const sourceFiles = getNamespaceSourceFiles();
-  let total = 0;
-  let t: number;
+  testEveryFileHasNamespaceTag(sourceFiles);
+});
 
-  console.log("help-codegen.test.ts:");
-  console.log(`  Scanning ${sourceFiles.length} namespace source files in ${NAMESPACES_DIR}`);
+test("every @namespace tag has a generated file on disk", () => {
+  const sourceFiles = getNamespaceSourceFiles();
+  testGeneratedFilesExist(sourceFiles);
+});
 
-  t = testEveryFileHasNamespaceTag(sourceFiles);
-  total += t;
-  console.log(`  Test 1 passed — all ${t} source files have a @namespace tag`);
-
-  t = testGeneratedFilesExist(sourceFiles);
-  total += t;
-  console.log(`  Test 2 passed — all ${t} @namespace tags have a generated file`);
-
-  t = testBounceApiCompleteness();
-  total += t;
-  console.log(`  Test 3 passed — all ${t} bounce-api.ts namespace imports are @namespace-tagged`);
-
-  console.log(`help-codegen.test.ts: all ${total} checks passed`);
-}
-
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
+test("bounce-api.ts completeness — every wired non-decorator namespace has @namespace", () => {
+  testBounceApiCompleteness();
 });

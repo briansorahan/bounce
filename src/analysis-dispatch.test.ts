@@ -6,6 +6,7 @@
  * Tests cover the four slice methods and MFCC that have no workflow coverage.
  */
 
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { dispatch } from "./electron/services/analysis/dispatch";
 
@@ -50,21 +51,18 @@ function makeSine(): number[] {
 // onsetSlice (already covered by workflow; sanity check here)
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch onsetSlice...");
+test("dispatch onsetSlice", () => {
   const result = dispatch("onsetSlice", { audioData: makeImpulseTrain(), options: {} }) as { onsets: number[] };
   assert.ok(Array.isArray(result.onsets), "onsets is an array");
   assert.ok(result.onsets.length > 0, "impulse train produces at least one onset");
   assert.ok(result.onsets.every((v: number) => v >= 0), "all onsets are non-negative");
-  console.log("  ✓ onsetSlice");
-}
+});
 
 // ---------------------------------------------------------------------------
 // ampSlice
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch ampSlice...");
+test("dispatch ampSlice", () => {
   // Use a low onThreshold so the loud half reliably crosses the gate
   const result = dispatch("ampSlice", {
     audioData: makeOnOffBursts(),
@@ -73,15 +71,13 @@ function makeSine(): number[] {
   assert.ok(Array.isArray(result.onsets), "onsets is an array");
   assert.ok(result.onsets.length > 0, "on/off bursts produce at least one onset");
   assert.ok(result.onsets.every((v: number) => v >= 0), "all onsets are non-negative");
-  console.log("  ✓ ampSlice");
-}
+});
 
 // ---------------------------------------------------------------------------
 // noveltySlice
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch noveltySlice...");
+test("dispatch noveltySlice", () => {
   const result = dispatch("noveltySlice", { audioData: makeImpulseTrain(), options: {} }) as { onsets: number[] };
   assert.ok(Array.isArray(result.onsets), "onsets is an array");
   assert.ok(result.onsets.every((v: number) => v >= 0), "all onsets are non-negative");
@@ -89,27 +85,23 @@ function makeSine(): number[] {
   for (let i = 1; i < result.onsets.length; i++) {
     assert.ok(result.onsets[i] > result.onsets[i - 1], `onset ${i} > onset ${i - 1}`);
   }
-  console.log("  ✓ noveltySlice");
-}
+});
 
 // ---------------------------------------------------------------------------
 // transientSlice
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch transientSlice...");
+test("dispatch transientSlice", () => {
   const result = dispatch("transientSlice", { audioData: makeImpulseTrain(), options: {} }) as { onsets: number[] };
   assert.ok(Array.isArray(result.onsets), "onsets is an array");
   assert.ok(result.onsets.every((v: number) => v >= 0), "all onsets are non-negative");
-  console.log("  ✓ transientSlice");
-}
+});
 
 // ---------------------------------------------------------------------------
 // mfcc
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch mfcc...");
+test("dispatch mfcc", () => {
   const result = dispatch("mfcc", {
     audioData: makeSine(),
     options: { numCoeffs: 13, numBands: 40, windowSize: 1024, fftSize: 1024, hopSize: 512 },
@@ -122,22 +114,17 @@ function makeSine(): number[] {
     result.coefficients.every(frame => frame.every(v => Number.isFinite(v))),
     "all coefficients are finite",
   );
-  console.log("  ✓ mfcc");
-}
+});
 
 // ---------------------------------------------------------------------------
 // Unknown method throws
 // ---------------------------------------------------------------------------
 
-{
-  console.log("dispatch unknown method...");
+test("dispatch unknown method", () => {
   assert.throws(
     // @ts-expect-error — intentionally passing invalid method
     () => dispatch("doesNotExist", {}),
     /Unknown analysis method/,
     "unknown method throws descriptive error",
   );
-  console.log("  ✓ unknown method");
-}
-
-console.log("\nAll analysis-dispatch tests passed.");
+});

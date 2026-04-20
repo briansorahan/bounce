@@ -1,4 +1,5 @@
 import { OnsetFeature, MFCCFeature } from "./index";
+import { test } from "vitest";
 
 // Create a test signal (sine wave with amplitude envelope)
 function generateTestSignal(
@@ -18,7 +19,7 @@ function generateTestSignal(
   return signal;
 }
 
-async function main() {
+test("OnsetFeature extracts onset features from a sine wave signal", async () => {
   // Create analyzer with default settings
   const analyzer = new OnsetFeature({
     function: 2, // Spectral Flux
@@ -45,12 +46,9 @@ async function main() {
   if (!Number.isFinite(onsetFeatures[0])) {
     throw new Error("Invalid onset feature values");
   }
+});
 
-  // Exit with success (no output unless there's an error)
-  process.exit(0);
-}
-
-async function testMFCC() {
+test("MFCCFeature processes audio correctly", async () => {
   const sampleRate = 44100;
   const numCoeffs = 13;
   const numBands = 40;
@@ -137,11 +135,4 @@ async function testMFCC() {
   if (!ctorThrew) {
     throw new Error("Expected error when numCoeffs > numBands");
   }
-}
-
-main()
-  .then(() => testMFCC())
-  .catch((error) => {
-    console.error("Test failed:", error);
-    process.exit(1);
-  });
+});
