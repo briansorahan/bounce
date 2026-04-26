@@ -283,7 +283,7 @@ window.electron = {
 
 ### Recommended Sequence (Non-Trivial Changes)
 
-1. **Create spec** → Copy `.github/skills/create-new-spec/skill.md`
+1. **Create spec** → Copy `.github/skills/create-spec/skill.md`
 2. **Write tests** → Follow `.github/skills/unit-testing/skill.md`
 3. **Implement** → Code with `@ts-expect-error` for incomplete types
 4. **Build** → `npm run build` then `npm run build:electron`

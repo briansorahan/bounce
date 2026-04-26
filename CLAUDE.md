@@ -76,7 +76,7 @@ TypeScript wrappers in `src/index.ts`. Type declarations in `src/native.d.ts`.
 
 ## Development Conventions
 
-- **Spec-driven development**: For non-trivial changes, use the spec workflow in `.github/skills/create-new-spec/SKILL.md`
+- **Spec-driven development**: For non-trivial changes, use the spec workflow in `.github/skills/create-spec/SKILL.md`
 - **Unit testing**: Follow `.github/skills/unit-testing/SKILL.md` when writing unit tests — covers file structure, coverage rules, `#x` private fields, and npm script wiring
 - **REPL interface contract**: Every REPL-exposed namespace/function needs a `help()` method; every returned object needs a useful terminal summary
 - **TypeScript strict mode** with three tsconfig files: `tsconfig.json` (library), `tsconfig.electron.json` (main process), `tsconfig.renderer.json` (renderer)
