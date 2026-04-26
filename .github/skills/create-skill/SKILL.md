@@ -65,7 +65,7 @@ metadata:
 
 ### Common Mistakes to Avoid
 
-Based on our experience creating the `create-new-spec` skill, watch out for:
+Based on our experience creating the `create-spec` skill, watch out for:
 
 1. **❌ Missing YAML frontmatter**
    - Every SKILL.md must start with `---` delimited YAML

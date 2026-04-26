@@ -119,7 +119,7 @@ For end-to-end Playwright tests: use `./build.sh` (Dockerized) rather than runni
 
 ## Spec-Driven Development
 
-For any non-trivial change (more than a couple of lines), use the spec workflow in `.github/skills/create-new-spec/SKILL.md`. Specs live under `specs/<slug>/` with `RESEARCH.md`, `PLAN.md`, and `IMPL.md`. For REPL-facing work, the spec must document:
+For any non-trivial change (more than a couple of lines), use the spec workflow in `.github/skills/create-spec/SKILL.md`. Specs live under `specs/<slug>/` with `RESEARCH.md`, `PLAN.md`, and `IMPL.md`. For REPL-facing work, the spec must document:
 - What gets a `help()` method
 - What each returned object prints to the terminal
 - Which unit and/or Playwright tests cover it

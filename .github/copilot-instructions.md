@@ -83,7 +83,7 @@ For detailed architecture documentation (process responsibilities, IPC protocol,
 ## Development Workflow
 
 ### Spec-Driven Development
-For any work beyond simple fixes (more than a couple lines), use the spec workflow documented in `.github/skills/create-new-spec/SKILL.md`. Additional skills are available in `.github/skills/` for common tasks like adding database migrations, wrapping FluCoMa algorithms, adding terminal commands, and managing the database.
+For any work beyond simple fixes (more than a couple lines), use the spec workflow documented in `.github/skills/create-spec/SKILL.md`. Additional skills are available in `.github/skills/` for common tasks like adding database migrations, wrapping FluCoMa algorithms, adding terminal commands, and managing the database.
 
 For REPL-facing work, specs should explicitly document the REPL interface contract: what gets a `help()` method, what each returned object prints to the terminal, and which unit and/or Playwright tests will verify those behaviors.
 
