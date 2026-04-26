@@ -447,18 +447,16 @@ None. No new dependencies, no binding.gyp changes, no tsconfig changes.
 
 | Issue | Title | Depends On |
 |-------|-------|-----------|
-| TBD-1 | Rename `granularize()` → `grains()` across all code | — |
-| TBD-2 | Resynthesis engine (`resynthesize.ts`) | — |
-| TBD-3 | RPC contract + worker handler for `bounceGrains` | TBD-2 |
-| TBD-4 | IPC contract + main handler + preload for `bounce-grains` | TBD-3 |
-| TBD-5 | `GrainCollection.bounce()` + constructor changes | TBD-4 |
-| TBD-6 | `GrainCollectionPromise.bounce()` proxy | TBD-5 |
-| TBD-7 | Opts docs + tab completion + type declarations for `BounceGrainsOptions` | TBD-5 |
-| TBD-8 | Unit tests for resynthesis engine + bounce integration | TBD-2, TBD-5 |
-| TBD-9 | Update existing granularize tests for `grains()` rename | TBD-1 |
-| TBD-10 | Playwright workflow test for `grains().bounce()` | TBD-7 |
-
-> **Note:** Beads issue IDs will be assigned when issues are created at the start of the implementation phase.
+| bounce-qn3 | Rename `granularize()` → `grains()` across all code | — |
+| bounce-351 | Resynthesis engine (`resynthesize.ts`) | — |
+| bounce-88f | RPC contract + worker handler for `bounceGrains` | bounce-351 |
+| bounce-6no | IPC contract + main handler + preload for `bounce-grains` | bounce-88f |
+| bounce-00i | `GrainCollection.bounce()` + constructor changes | bounce-6no |
+| bounce-r5i | `GrainCollectionPromise.bounce()` proxy | bounce-00i |
+| bounce-ybv | Opts docs + tab completion + type declarations for `BounceGrainsOptions` | bounce-00i |
+| bounce-445 | Unit tests for resynthesis engine + bounce integration | bounce-351, bounce-00i |
+| bounce-t0m | Update existing granularize tests for `grains()` rename | bounce-qn3 |
+| bounce-7cw | Playwright workflow test for `grains().bounce()` | bounce-ybv |
 
 ## Land the Plane Checklist
 
