@@ -12,7 +12,7 @@ export interface GrainsOptions {
   endTime?: number;          // ms into source, default = duration * 1000
   jitter?: number;           // 0–1 timing randomness, default 0
   normalize?: boolean;
-  silenceThreshold?: number; // dBFS, default -60; use -Infinity or -100 to disable
+  silenceThreshold?: number; // dBFS, default -Infinity (disabled)
 }
 
 export interface GrainsResult {
@@ -25,6 +25,23 @@ export interface GrainsResult {
   grainDuration: number;
   /** Grain start positions in samples — needed by storage layer for storeFeature(). */
   grainStartPositions: number[];
+}
+
+export interface BounceGrainsOptions {
+  density?: number;       // grains/sec, default 20
+  pitch?: number;         // playback rate, default 1.0 (range 0.25–4.0)
+  envelope?: number;      // 0=Hann, 1=Hamming, 2=Triangle, 3=Tukey, default 0
+  duration?: number;      // output duration in seconds, default = input duration
+  normalize?: boolean;    // peak-normalize output to prevent clipping, default true
+}
+
+export interface BounceGrainsResult {
+  outputData: number[];       // resynthesized PCM
+  outputHash: string;         // SHA-256 of output audio bytes
+  sampleRate: number;
+  duration: number;           // output duration in seconds
+  channels: number;           // always 1 (mono output)
+  grainCount: number;         // number of grains placed
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +60,19 @@ export interface GrainsRpc extends RpcContract {
     };
     result: GrainsResult;
   };
+  bounceGrains: {
+    params: {
+      sourceHash: string;
+      audioData: number[];
+      sampleRate: number;
+      channels: number;
+      duration: number;           // source duration in seconds
+      grainPositions: number[];   // source sample offsets (non-null only)
+      grainSizeSamples: number;
+      options: BounceGrainsOptions;
+    };
+    result: BounceGrainsResult;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +83,7 @@ type E = ResponseError;
 
 export const GrainsRequest = {
   grains: new RequestType<GrainsRpc["grains"]["params"], GrainsResult, E>("grains/grains"),
+  bounceGrains: new RequestType<GrainsRpc["bounceGrains"]["params"], BounceGrainsResult, E>("grains/bounceGrains"),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -61,6 +92,7 @@ export const GrainsRequest = {
 
 export interface GrainsHandlers {
   grains(params: GrainsRpc["grains"]["params"]): Promise<GrainsResult>;
+  bounceGrains(params: GrainsRpc["bounceGrains"]["params"]): Promise<BounceGrainsResult>;
 }
 
 // ---------------------------------------------------------------------------
