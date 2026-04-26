@@ -9,7 +9,7 @@ import type {
   NoveltySliceOptions,
   TransientSliceOptions,
 } from "./ipc-types";
-import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData } from "../shared/ipc-contract";
+import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData, BounceGrainsOptions } from "../shared/ipc-contract";
 
 const api: ElectronAPI = {
   version: process.versions.electron,
@@ -97,6 +97,8 @@ const api: ElectronAPI = {
   },
   grainsSample: (sourceHash: string, options?: GrainsOptions) =>
     ipcRenderer.invoke("grains-sample", sourceHash, options),
+  bounceGrains: (sourceHash: string, grainPositions: number[], grainSizeSamples: number, options?: BounceGrainsOptions) =>
+    ipcRenderer.invoke("bounce-grains", sourceHash, grainPositions, grainSizeSamples, options),
   transpileTypeScript: (source: string): Promise<string> =>
     ipcRenderer.invoke("transpile-typescript", source),
   corpusBuild: (sourceHash: string, featureHash: string) =>

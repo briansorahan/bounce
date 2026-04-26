@@ -161,6 +161,14 @@ interface FeatureOptions {
   [key: string]: unknown;
 }
 
+interface BounceGrainsOptions {
+  density?: number;
+  pitch?: number;
+  envelope?: number;
+  duration?: number;
+  normalize?: boolean;
+}
+
 interface DebugLogEntry {
   id: number;
   level: string;
@@ -308,6 +316,12 @@ interface Window {
       sampleRate: number;
       grainDuration: number;
     }>;
+    bounceGrains: (
+      sourceHash: string,
+      grainPositions: number[],
+      grainSizeSamples: number,
+      options?: BounceGrainsOptions,
+    ) => Promise<SampleData>;
     corpusBuild: (
       sourceHash: string,
       featureHash: string,

@@ -1,3 +1,6 @@
+export type { BounceGrainsOptions } from "./rpc/granularize.rpc.js";
+import type { BounceGrainsOptions } from "./rpc/granularize.rpc.js";
+
 // ---------------------------------------------------------------------------
 // Completion types
 // ---------------------------------------------------------------------------
@@ -286,6 +289,8 @@ export interface GrainsResult {
   featureHash: string;
   sampleRate: number;
   grainDuration: number;
+  grainStartPositions: number[];  // source sample offsets
+  grainSizeSamples: number;       // grain size in samples
 }
 
 export interface RemoveProjectResult {
@@ -410,6 +415,7 @@ export const IpcChannel = {
   GetSampleByName: "get-sample-by-name",
   StoreRecording: "store-recording",
   GrainsSample: "grains-sample",
+  BounceGrains: "bounce-grains",
 
   // Commands
   SendCommand: "send-command",
@@ -665,6 +671,10 @@ export interface IpcHandleContract {
   "grains-sample": {
     request: [sourceHash: string, options?: GrainsOptions];
     response: GrainsResult;
+  };
+  "bounce-grains": {
+    request: [sourceHash: string, grainPositions: number[], grainSizeSamples: number, options?: BounceGrainsOptions];
+    response: SampleRecord;
   };
   "send-command": {
     request: [commandName: string, args: string[]];
@@ -999,6 +1009,7 @@ export interface ElectronAPI {
   getSampleByName: (name: string) => Promise<SampleByNameResult | null>;
   storeRecording: (name: string, audioData: number[], sampleRate: number, channels: number, duration: number, overwrite: boolean) => Promise<StoreRecordingResult>;
   grainsSample: (sourceHash: string, options?: GrainsOptions) => Promise<GrainsResult>;
+  bounceGrains: (sourceHash: string, grainPositions: number[], grainSizeSamples: number, options?: BounceGrainsOptions) => Promise<SampleRecord>;
 
   // Commands
   sendCommand: (command: string, args: string[]) => Promise<string>;

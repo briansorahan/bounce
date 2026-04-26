@@ -124,6 +124,7 @@ test("IpcChannel runtime checks", () => {
     ["GetSampleByName", "get-sample-by-name"],
     ["StoreRecording", "store-recording"],
     ["GrainsSample", "grains-sample"],
+    ["BounceGrains", "bounce-grains"],
     ["SendCommand", "send-command"],
     ["AnalyzeNMF", "analyze-nmf"],
     ["VisualizeNMF", "visualize-nmf"],
