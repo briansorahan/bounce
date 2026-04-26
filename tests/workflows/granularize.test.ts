@@ -14,7 +14,7 @@ interface GranularizeResult {
   grainStartPositions: number[];
 }
 
-describe("granularize", () => {
+describe("grains", () => {
   let services: WorkflowServices;
   let cleanup: () => void;
   let tmpDir: string;
@@ -37,7 +37,7 @@ describe("granularize", () => {
   });
 
   it("setup", () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-wf-granularize-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-wf-grains-"));
     wavPath = path.join(tmpDir, "test.wav");
     createTestWav(wavPath, 1.0);
   });
@@ -49,8 +49,8 @@ describe("granularize", () => {
     sampleRate = result.sampleRate;
   });
 
-  it("granularize-100ms", async () => {
-    grainResult = await services.granularizeClient.invoke("granularize", {
+  it("grains-100ms", async () => {
+    grainResult = await services.grainsClient.invoke("grains", {
       sourceHash: sampleHash,
       audioData: channelData,
       sampleRate,
@@ -93,8 +93,8 @@ describe("granularize", () => {
     );
   });
 
-  it("granularize-200ms", async () => {
-    grainResult200 = await services.granularizeClient.invoke("granularize", {
+  it("grains-200ms", async () => {
+    grainResult200 = await services.grainsClient.invoke("grains", {
       sourceHash: sampleHash,
       audioData: channelData,
       sampleRate,
@@ -113,7 +113,7 @@ describe("granularize", () => {
   });
 
   it("hashes-are-deterministic", async () => {
-    const result2 = await services.granularizeClient.invoke("granularize", {
+    const result2 = await services.grainsClient.invoke("grains", {
       sourceHash: sampleHash,
       audioData: channelData,
       sampleRate,

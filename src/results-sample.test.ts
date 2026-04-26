@@ -230,10 +230,10 @@ test("AudioResult.nx rejects", async () => {
   );
 });
 
-test("AudioResult.granularize rejects", async () => {
+test("AudioResult.grains rejects", async () => {
   const audio = makeAudio();
   await assert.rejects(
-    async () => { await audio.granularize(); },
+    async () => { await audio.grains(); },
     /does not support granularization/,
   );
 });

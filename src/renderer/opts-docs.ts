@@ -87,9 +87,9 @@ export type _SepOptions = Record<string, never>;
 export type _MFCCOptions = Record<string, never>;
 
 /**
- * @opts GranularizeOptions
+ * @opts GrainsOptions
  * Options for grain decomposition.
- * @usedby granularize
+ * @usedby grains
  * @prop {number} grainSize Grain duration in seconds (default: 0.1)
  * @prop {number} hopSize Hop between grain onsets in seconds (default: 0.05)
  * @prop {number} jitter Random timing jitter 0–1 (default: 0)
@@ -98,7 +98,7 @@ export type _MFCCOptions = Record<string, never>;
  * @prop {boolean} normalize Normalize each grain amplitude (default: false)
  * @prop {number} silenceThreshold Skip grains below this RMS level 0–1 (default: 0)
  */
-export type _GranularizeOptions = Record<string, never>;
+export type _GrainsOptions = Record<string, never>;
 
 /**
  * @opts AmpSliceOptions

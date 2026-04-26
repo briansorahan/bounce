@@ -153,14 +153,14 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
         }
     ],
   },
-  "Sample.granularize": {
+  "Sample.grains": {
     summary: "Create a GrainCollection for granular synthesis.",
     visibility: "porcelain",
     returns: "GrainCollectionPromise",
     params: [
         {
             "name": "options",
-            "summary": "Granularize options.",
+            "summary": "Grains options.",
             "kind": "options"
         }
     ],
@@ -1668,14 +1668,14 @@ export const replTypes: Record<string, ReplTypeEntry> = {
             }
       ],
       },
-      "granularize": {
+      "grains": {
         summary: "Create a GrainCollection for granular synthesis.",
         visibility: "porcelain",
         returns: "GrainCollectionPromise",
         params: [
             {
                   "name": "options",
-                  "summary": "Granularize options.",
+                  "summary": "Grains options.",
                   "kind": "options"
             }
       ],

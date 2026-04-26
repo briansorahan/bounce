@@ -10,7 +10,7 @@ import { createMidiClient } from "../../src/shared/rpc/midi.rpc";
 import { createMixerClient } from "../../src/shared/rpc/mixer.rpc";
 import { createReplEnvClient } from "../../src/shared/rpc/repl-env.rpc";
 import { createAudioEngineClient } from "../../src/shared/rpc/audio-engine.rpc";
-import { createGranularizeClient } from "../../src/shared/rpc/granularize.rpc";
+import { createGrainsClient } from "../../src/shared/rpc/granularize.rpc";
 import type { MessageConnection } from "vscode-jsonrpc";
 import { EventBusImpl } from "../../src/shared/event-bus";
 import { AudioFileService } from "../../src/electron/services/audio-file";
@@ -22,7 +22,7 @@ import { MidiService } from "../../src/electron/services/midi";
 import { MixerService } from "../../src/electron/services/mixer";
 import { ReplEnvService } from "../../src/electron/services/repl-env";
 import { MockAudioEngineService } from "./mock-audio-engine";
-import { GranularizeService } from "../../src/electron/services/granularize";
+import { GrainsService } from "../../src/electron/services/granularize";
 import { InMemoryStore } from "./in-memory-store";
 import { InMemoryPersistenceService, InMemoryQueryService } from "./in-memory-query-service";
 import type { IQueryService } from "../../src/shared/query-interfaces";
@@ -37,7 +37,7 @@ export interface WorkflowServices {
   mixerClient: ReturnType<typeof createMixerClient>;
   replEnvClient: ReturnType<typeof createReplEnvClient>;
   audioEngineClient: ReturnType<typeof createAudioEngineClient>;
-  granularizeClient: ReturnType<typeof createGranularizeClient>;
+  grainsClient: ReturnType<typeof createGrainsClient>;
   queryService: IQueryService;
 }
 
@@ -122,13 +122,13 @@ export function bootServices(): {
   replEnvPair.client.listen();
   const replEnvClient = createReplEnvClient(replEnvPair.client);
 
-  // GranularizeService — pure computation, no database.
-  const granularizeService = new GranularizeService();
-  const granularizePair = createInProcessPair();
-  granularizeService.listen(granularizePair.server);
-  granularizePair.server.listen();
-  granularizePair.client.listen();
-  const granularizeClient = createGranularizeClient(granularizePair.client);
+  // GrainsService — pure computation, no database.
+  const grainsService = new GrainsService();
+  const grainsPair = createInProcessPair();
+  grainsService.listen(grainsPair.server);
+  grainsPair.server.listen();
+  grainsPair.client.listen();
+  const grainsClient = createGrainsClient(grainsPair.client);
 
   // MockAudioEngineService — pure TypeScript mock, no native addon.
   const audioEngineService = new MockAudioEngineService();
@@ -148,9 +148,8 @@ export function bootServices(): {
     mixerPair.client, mixerPair.server,
     replEnvPair.client, replEnvPair.server,
     audioEnginePair.client, audioEnginePair.server,
-    granularizePair.client, granularizePair.server,
+    grainsPair.client, grainsPair.server,
   ];
-
   return {
     ctx: {
       projectClient,
@@ -162,7 +161,7 @@ export function bootServices(): {
       mixerClient,
       replEnvClient,
       audioEngineClient,
-      granularizeClient,
+      grainsClient,
       queryService,
     },
     cleanup: () => {

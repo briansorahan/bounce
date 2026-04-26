@@ -1,5 +1,5 @@
 ---
-name: create-new-spec
+name: create-spec
 description: Creates specification documents for new features and bug fixes in Bounce. Use when planning non-trivial work that requires research, planning, and implementation tracking. Follows a three-phase workflow (RESEARCH → PLAN → IMPL) with structured templates, and uses beads for all task tracking.
 license: ISC
 metadata:
@@ -13,9 +13,12 @@ metadata:
 
 ## Purpose
 
-This skill guides the creation of specification documents for new features and significant bug fixes or refactoring in Bounce. The spec workflow ensures thorough research, planning, and implementation tracking for all non-trivial work.
+This skill guides the creation of specification documents for new features and significant bug fixes or refactoring in Bounce.
+The spec workflow ensures thorough research, planning, and implementation tracking for all non-trivial work.
 
-Each spec corresponds to **one parent beads issue** with a graph of child task issues. The parent issue represents the feature as a whole; child issues are the discrete implementation tasks. Task progress is tracked entirely in beads — never in markdown files.
+Each spec corresponds to **one parent beads issue** with a graph of child task issues.
+The parent issue represents the feature as a whole; child issues are the discrete implementation tasks.
+Task progress is tracked entirely in beads — never in markdown files.
 
 ## When to Use
 
@@ -65,9 +68,9 @@ SLUG="onset-visualization"  # example
 
 # Create spec directory and copy templates
 mkdir -p specs/$SLUG
-cp .github/skills/create-new-spec/assets/RESEARCH.md.tmpl specs/$SLUG/RESEARCH.md
-cp .github/skills/create-new-spec/assets/PLAN.md.tmpl specs/$SLUG/PLAN.md
-cp .github/skills/create-new-spec/assets/IMPL.md.tmpl specs/$SLUG/IMPL.md
+cp .github/skills/create-spec/assets/RESEARCH.md.tmpl specs/$SLUG/RESEARCH.md
+cp .github/skills/create-spec/assets/PLAN.md.tmpl specs/$SLUG/PLAN.md
+cp .github/skills/create-spec/assets/IMPL.md.tmpl specs/$SLUG/IMPL.md
 # REVIEW.md is created during Step 5 — do not pre-create it
 
 # Create the parent beads issue
@@ -279,7 +282,7 @@ When returning to a spec after a break:
 
 ## Templates
 
-Template files are located in `.github/skills/create-new-spec/assets/`:
+Template files are located in `.github/skills/create-spec/assets/`:
 
 - `RESEARCH.md.tmpl` - Research phase template
 - `PLAN.md.tmpl` - Planning phase template

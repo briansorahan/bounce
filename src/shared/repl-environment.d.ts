@@ -40,7 +40,7 @@ interface Sample {
   display(): SamplePromise;
   slice(options?: SliceOptions): Promise<BounceResult>;
   sep(options?: SepOptions): Promise<BounceResult>;
-  granularize(options?: GranularizeOptions): GrainCollectionPromise;
+  grains(options?: GrainsOptions): GrainCollectionPromise;
   onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise;
   ampSlice(options?: AmpSliceOptions): SliceFeaturePromise;
   noveltySlice(options?: NoveltySliceOptions): SliceFeaturePromise;

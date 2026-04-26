@@ -5,7 +5,7 @@ import type { RpcContract } from "./types";
 // Option / result types
 // ---------------------------------------------------------------------------
 
-export interface GranularizeOptions {
+export interface GrainsOptions {
   grainSize?: number;        // ms, default 20
   hopSize?: number;          // ms, default = grainSize
   startTime?: number;        // ms into source, default 0
@@ -15,7 +15,7 @@ export interface GranularizeOptions {
   silenceThreshold?: number; // dBFS, default -60; use -Infinity or -100 to disable
 }
 
-export interface GranularizeResult {
+export interface GrainsResult {
   /** Per-grain derived sample hashes. null = silent grain (below threshold). */
   grainHashes: Array<string | null>;
   /** Deterministic SHA-256 hash of the feature (grain positions + options). */
@@ -31,17 +31,17 @@ export interface GranularizeResult {
 // Contract
 // ---------------------------------------------------------------------------
 
-export interface GranularizeRpc extends RpcContract {
-  granularize: {
+export interface GrainsRpc extends RpcContract {
+  grains: {
     params: {
       sourceHash: string;    // hash of the source sample — used for derived hash computation
       audioData: number[];   // decoded PCM, float32 range [-1, 1]
       sampleRate: number;
       channels: number;
       duration: number;      // seconds — used for endTime default
-      options: GranularizeOptions;
+      options: GrainsOptions;
     };
-    result: GranularizeResult;
+    result: GrainsResult;
   };
 }
 
@@ -51,45 +51,45 @@ export interface GranularizeRpc extends RpcContract {
 
 type E = ResponseError;
 
-export const GranularizeRequest = {
-  granularize: new RequestType<GranularizeRpc["granularize"]["params"], GranularizeResult, E>("granularize/granularize"),
+export const GrainsRequest = {
+  grains: new RequestType<GrainsRpc["grains"]["params"], GrainsResult, E>("grains/grains"),
 } as const;
 
 // ---------------------------------------------------------------------------
 // Handlers interface
 // ---------------------------------------------------------------------------
 
-export interface GranularizeHandlers {
-  granularize(params: GranularizeRpc["granularize"]["params"]): Promise<GranularizeResult>;
+export interface GrainsHandlers {
+  grains(params: GrainsRpc["grains"]["params"]): Promise<GrainsResult>;
 }
 
 // ---------------------------------------------------------------------------
 // Factory functions
 // ---------------------------------------------------------------------------
 
-export function registerGranularizeHandlers(
+export function registerGrainsHandlers(
   connection: MessageConnection,
-  handlers: GranularizeHandlers,
+  handlers: GrainsHandlers,
 ): void {
-  for (const [key, reqType] of Object.entries(GranularizeRequest)) {
-    const method = key as keyof GranularizeHandlers;
+  for (const [key, reqType] of Object.entries(GrainsRequest)) {
+    const method = key as keyof GrainsHandlers;
     connection.onRequest(reqType as RequestType<unknown, unknown, E>, (params) =>
       (handlers[method] as (p: unknown) => Promise<unknown>)(params),
     );
   }
 }
 
-export function createGranularizeClient(connection: MessageConnection): {
-  invoke<K extends keyof GranularizeRpc & string>(
+export function createGrainsClient(connection: MessageConnection): {
+  invoke<K extends keyof GrainsRpc & string>(
     method: K,
-    params: GranularizeRpc[K]["params"],
-  ): Promise<GranularizeRpc[K]["result"]>;
+    params: GrainsRpc[K]["params"],
+  ): Promise<GrainsRpc[K]["result"]>;
 } {
   return {
     invoke(method, params) {
-      const reqType = GranularizeRequest[method as keyof typeof GranularizeRequest];
+      const reqType = GrainsRequest[method as keyof typeof GrainsRequest];
       return connection.sendRequest(
-        reqType as RequestType<unknown, GranularizeRpc[typeof method]["result"], E>,
+        reqType as RequestType<unknown, GrainsRpc[typeof method]["result"], E>,
         params,
       );
     },

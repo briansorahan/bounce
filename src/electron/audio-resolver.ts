@@ -108,7 +108,7 @@ async function resolveDerived(
   switch (feature.feature_type) {
     case "onset":
     case "onset-slice":
-    case "granularize": {
+    case "grains": {
       const positions = JSON.parse(feature.feature_data) as number[];
       return resolveSliceOrGrain(source, positions, link.index_order, feature.feature_type, sampleRate);
     }
@@ -143,10 +143,10 @@ function resolveSliceOrGrain(
     return Promise.resolve({ audioData: sliceAudio, sampleRate: source.sampleRate });
   }
 
-  // granularize: positions are grain start positions, need grain size from options
+  // grains: positions are grain start positions, need grain size from options
   // For grains, the duration is stored in the derived sample metadata, so we compute
   // the grain size from that.
-  if (featureType === "granularize") {
+  if (featureType === "grains") {
     if (index >= positions.length) {
       throw new Error(`Grain index ${index} out of range (${positions.length} grains)`);
     }

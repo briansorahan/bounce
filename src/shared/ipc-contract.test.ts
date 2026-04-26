@@ -123,7 +123,7 @@ test("IpcChannel runtime checks", () => {
     ["GetSampleByHash", "get-sample-by-hash"],
     ["GetSampleByName", "get-sample-by-name"],
     ["StoreRecording", "store-recording"],
-    ["GranularizeSample", "granularize-sample"],
+    ["GrainsSample", "grains-sample"],
     ["SendCommand", "send-command"],
     ["AnalyzeNMF", "analyze-nmf"],
     ["VisualizeNMF", "visualize-nmf"],

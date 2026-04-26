@@ -39,7 +39,7 @@ interface MFCCOptions {
   sampleRate?: number;
 }
 
-interface GranularizeOptions {
+interface GrainsOptions {
   grainSize?: number;
   hopSize?: number;
   jitter?: number;
@@ -110,7 +110,7 @@ declare class SampleResult extends BounceResult {
   display(): ReplValue<Promise<SampleResult>>;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
-  granularize(options?: GranularizeOptions): ReplValue<Promise<GrainCollection>>;
+  grains(options?: GrainsOptions): ReplValue<Promise<GrainCollection>>;
   onsetSlice(options?: AnalyzeOptions): ReplValue<Promise<SliceFeatureResult>>;
   ampSlice(options?: AmpSliceOptions): ReplValue<Promise<SliceFeatureResult>>;
   noveltySlice(options?: NoveltySliceOptions): ReplValue<Promise<SliceFeatureResult>>;

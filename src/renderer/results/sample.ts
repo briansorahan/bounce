@@ -27,7 +27,7 @@ export interface SampleMethodBindings {
   display: () => Promise<SampleResult>;
   slice: (options?: SliceOptions) => Promise<BounceResult>;
   sep: (options?: SepOptions) => Promise<BounceResult>;
-  granularize: (options?: GranularizeOptions) => Promise<GrainCollection>;
+  grains: (options?: GrainsOptions) => Promise<GrainCollection>;
   onsetSlice: (options?: AnalyzeOptions) => Promise<SliceFeatureResult>;
   ampSlice: (options?: AmpSliceOptions) => Promise<SliceFeatureResult>;
   noveltySlice: (options?: NoveltySliceOptions) => Promise<SliceFeatureResult>;
@@ -54,7 +54,7 @@ function unavailableSampleBindings(name: string): SampleMethodBindings {
     sep: async () => {
       throw new Error(`${name} does not support separation in this context.`);
     },
-    granularize: async () => {
+    grains: async () => {
       throw new Error(`${name} does not support granularization in this context.`);
     },
     onsetSlice: async () => {
@@ -156,9 +156,9 @@ export class SampleResult extends HelpableResult {
   }
 
   @describe({ summary: "Create a GrainCollection for granular synthesis.", returns: "GrainCollectionPromise" })
-  @param("options", { summary: "Granularize options.", kind: "options" })
-  granularize(options?: GranularizeOptions): GrainCollectionPromise {
-    return new GrainCollectionPromise(this.bindings.granularize(options));
+  @param("options", { summary: "Grains options.", kind: "options" })
+  grains(options?: GrainsOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.bindings.grains(options));
   }
 
   @describe({ summary: "Analyse onset positions using FluidOnsetSlice.", returns: "SliceFeaturePromise" })
@@ -316,8 +316,8 @@ export class SamplePromise implements PromiseLike<SampleResult> {
     return this.promise.then((sample) => sample.sep(options));
   }
 
-  granularize(options?: GranularizeOptions): GrainCollectionPromise {
-    return new GrainCollectionPromise(this.promise.then((sample) => sample.granularize(options)));
+  grains(options?: GrainsOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.promise.then((sample) => sample.grains(options)));
   }
 
   onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {
@@ -402,8 +402,8 @@ export class CurrentSamplePromise implements PromiseLike<SampleResult | null> {
     return this.requireSample().then((sample) => sample.sep(options));
   }
 
-  granularize(options?: GranularizeOptions): GrainCollectionPromise {
-    return new GrainCollectionPromise(this.requireSample().then((sample) => sample.granularize(options)));
+  grains(options?: GrainsOptions): GrainCollectionPromise {
+    return new GrainCollectionPromise(this.requireSample().then((sample) => sample.grains(options)));
   }
 
   onsetSlice(options?: AnalyzeOptions): SliceFeaturePromise {

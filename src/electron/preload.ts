@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { FeatureOptions, GranularizeOptions } from "./database";
+import type { FeatureOptions, GrainsOptions } from "./database";
 import type {
   BufNMFOptions,
   MFCCOptions,
@@ -95,8 +95,8 @@ const api: ElectronAPI = {
       callback(data),
     );
   },
-  granularizeSample: (sourceHash: string, options?: GranularizeOptions) =>
-    ipcRenderer.invoke("granularize-sample", sourceHash, options),
+  grainsSample: (sourceHash: string, options?: GrainsOptions) =>
+    ipcRenderer.invoke("grains-sample", sourceHash, options),
   transpileTypeScript: (source: string): Promise<string> =>
     ipcRenderer.invoke("transpile-typescript", source),
   corpusBuild: (sourceHash: string, featureHash: string) =>

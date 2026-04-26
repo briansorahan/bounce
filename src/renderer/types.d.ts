@@ -299,9 +299,9 @@ interface Window {
     nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
     transpileTypeScript: (source: string) => Promise<string>;
-    granularizeSample: (
+    grainsSample: (
       sourceHash: string,
-      options?: GranularizeOptions,
+      options?: GrainsOptions,
     ) => Promise<{
       grainHashes: Array<string | null>;
       featureHash: string;

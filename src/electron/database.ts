@@ -111,7 +111,7 @@ export interface FeatureOptions {
   [key: string]: unknown;
 }
 
-export interface GranularizeOptions {
+export interface GrainsOptions {
   grainSize?: number;
   hopSize?: number;
   jitter?: number;
@@ -1031,9 +1031,9 @@ export class DatabaseManager {
     return results;
   }
 
-  granularize(
+  grains(
     sourceHash: string,
-    options: GranularizeOptions,
+    options: GrainsOptions,
     sourceAudio: Float32Array,
   ): { grainHashes: Array<string | null>; featureHash: string; sampleRate: number; grainDuration: number } {
     const sample = this.getSampleByHash(sourceHash);
@@ -1044,13 +1044,13 @@ export class DatabaseManager {
     const MAX_DURATION = 20;
     if (sample.duration > MAX_DURATION) {
       throw new Error(
-        `Sample duration ${sample.duration.toFixed(2)}s exceeds the ${MAX_DURATION}s limit for granularize`,
+        `Sample duration ${sample.duration.toFixed(2)}s exceeds the ${MAX_DURATION}s limit for grains`,
       );
     }
 
     const { sample_rate: sampleRate, channels } = sample;
 
-    // Delegate pure computation to GranularizeService (no storage).
+    // Delegate pure computation to GrainsService (no storage).
     const { grainHashes, featureHash, grainDuration, grainStartPositions } = computeGrains({
       sourceHash: sample.hash,
       audioData: sourceAudio,
@@ -1062,7 +1062,7 @@ export class DatabaseManager {
     // Store grain positions as the feature (storage stays here in DatabaseManager).
     this.storeFeature(
       sample.hash,
-      "granularize",
+      "grains",
       grainStartPositions,
       options as FeatureOptions,
     );

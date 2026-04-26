@@ -263,11 +263,11 @@ test("resolveAudioData — derived + onset (legacy)", async () => {
 });
 
   // -------------------------------------------------------------------------
-  // resolveAudioData — derived + granularize (grains correct, last extends to end)
+  // resolveAudioData — derived + grains (grains correct, last extends to end)
   // -------------------------------------------------------------------------
 
 
-test("resolveAudioData — derived + granularize", async () => {
+test("resolveAudioData — derived + grains", async () => {
 
   // Source: 10 samples [0..9]
   // Grain positions: [0, 3, 7] — 3 grains
@@ -297,7 +297,7 @@ test("resolveAudioData — derived + granularize", async () => {
       id: 22,
       sample_hash: "source003",
       feature_hash: "feat0003",
-      feature_type: "granularize",
+      feature_type: "grains",
       feature_data: JSON.stringify(positions),
       options: null,
     }),
@@ -584,11 +584,11 @@ test("onset-slice — index out of range", async () => {
 });
 
   // -------------------------------------------------------------------------
-  // granularize — index out of range
+  // grains — index out of range
   // -------------------------------------------------------------------------
 
 
-test("granularize — index out of range", async () => {
+test("grains — index out of range", async () => {
 
   // 3 grain positions → valid indices 0, 1, 2; index 3 is out of range
   const sourceAudio = makeAudioBuffer(RAW_SAMPLES);
@@ -614,7 +614,7 @@ test("granularize — index out of range", async () => {
       id: 27,
       sample_hash: "source010",
       feature_hash: "feat0010",
-      feature_type: "granularize",
+      feature_type: "grains",
       feature_data: JSON.stringify(positions),
       options: null,
     }),
@@ -628,7 +628,7 @@ test("granularize — index out of range", async () => {
   await assert.rejects(
     () => resolveAudioData(db, "derived10"),
     /Grain index 3 out of range \(3 grains\)/,
-    "granularize throws when index equals positions.length",
+    "grains throws when index equals positions.length",
   );
 
 });

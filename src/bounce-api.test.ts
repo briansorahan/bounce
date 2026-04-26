@@ -102,7 +102,7 @@ const mockElectron = {
     channels: 1,
     duration: 0.001,
   }),
-  granularizeSample: async () => ({
+  grainsSample: async () => ({
     grainHashes: ["grain1", null, "grain2"],
     featureHash: "gran123",
     sampleRate: 44100,
@@ -442,7 +442,7 @@ test("bounce-api", async () => {
   assert.equal(stack.waveform(sample), stack, "stack accepts multiple scenes");
   assert.ok(stack.toString().includes("scenes: 2"), "VisStackResult prints scene count");
 
-  const grains = await sample.granularize({ grainSize: 20 });
+  const grains = await sample.grains({ grainSize: 20 });
   assert.ok(grains.toString().includes("grains"));
 
   const listed = await sn.list();
@@ -479,8 +479,8 @@ test("bounce-api", async () => {
   const currentPlayed = await sn.current().play();
   assert.ok(currentPlayed instanceof SampleResult, "sn.current().play() returns SampleResult");
 
-  const grainCount = await sn.read("/test.wav").granularize({ grainSize: 20 }).length();
-  assert.equal(grainCount, 2, "sn.read().granularize().length() counts non-silent grains");
+  const grainCount = await sn.read("/test.wav").grains({ grainSize: 20 }).length();
+  assert.equal(grainCount, 2, "sn.read().grains().length() counts non-silent grains");
 
   const corpusBuilt = await corpus.build(sn.read("/test.wav"));
   assert.ok(corpusBuilt instanceof BounceResult, "corpus.build accepts thenable sample sources");
