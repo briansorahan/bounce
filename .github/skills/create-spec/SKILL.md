@@ -219,6 +219,7 @@ Run this checklist in order after all child tasks are closed. Do not skip steps.
 npm test                    # All unit tests must pass
 npm run lint                # No lint errors
 npm run build:electron      # TypeScript must compile cleanly
+npm ci --ignore-scripts     # Verify package-lock.json is in sync — if this fails, run npm install and commit the updated lockfile
 ./build.sh                  # Full Dockerized Playwright suite — mandatory, no exceptions
 npm run dev:electron        # Manual smoke test
 ```
