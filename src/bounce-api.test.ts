@@ -107,6 +107,8 @@ const mockElectron = {
     featureHash: "gran123",
     sampleRate: 44100,
     grainDuration: 0.02,
+    grainStartPositions: [0, 882, 1764],
+    grainSizeSamples: 882,
   }),
   listSamples: async () => [
     { id: 1, hash: "abcdef1234567890", file_path: "/test.wav", sample_rate: 44100, channels: 1, duration: 1.5, data_size: 100, created_at: "2024-01-01" },

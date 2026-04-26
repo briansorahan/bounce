@@ -1288,7 +1288,34 @@ export class SampleNamespace implements SampleBinder {
       },
     );
 
-    return new GrainCollection(grains, options?.normalize ?? false, hash);
+    const nonNullPositions: number[] = [];
+    for (let i = 0; i < result.grainHashes.length; i++) {
+      if (result.grainHashes[i] !== null) {
+        nonNullPositions.push(result.grainStartPositions[i]);
+      }
+    }
+
+    return new GrainCollection(
+      grains,
+      options?.normalize ?? false,
+      hash,
+      nonNullPositions,
+      result.grainSizeSamples,
+      async (sourceHash, positions, sizeSamples, bounceOpts) => {
+        const bounceResult = await window.electron.bounceGrains(sourceHash, positions, sizeSamples, bounceOpts);
+        return this.bindSample(
+          {
+            id: bounceResult.id,
+            hash: bounceResult.hash,
+            filePath: undefined,
+            sampleRate: bounceResult.sample_rate,
+            channels: bounceResult.channels,
+            duration: bounceResult.duration,
+          },
+          `\x1b[32mBounced: ${bounceResult.hash.substring(0, 8)}\x1b[0m`,
+        );
+      },
+    );
   }
 
   private async getAudioInputs(): Promise<AudioInputDevice[]> {

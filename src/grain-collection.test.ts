@@ -20,7 +20,7 @@ test("grain collection", async () => {
     makeGrain("ccc"),
     null,
   ];
-  const col = new GrainCollection(grains, false, "sourcehash12345678");
+  const col = new GrainCollection(grains, false, "sourcehash12345678", [0, 1, 2], 1024);
 
   // length() counts only stored (non-null) grains
   localAssert(col.length() === 3, "length() returns count of non-null grains");
@@ -64,7 +64,7 @@ test("grain collection", async () => {
   );
 
   // filter result has same normalize setting
-  const normed = new GrainCollection([makeGrain("x")], true, "src");
+  const normed = new GrainCollection([makeGrain("x")], true, "src", [0], 1024);
   const filteredNormed = normed.filter(() => true);
   localAssert(filteredNormed.normalize === true, "filter preserves normalize setting");
 
@@ -75,7 +75,7 @@ test("grain collection", async () => {
   localAssert(str.includes("2 silent"), "toString includes silent grain count");
 
   // Empty collection
-  const empty = new GrainCollection([], false, "emptyhash");
+  const empty = new GrainCollection([], false, "emptyhash", [], 1024);
   localAssert(empty.length() === 0, "empty collection has length 0");
   const visited: number[] = [];
   await empty.forEach((_g, i) => { visited.push(i); });
