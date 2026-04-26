@@ -105,4 +105,6 @@ const KNOWN_OPTION_KEYS: Record<string, string[]> = {
   RecordOptions: ["duration", "overwrite"],
   // NxOptions
   NxOptions: ["components"],
+  // BounceGrains options
+  BounceGrainsOptions: ["density", "pitch", "envelope", "duration", "normalize"],
 };

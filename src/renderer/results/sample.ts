@@ -470,4 +470,8 @@ export class GrainCollectionPromise implements PromiseLike<GrainCollection> {
   ): GrainCollectionPromise {
     return new GrainCollectionPromise(this.promise.then((collection) => collection.filter(predicate)));
   }
+
+  bounce(options?: BounceGrainsOptions): SamplePromise {
+    return new SamplePromise(this.promise.then((collection) => collection.bounce(options)));
+  }
 }

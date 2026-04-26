@@ -49,6 +49,14 @@ interface GrainsOptions {
   silenceThreshold?: number;
 }
 
+interface BounceGrainsOptions {
+  density?: number;
+  pitch?: number;
+  envelope?: number;
+  duration?: number;
+  normalize?: boolean;
+}
+
 interface AmpSliceOptions {
   fastRampUp?: number;
   fastRampDown?: number;
@@ -245,6 +253,7 @@ declare class GrainCollection extends BounceResult {
   forEach(callback: (grain: SampleResult, index: number) => void | Promise<void>): Promise<void>;
   map<T>(callback: (grain: SampleResult, index: number) => T): T[];
   filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection;
+  bounce(options?: BounceGrainsOptions): ReplValue<Promise<SampleResult>>;
 }
 
 interface SampleNamespace {

@@ -1,6 +1,8 @@
 import { test } from "vitest";
+import assert from "node:assert/strict";
 import { GrainCollection } from "./renderer/grain-collection.js";
-import { AudioResult } from "./renderer/bounce-result.js";
+import { AudioResult, type SampleResult } from "./renderer/bounce-result.js";
+import type { BounceGrainsOptions } from "./shared/ipc-contract.js";
 
 function makeGrain(hash: string, duration = 0.02): AudioResult {
   return new AudioResult(`Grain: ${hash}`, hash, undefined, 44100, duration);
@@ -80,4 +82,148 @@ test("grain collection", async () => {
   const visited: number[] = [];
   await empty.forEach((_g, i) => { visited.push(i); });
   localAssert(visited.length === 0, "forEach on empty collection visits nothing");
+});
+
+// ---------------------------------------------------------------------------
+// bounce() — callback invocation and option forwarding
+// ---------------------------------------------------------------------------
+
+type CallbackArgs = {
+  sourceHash: string;
+  positions: number[];
+  sizeSamples: number;
+  options: BounceGrainsOptions | undefined;
+};
+
+function makeBounceCallback(mockResult: SampleResult): {
+  callback: (sourceHash: string, positions: number[], sizeSamples: number, options?: BounceGrainsOptions) => Promise<SampleResult>;
+  calls: CallbackArgs[];
+} {
+  const calls: CallbackArgs[] = [];
+  const callback = async (
+    sourceHash: string,
+    positions: number[],
+    sizeSamples: number,
+    options?: BounceGrainsOptions,
+  ): Promise<SampleResult> => {
+    calls.push({ sourceHash, positions, sizeSamples, options });
+    return mockResult;
+  };
+  return { callback, calls };
+}
+
+test("bounce() calls callback with correct sourceHash, positions, sizeSamples", async () => {
+  const sourceHash = "sourcehashbounce01";
+  const positions = [100, 200, 300];
+  const sizeSamples = 512;
+  const mockResult = makeGrain("bounce-result-hash");
+  const { callback, calls } = makeBounceCallback(mockResult);
+
+  const col = new GrainCollection(
+    [makeGrain("g1"), makeGrain("g2"), makeGrain("g3")],
+    false,
+    sourceHash,
+    positions,
+    sizeSamples,
+    callback,
+  );
+
+  const result = await col.bounce();
+
+  assert.equal(calls.length, 1, "callback should be called exactly once");
+  assert.equal(calls[0].sourceHash, sourceHash, "callback receives correct sourceHash");
+  assert.deepEqual(calls[0].positions, positions, "callback receives correct positions");
+  assert.equal(calls[0].sizeSamples, sizeSamples, "callback receives correct sizeSamples");
+  assert.equal(result.hash, mockResult.hash, "bounce() resolves to the SampleResult returned by callback");
+});
+
+test("bounce() forwards options to callback", async () => {
+  const mockResult = makeGrain("bounce-result-opts");
+  const { callback, calls } = makeBounceCallback(mockResult);
+
+  const col = new GrainCollection(
+    [makeGrain("g1")],
+    false,
+    "srchash",
+    [0],
+    1024,
+    callback,
+  );
+
+  const opts: BounceGrainsOptions = { density: 30, pitch: 1.5 };
+  await col.bounce(opts);
+
+  assert.equal(calls.length, 1, "callback called once");
+  assert.deepEqual(calls[0].options, opts, "callback receives the options passed to bounce()");
+});
+
+test("bounce() without callback throws 'bounce() is not available'", () => {
+  const col = new GrainCollection(
+    [makeGrain("g1")],
+    false,
+    "srchash",
+    [0],
+    1024,
+    // no callback
+  );
+
+  assert.throws(
+    () => col.bounce(),
+    /bounce\(\) is not available/,
+    "bounce() without a callback should throw",
+  );
+});
+
+test("filter() preserves position alignment after filtering", async () => {
+  const mockResult = makeGrain("filtered-result");
+  const { callback, calls } = makeBounceCallback(mockResult);
+
+  const col = new GrainCollection(
+    [makeGrain("g1"), makeGrain("g2"), makeGrain("g3")],
+    false,
+    "srchash",
+    [100, 200, 300],
+    512,
+    callback,
+  );
+
+  // Keep grains at index 0 and 2 (i.e. "g1" and "g3"), drop "g2"
+  const filtered = col.filter((_grain, i) => i === 0 || i === 2);
+  assert.equal(filtered.length(), 2, "filtered collection should have 2 grains");
+
+  await filtered.bounce();
+  assert.equal(calls.length, 1, "callback called once");
+  assert.deepEqual(
+    calls[0].positions,
+    [100, 300],
+    "filter() should pass positions [100, 300] after removing middle grain",
+  );
+});
+
+test("filter() with null grains preserves position alignment", async () => {
+  const mockResult = makeGrain("filtered-null-result");
+  const { callback, calls } = makeBounceCallback(mockResult);
+
+  // Grains array: [grain, null, grain, grain]
+  // Non-null grains have positions [100, 300, 400]
+  const col = new GrainCollection(
+    [makeGrain("g1"), null, makeGrain("g2"), makeGrain("g3")],
+    false,
+    "srchash",
+    [100, 300, 400],
+    512,
+    callback,
+  );
+
+  // Keep first and last non-null grains (index 0 "g1" and index 2 "g3"), drop "g2"
+  const filtered = col.filter((_grain, i) => i === 0 || i === 2);
+  assert.equal(filtered.length(), 2, "filtered collection should have 2 grains");
+
+  await filtered.bounce();
+  assert.equal(calls.length, 1, "callback called once");
+  assert.deepEqual(
+    calls[0].positions,
+    [100, 400],
+    "filter() with null grains should map positions correctly: [100, 400]",
+  );
 });
