@@ -11,7 +11,13 @@ Bounce has two existing granular features — grain extraction (`sample.granular
 
 ## Approach Summary
 
-Two changes:
+Two changes plus one default adjustment:
+
+1. **Rename `sample.granularize()` → `sample.grains()`** across all code, types, docs, and tests.
+
+2. **Add `grains.bounce(options?)` → `SamplePromise`** that resynthesizes a `GrainCollection` into a single new sample via overlap-add.
+
+3. **Change `silenceThreshold` default from `-60` dBFS to `-Infinity` (disabled).** Silent grain filtering should be opt-in, not opt-out. Users who want it can pass `{ silenceThreshold: -60 }` explicitly. This affects `computeGrains()` in `src/electron/services/granularize/index.ts`, the RPC type comment in `src/shared/rpc/granularize.rpc.ts`, and the opts-docs entry.
 
 1. **Rename `sample.granularize()` → `sample.grains()`** across all code, types, docs, and tests.
 
