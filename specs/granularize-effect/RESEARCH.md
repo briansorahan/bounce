@@ -203,9 +203,9 @@ All resolved during user discussion:
 
 5. **A new options type (`BounceGrainsOptions`) is needed** for the resynthesis parameters: `density`, `pitch`, `envelope`, and `duration`. These don't overlap with `GranularizeOptions`.
 
-6. **TypeScript implementation is sufficient.** The overlap-add resynthesis is straightforward math on `Float32Array` — no need for C++ native code.
+6. **TypeScript implementation is sufficient.** The overlap-add resynthesis is straightforward math on `Float32Array` — no need for C++ native code. Note: the C++ `GranularInstrument` only implements Hann window despite accepting an envelope type parameter. The TypeScript resynthesis engine must implement all 4 window types independently.
 
-7. **GrainCollection needs access to IPC** to send audio data to the worker for resynthesis. Currently it's a pure data class. It will need a reference to `window.electron` (or a callback) to perform the bounce operation.
+7. **GrainCollection needs access to IPC** to send audio data to the worker for resynthesis. Currently it's a pure data class extending `BounceResult`. It will need: (a) a `bounceCallback` for IPC, (b) storage for `grainPositions` and `grainSizeSamples`, (c) a `@replType` decorator for registry integration and help() support.
 
 8. **`GrainCollectionPromise` must proxy `bounce()`** so that `sample.grains().bounce()` chains without an explicit `await`. This follows the same pattern `SamplePromise` uses to proxy `SampleResult` methods.
 

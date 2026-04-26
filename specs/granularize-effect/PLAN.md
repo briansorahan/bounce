@@ -62,6 +62,7 @@ Files requiring the rename (method name, help text, option references, tests):
 | `src/shared/repl-registry.generated.ts` | Generated — will update via `npm run generate:help` after source changes |
 | `src/renderer/namespaces/inst-commands.generated.ts` | Check for references |
 | `src/renderer/bounce-api.ts` | Check for references |
+| `src/renderer/bounce-globals.d.ts` | `granularize` in Sample interface → `grains` |
 | `src/granular-instrument.test.ts` | Update any calls to `granularize` |
 | `src/bounce-api.test.ts` | Update help coverage for renamed method |
 | `src/results-sample.test.ts` | Update test descriptions if they reference `granularize` |
@@ -88,19 +89,29 @@ export function resynthesize(params: ResynthesisParams): Float32Array;
 ```
 
 **Algorithm:**
-1. Pre-compute window LUT (1024 samples) for selected envelope type
+1. Pre-compute window LUT (1024 samples) for selected envelope type:
+   - Hann: `0.5 * (1 - cos(2π * n / (N-1)))`
+   - Hamming: `0.54 - 0.46 * cos(2π * n / (N-1))`
+   - Triangle: `1 - |2(n - N/2) / N|`
+   - Tukey (α=0.5): Hann taper over outer 25% each side, flat middle 50%
 2. Allocate output buffer of `outputLengthSamples`
 3. Compute output grain placement interval: `outputHop = sampleRate / density`
-4. For each output position (0, outputHop, 2×outputHop, ...):
-   a. Select source grain: map output position linearly into the `grainPositions` array
-   b. Extract grain from source with pitch-shifted read (linear interpolation)
-   c. Apply window envelope
-   d. Add to output buffer at current output position (overlap-add)
-5. Return output buffer
+4. For each output position `outPos` (0, outputHop, 2×outputHop, ...):
+   a. Select source grain index: `srcIdx = Math.round(outPos / outputLengthSamples * (grainPositions.length - 1))`, clamped to `[0, grainPositions.length - 1]`
+   b. Look up source read position: `srcStart = grainPositions[srcIdx]`
+   c. Extract grain from source with pitch-shifted read: read `grainSizeSamples` output samples, advancing source position by `pitch` per output sample, using linear interpolation between source samples
+   d. Apply window envelope: multiply each grain sample by the LUT value (linearly interpolated to fit grain length)
+   e. Add to output buffer at `outPos` (overlap-add)
+5. Normalize: if peak amplitude > 1.0, scale entire output by `1.0 / peak`. This prevents clipping by default while preserving relative dynamics.
+6. Return output buffer
+
+**Note on null/silent grains:** The `grainPositions` array passed to `resynthesize()` must contain only non-null grain positions. Silent grains (filtered by threshold in the granularize step) are excluded before resynthesis. This is handled by the `GrainCollection` which stores only non-null positions.
+
+**Known limitation:** Linear interpolation for pitch-shifted reads may produce aliasing artifacts at extreme pitch values (>2.0x). This is acceptable for the initial implementation; a future iteration could add a simple lowpass filter before downsampled reads.
 
 #### 3. RPC Extension — `src/shared/rpc/granularize.rpc.ts`
 
-Add new RPC method to the existing contract:
+Add new types and RPC method to the existing contract. **`BounceGrainsOptions` is defined here as the single source of truth** and re-exported from `ipc-contract.ts`:
 
 ```typescript
 export interface BounceGrainsOptions {
@@ -118,13 +129,13 @@ bounceGrains: {
     sampleRate: number;
     channels: number;
     duration: number;           // source duration in seconds
-    grainPositions: number[];   // source sample offsets from granularize step
+    grainPositions: number[];   // source sample offsets from granularize step (non-null only)
     grainSizeSamples: number;
     options: BounceGrainsOptions;
   };
   result: {
     outputData: number[];       // resynthesized PCM
-    outputHash: string;         // SHA-256 of output audio
+    outputHash: string;         // SHA-256 of output audio bytes
     sampleRate: number;
     duration: number;           // output duration in seconds
     channels: number;           // always 1 (mono output)
@@ -135,15 +146,11 @@ bounceGrains: {
 
 #### 4. IPC Contract — `src/shared/ipc-contract.ts`
 
-Add the `BounceGrainsOptions` interface and new handle channel:
+Re-export `BounceGrainsOptions` from the RPC contract and add the new handle channel:
 
 ```typescript
-export interface BounceGrainsOptions {
-  density?: number;
-  pitch?: number;
-  envelope?: number;
-  duration?: number;
-}
+// Re-export from rpc contract (single source of truth)
+export type { BounceGrainsOptions } from "./rpc/granularize.rpc";
 
 // In ElectronHandleContract:
 BounceGrains: {
@@ -180,32 +187,71 @@ Add `bounceGrains()` method to `GranularizeService`:
 
 #### 8. GrainCollection — `src/renderer/grain-collection.ts`
 
-Add `bounce()` method. Requires:
+**Major changes to this class:**
 
-- **Constructor injection** of a bounce callback: `GrainCollection` gains a `#bounceCallback` that abstracts the IPC call. The sample namespace provides this callback when creating `GrainCollection` instances. This keeps `GrainCollection` decoupled from `window.electron`.
-
-- **Store grain metadata**: `GrainCollection` must store `grainPositions` and `grainSizeSamples` from the granularize result, since the resynthesis engine needs the source positions (not just the grain hashes).
+a. **Add `@replType` decorator** so the registry discovers `bounce()` and `attachMethodHelpFromRegistry()` can attach help:
 
 ```typescript
-bounce(options?: BounceGrainsOptions): SamplePromise {
-  return new SamplePromise(
-    this.#bounceCallback(this.#sourceHash, this.#grainPositions, this.#grainSizeSamples, options)
-  );
-}
+@replType("GrainCollection", {
+  summary: "A collection of grains extracted from a sample, ready for resynthesis.",
+  instanceName: "grains",
+})
+export class GrainCollection extends BounceResult { ... }
 ```
 
-Updated constructor:
+b. **Expand constructor** with grain metadata and bounce callback:
 
 ```typescript
 constructor(
   grains: Array<SampleResult | null>,
   normalize: boolean,
   sourceHash: string,
-  grainPositions: number[],
+  grainPositions: number[],           // source sample offsets (non-null only)
   grainSizeSamples: number,
-  bounceCallback: (sourceHash: string, positions: number[], sizeSamples: number, options?: BounceGrainsOptions) => Promise<SampleResult>,
-)
+  bounceCallback?: (sourceHash: string, positions: number[], sizeSamples: number, options?: BounceGrainsOptions) => Promise<SampleResult>,
+) {
+  // ... existing display logic ...
+  this.#grainPositions = grainPositions;
+  this.#grainSizeSamples = grainSizeSamples;
+  this.#bounceCallback = bounceCallback;
+  attachMethodHelpFromRegistry(this, "GrainCollection");
+}
 ```
+
+c. **Add `bounce()` method** with `@describe` and `@param` decorators:
+
+```typescript
+@describe({ summary: "Resynthesize grains into a new sample via overlap-add.", returns: "SamplePromise" })
+@param("options", { summary: "Bounce options: density, pitch, envelope, duration.", kind: "options" })
+bounce(options?: BounceGrainsOptions): SamplePromise {
+  if (!this.#bounceCallback) {
+    throw new Error("bounce() is not available for this GrainCollection");
+  }
+  return new SamplePromise(
+    this.#bounceCallback(this.#sourceHash, this.#grainPositions, this.#grainSizeSamples, options)
+  );
+}
+```
+
+d. **Update `filter()` to preserve grain position correspondence:**
+
+```typescript
+filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection {
+  const keptGrains: Array<SampleResult | null> = [];
+  const keptPositions: number[] = [];
+  let i = 0;
+  for (let j = 0; j < this.#grains.length; j++) {
+    const grain = this.#grains[j];
+    if (grain !== null && predicate(grain, i++)) {
+      keptGrains.push(grain);
+      keptPositions.push(this.#grainPositions[j]);
+    }
+  }
+  return new GrainCollection(keptGrains, this.#normalize, this.#sourceHash, keptPositions, this.#grainSizeSamples, this.#bounceCallback);
+}
+```
+
+**Note on help system:** `GrainCollection` uses `attachMethodHelpFromRegistry` (for type instances), NOT `attachNamespaceMethodHelp` (which is for namespace objects like `sn`, `vis`, etc.).
 
 #### 9. GrainCollectionPromise — `src/renderer/results/sample.ts`
 
@@ -263,8 +309,8 @@ No new visualizations. The method uses existing terminal feedback patterns:
 ### REPL Interface Contract
 
 **Exposed methods requiring `help()`:**
-- `grains.bounce.help()` — Documents parameters, defaults, ranges, and usage examples
-- `sample.grains.help()` — Updated (renamed from granularize)
+- `grains.bounce.help()` — Documents parameters, defaults, ranges, and usage examples. Attached via `attachMethodHelpFromRegistry(this, "GrainCollection")` in the `GrainCollection` constructor (NOT `attachNamespaceMethodHelp` — GrainCollection is a type, not a namespace).
+- `sample.grains.help()` — Updated (renamed from granularize). Already attached via existing SampleResult help infrastructure.
 
 **Returned object terminal summary:**
 - `bounce()` returns standard `SampleResult` — no new type needed
@@ -292,22 +338,32 @@ None. No new dependencies, no binding.gyp changes, no tsconfig changes.
 ### Unit Tests
 
 **`src/resynthesize.test.ts`** (new file):
-- **Identity resynthesis:** grainSize=full duration, density=1, pitch=1.0 → output ≈ input (within windowing tolerance)
+- **Identity resynthesis:** grainSize=full duration, density=1, pitch=1.0 → output ≈ input (max sample deviation < 0.01)
 - **Time stretching:** outputDuration = 2x input → output is 2x length
 - **Pitch shifting:** pitch=2.0 → verify output samples read at double rate
 - **Window envelopes:** Test all 4 window types produce valid output (no NaN, no Inf)
-- **Empty/edge cases:** Zero-length input, very small grain size, very high density
-- **Determinism:** Same inputs → identical outputs (no random state unless scatter > 0)
+- **Empty input:** Zero grains → returns zero-length silent buffer
+- **Single grain:** One grain position → output contains one windowed grain
+- **Very high density:** density=500 → produces many overlapping grains without buffer overflow
+- **Determinism:** Same inputs → identical outputs
+- **Normalization:** Overlapping grains that would clip → output peak ≤ 1.0
 
 **`src/grain-collection.test.ts`** (new or extended):
 - **bounce() calls callback:** Verify `bounce()` invokes the injected callback with correct args
 - **bounce() passes options:** Verify options are forwarded
 - **bounce() on filtered collection:** Filter grains, then bounce — verify only kept grain positions are used
+- **bounce() on empty collection:** Returns error or zero-length sample
+- **bounce() without callback:** Throws descriptive error
+- **filter() preserves position alignment:** After filter, grainPositions correspond 1:1 with remaining grains
+- **Input validation:** pitch < 0.25 or > 4.0, negative density, duration ≤ 0 — verify rejection or clamping
 
 **Updates to existing test files:**
-- `src/ipc-contract.test.ts` — Add `BounceGrains` channel to contract tests
-- `src/bounce-api.test.ts` — Update help coverage for `grains` (renamed from `granularize`), add `bounce`
-- `src/results-sample.test.ts` — Rename `granularize` references to `grains`, add `GrainCollectionPromise.bounce()` proxy test
+- `src/ipc-contract.test.ts` — Add `BounceGrains` channel (`["BounceGrains", "bounce-grains"]`) to contract tests
+- `src/bounce-api.test.ts` — Update help coverage for `grains` (renamed from `granularize`), add `bounce` help test
+- `src/results-sample.test.ts` — Rename `granularize` references to `grains`, add `GrainCollectionPromise.bounce()` proxy test:
+  ```
+  test("GrainCollectionPromise.bounce() proxies to resolved GrainCollection.bounce()")
+  ```
 
 ### E2E Tests
 
@@ -348,9 +404,10 @@ None. No new dependencies, no binding.gyp changes, no tsconfig changes.
 | `granularize()` → `grains()` rename breaks user scripts | Breaking change | This is pre-1.0 software; document in changelog. Clean rename with no ambiguity. |
 | Large file memory usage | High memory for long files | Output buffer is the only large allocation; source is already in memory. Could add streaming for files > 5 minutes in a future iteration. |
 | Audio artifacts at grain boundaries | Poor audio quality | Hann window default with proper overlap-add eliminates discontinuities. Unit tests verify smooth output. |
+| Aliasing at extreme pitch values | Audio quality degradation | Linear interpolation without anti-aliasing is acceptable for initial release. Document as known limitation. Future: add lowpass before downsampled reads for pitch > 2.0. |
 | Worker process blocking | UI freeze during long renders | Computation runs in the granularize worker (separate process via JSON-RPC). Main process stays responsive. |
 | PCM transfer overhead (worker↔main) | Slow for large files | JSON-RPC serializes as `number[]`. For typical files (< 2 minutes) this is fine. Could optimize with SharedArrayBuffer later. |
-| GrainCollection constructor change breaks callers | Regression | All callers are internal (sample-namespace.ts). Single point of change. |
+| GrainCollection constructor change breaks callers | Regression | All callers are internal (sample-namespace.ts). Single point of change. Update filter() to forward new fields. |
 
 ## Task Graph
 
