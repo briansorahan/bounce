@@ -12,23 +12,40 @@ Bounce currently supports granular synthesis through two paths:
 1. **`sample.granularize()`** — Decomposes a sample into individual grains stored as derived samples. Returns a `GrainCollection` of separate `SampleResult` objects. This is an analysis/extraction tool.
 2. **`inst.granular()`** — Creates a real-time granular instrument that must be played with `noteOn`/`noteOff`. This is a performance tool.
 
-Neither path provides a simple audio-editor-style workflow: "take this sample, run it through granular synthesis with these parameters, give me back a new sample." Users who want to apply granular processing as an effect — time-stretching, texture creation, grain density manipulation — must set up an instrument, play notes, and record the output. This is cumbersome for sound design and batch processing workflows.
+Neither path provides a way to **resynthesize** grains back into a single processed sample. Users who want to apply granular processing as an effect — time-stretching, texture creation, grain density manipulation — must set up an instrument, play notes, and record the output. This is cumbersome for sound design and batch processing workflows.
 
-**User need:** A function like `sn.granularize(sample, { grainSize: 50, density: 4, pitch: 1.2 })` that returns a new `SampleResult` — playable, saveable, and chainable with other operations.
+**User need:** After decomposing a sample into grains, call `grains.bounce({ density: 20, pitch: 1.2 })` to resynthesize the grains into a new `SampleResult` — playable, saveable, and chainable with other operations.
 
 ## Background
 
-The distinction between "instrument" and "effect" workflows is fundamental in audio software:
+The natural workflow is a two-step pipeline:
 
-- **Instrument workflow:** Create instrument → load sample → play notes → hear output in real-time. Output is ephemeral unless explicitly recorded.
-- **Effect/editor workflow:** Select sample → apply processing → get new sample. Output is persistent and deterministic.
+```typescript
+const grains = sample.grains({ grainSize: 50 })  // step 1: decompose
+const result = grains.bounce({ density: 20, pitch: 1.2, duration: 10 })  // step 2: resynthesize
+```
 
-Bounce's REPL already has the effect workflow pattern for other operations (e.g., `sample.slice()` creates new samples from slice points). Granular synthesis is the missing piece — it should feel like applying an effect, not performing an instrument.
+Or fully chained:
 
-**Key design decision (confirmed with user):**
-- Pure processing function: takes a sample + parameters, returns a new `SampleResult`
+```typescript
+const res = sn.load("foo").grains().bounce({ pitch: 1.2 })
+vis.waveform(res).show()
+res.play()
+```
+
+This separates concerns cleanly:
+- **Grain extraction** (`grains()`) controls *what* grains are extracted — grain size, hop, jitter, silence filtering
+- **Resynthesis** (`bounce()`) controls *how* grains are reassembled — density, pitch, envelope, output duration
+
+The intermediate `GrainCollection` is inspectable and filterable, so users can curate grains before resynthesizing. This composability is a strength over a single monolithic "granular effect" function.
+
+**Key design decisions (confirmed with user):**
+- Rename existing `sample.granularize()` → `sample.grains()` (shorter, cleaner)
+- `bounce()` is a method on `GrainCollection`, not a new top-level `sn.*` method
+- `GrainCollectionPromise` must proxy `bounce()` so chaining works without `await`
 - Output duration matches input by default, but can be overridden (enables time-stretching)
 - No real-time preview — process and return
+- Name "bounce" is on-brand with the application name
 
 ## Related Work / Prior Art
 
@@ -44,39 +61,37 @@ Bounce's REPL already has the effect workflow pattern for other operations (e.g.
 
 | Parameter | Paul Stretch | Granulator II | Cecilia5 | Our Proposal |
 |-----------|-------------|--------------|----------|-------------|
-| Grain size | ✓ | ✓ | ✓ | ✓ |
-| Density/overlap | ✓ | ✓ | ✓ | ✓ |
-| Pitch | ✗ | ✓ | ✓ | ✓ |
-| Position scatter | ✗ | ✓ (spray) | ✓ | ✓ |
-| Window/envelope | ✓ | ✗ (fixed Hann) | ✓ | ✓ |
-| Time stretch | ✓ (primary) | ✗ | ✓ | ✓ (via duration) |
+| Grain size | ✓ | ✓ | ✓ | ✓ (in granularize step) |
+| Density/overlap | ✓ | ✓ | ✓ | ✓ (in bounce step) |
+| Pitch | ✗ | ✓ | ✓ | ✓ (in bounce step) |
+| Position scatter | ✗ | ✓ (spray) | ✓ | ✓ (in granularize step) |
+| Window/envelope | ✓ | ✗ (fixed Hann) | ✓ | ✓ (in bounce step) |
+| Time stretch | ✓ (primary) | ✗ | ✓ | ✓ (via duration in bounce step) |
 | Reverse grains | ✗ | ✗ | ✓ | Deferred |
 
 ## FluCoMa Algorithm Details
 
-This feature does not directly use FluCoMa algorithms. It reuses the existing grain computation infrastructure in `GranularizeService.computeGrains()` and adds an overlap-add resynthesis step.
-
-However, the output samples can be further analyzed with FluCoMa tools (MFCC, spectral shape, etc.), making this a natural part of the corpus analysis pipeline.
+This feature does not directly use FluCoMa algorithms. It adds an overlap-add resynthesis step to the existing `GrainCollection`. However, the output samples can be further analyzed with FluCoMa tools (MFCC, spectral shape, etc.), making this a natural part of the corpus analysis pipeline.
 
 ## Technical Constraints
 
 ### Existing Infrastructure to Reuse
 
-1. **`computeGrains()` in `src/electron/services/granularize/index.ts`** — Pure synchronous function that computes grain start positions, applies jitter, filters silent grains, and derives hashes. This handles the "analysis" half of the effect.
+1. **`GrainCollection`** (`src/renderer/grain-collection.ts`) — The class that will gain the new `bounce()` method. Already stores grain references, source hash, and supports filtering.
 
-2. **Audio resolver** (`src/electron/audio-resolver.ts`) — Resolves sample hashes to PCM data. Handles raw, derived, recorded, and freesound sample types.
+2. **`computeGrains()` in `src/electron/services/granularize/index.ts`** — Pure synchronous function that computes grain start positions, applies jitter, filters silent grains, and derives hashes. The grain positions stored in `GrainCollection` were computed by this function.
 
-3. **Derived sample storage** — Database schema already supports `sample_type='derived'` for programmatically-created samples.
+3. **Audio resolver** (`src/electron/audio-resolver.ts`) — Resolves sample hashes to PCM data. Handles raw, derived, recorded, and freesound sample types.
 
-4. **IPC contract** — Existing `granularize-sample` channel and RPC infrastructure.
+4. **Derived sample storage** — Database schema already supports `sample_type='derived'` for programmatically-created samples.
 
-5. **`GranularizeOptions` interface** — Already defined in `src/shared/ipc-contract.ts` and `src/shared/rpc/granularize.rpc.ts`.
+5. **IPC contract** — Existing `granularize-sample` channel and RPC infrastructure.
 
 ### What Needs to Be Built
 
-The **resynthesis engine** — the core new code. Given grain positions from `computeGrains()`, reconstruct a single output buffer by:
+The **resynthesis engine** — the core new code. Given grain audio data, reconstruct a single output buffer by:
 
-1. Extracting each grain from the source PCM
+1. Resolving each grain's audio data from the source sample
 2. Applying a window envelope (Hann, Hamming, Triangle, or Tukey)
 3. Optionally pitch-shifting each grain (via playback rate / linear interpolation)
 4. Placing grains into the output buffer at computed positions (overlap-add)
@@ -85,11 +100,10 @@ The **resynthesis engine** — the core new code. Given grain positions from `co
 ### Architecture Fit
 
 This fits cleanly into the three-process model:
-- **Main process** handles the computation (same as existing `granularize-sample` handler)
-- **Renderer** calls the new method and receives a `SampleResult`
+- **Renderer** calls `grains.bounce()` which sends an IPC request
+- **Main process** resolves source audio, delegates resynthesis computation
+- **Worker** (existing granularize worker) performs the overlap-add resynthesis
 - **Audio engine** is not involved (offline processing, not real-time)
-
-The computation can run in the existing granularize worker process (JSON-RPC over stdio) to avoid blocking the main process for large files.
 
 ## Audio Processing Considerations
 
@@ -109,12 +123,15 @@ The standard approach for granular resynthesis is overlap-add (OLA):
 
 ### Grain Scheduling for Output
 
-The existing `computeGrains()` uses `hopSize` to space grain *read* positions in the source. For the effect, we need to distinguish:
+The grains in `GrainCollection` already have defined positions in the source. The `bounce()` method needs to determine where to place each grain in the *output*:
 
-- **Source positions** (where to read grains from the source): Controlled by existing parameters (`startTime`, `endTime`, `hopSize`, `jitter`)
-- **Output positions** (where to place grains in the output): Determined by `density` and output duration
+- **Output placement interval:** `outputHop = sampleRate / density` samples between grains
+- When `outputDuration` equals input duration and density matches the natural hop rate, the output sounds like a granular reconstruction of the input
+- When they differ, you get time-stretching or density effects
 
-When `outputDuration` equals input duration and density matches the natural hop rate, the output sounds like a granular reconstruction of the input. When they differ, you get time-stretching or density effects.
+### Source Grain Selection
+
+With N source grains and M output grain slots, source grains are selected by linearly mapping output position to source grain index. This naturally handles time-stretching: longer output = each source grain used multiple times.
 
 ### Pitch Shifting
 
@@ -139,46 +156,40 @@ Output sample rate always matches input sample rate. No resampling needed.
 
 ### REPL API Surface
 
-**New method on `SampleResult`:**
+**New method on `GrainCollection`:**
 ```typescript
-sample.granularizeEffect(options?: GranularizeEffectOptions): SamplePromise
+grains.bounce(options?: BounceGrainsOptions): SamplePromise
 ```
 
-This returns a `SamplePromise` (not a `GrainCollection`), consistent with other sample processing methods. The result is a single new sample, not a collection of grains.
-
-**Namespace-level convenience:**
-```typescript
-sn.granularizeEffect(source?, options?): SamplePromise
-```
-
-Follows the existing overloaded pattern where the source can be a sample, promise, hash, or omitted (uses current audio).
+This returns a `SamplePromise` (not another `GrainCollection`), consistent with other sample-producing methods.
 
 ### REPL Interface Contract
 
-- `sn.granularizeEffect.help()` — must document all parameters with defaults and ranges
+- `grains.bounce.help()` — must document all parameters with defaults and ranges
 - The returned `SampleResult` uses the existing `toString()` display — no new result type needed
-- Tab completion for `GranularizeEffectOptions` keys
+- Tab completion for `BounceGrainsOptions` keys
 
 ### Terminal Output
 
 Processing feedback via `terminal.writeln()`:
 ```
-Granularize effect: 500 grains, 50ms @ 20/s, pitch 1.2x → 3.5s output
+Bounce: 500 grains → 50ms @ 20/s, pitch 1.2x → 3.5s
 ```
 
 The returned `SampleResult` displays normally (hash, duration, channels, sample rate).
 
 ## Cross-Platform Considerations
 
-No platform-specific concerns. All computation is pure TypeScript/JavaScript math operating on `Float32Array` buffers. The existing cross-platform infrastructure for sample storage and IPC handles the rest.
+No platform-specific concerns. All computation is pure TypeScript/JavaScript math operating on `Float32Array` buffers.
 
 ## Open Questions
 
 All resolved during user discussion:
 
-1. ~~Should this be a real-time preview or offline render?~~ → **Offline render** (pure function, returns new sample)
-2. ~~Should output duration match input?~~ → **Match by default, allow override**
-3. ~~Where does computation run?~~ → Main process or existing worker, same as `granularize-sample`
+1. ~~Should this be a top-level `sn.*` method or a method on `GrainCollection`?~~ → **Method on `GrainCollection`** — composable pipeline: `sample.granularize().bounce()`
+2. ~~What should the method be called?~~ → **`bounce()`** — short, on-brand
+3. ~~Should output duration match input?~~ → **Match by default, allow override**
+4. ~~Where does computation run?~~ → Main process or existing worker, same as `granularize-sample`
 
 ## Research Findings
 
@@ -186,22 +197,29 @@ All resolved during user discussion:
 
 2. **Overlap-add is the right approach.** It's well-understood, deterministic, and efficient for offline granular resynthesis.
 
-3. **The existing `GranularizeOptions` needs extension** with new parameters: `density`, `pitch`, `envelope`, and `duration` (output duration). These don't conflict with the existing analysis parameters.
+3. **Adding `bounce()` to `GrainCollection` is the cleanest design.** It extends the existing granularize pipeline without adding new top-level API surface. The two-step workflow (grains → bounce) separates extraction concerns from resynthesis concerns.
 
-4. **A new options type (`GranularizeEffectOptions`) is cleaner** than extending `GranularizeOptions`, since the semantics differ (effect vs. analysis). The effect options include parameters that don't apply to grain extraction (pitch, envelope, output duration) and exclude parameters that don't apply to the effect (normalize per-grain, silence threshold for filtering).
+4. **Renaming `granularize()` to `grains()` is a breaking change** but is worthwhile for a cleaner API. All references in `SampleResult`, `SamplePromise`, `CurrentSamplePromise`, `sample-namespace.ts`, `repl-environment.d.ts`, `repl-registry.generated.ts`, `opts-docs.ts`, and tests need updating.
 
-5. **TypeScript implementation is sufficient.** The overlap-add resynthesis is straightforward math on `Float32Array` — no need for C++ native code. This keeps the feature simpler to maintain and test.
+5. **A new options type (`BounceGrainsOptions`) is needed** for the resynthesis parameters: `density`, `pitch`, `envelope`, and `duration`. These don't overlap with `GranularizeOptions`.
 
-6. **The method name should distinguish from existing `granularize()`** to avoid confusion. `granularizeEffect()` is clear: it applies granular synthesis as an effect and returns a processed sample.
+6. **TypeScript implementation is sufficient.** The overlap-add resynthesis is straightforward math on `Float32Array` — no need for C++ native code.
+
+7. **GrainCollection needs access to IPC** to send audio data to the worker for resynthesis. Currently it's a pure data class. It will need a reference to `window.electron` (or a callback) to perform the bounce operation.
+
+8. **`GrainCollectionPromise` must proxy `bounce()`** so that `sample.grains().bounce()` chains without an explicit `await`. This follows the same pattern `SamplePromise` uses to proxy `SampleResult` methods.
 
 ## Next Steps
 
 In the PLAN phase:
 
-1. Define the `GranularizeEffectOptions` interface with all parameters, defaults, and ranges
+1. Define the `BounceGrainsOptions` interface with all parameters, defaults, and ranges
 2. Design the resynthesis engine (overlap-add algorithm)
-3. Define the RPC contract extension
-4. Plan the IPC flow and handler wiring
-5. Specify REPL integration (help, tab completion, display)
-6. Define testing strategy (unit tests for the engine, Playwright for REPL)
-7. Create beads task graph with dependencies
+3. Design how `GrainCollection` gains access to IPC (constructor injection or callback)
+4. Plan the `granularize()` → `grains()` rename across all files
+5. Plan `GrainCollectionPromise.bounce()` proxy
+6. Define the RPC contract extension
+7. Plan the IPC flow and handler wiring
+8. Specify REPL integration (help, tab completion, display)
+9. Define testing strategy (unit tests for the engine, Playwright for REPL)
+10. Create beads task graph with dependencies
