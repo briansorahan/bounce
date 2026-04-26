@@ -87,9 +87,9 @@ export type _SepOptions = Record<string, never>;
 export type _MFCCOptions = Record<string, never>;
 
 /**
- * @opts GranularizeOptions
+ * @opts GrainsOptions
  * Options for grain decomposition.
- * @usedby granularize
+ * @usedby grains
  * @prop {number} grainSize Grain duration in seconds (default: 0.1)
  * @prop {number} hopSize Hop between grain onsets in seconds (default: 0.05)
  * @prop {number} jitter Random timing jitter 0–1 (default: 0)
@@ -98,7 +98,7 @@ export type _MFCCOptions = Record<string, never>;
  * @prop {boolean} normalize Normalize each grain amplitude (default: false)
  * @prop {number} silenceThreshold Skip grains below this RMS level 0–1 (default: 0)
  */
-export type _GranularizeOptions = Record<string, never>;
+export type _GrainsOptions = Record<string, never>;
 
 /**
  * @opts AmpSliceOptions
@@ -173,3 +173,15 @@ export type _MidiRecordOptions = Record<string, never>;
  * @prop {boolean} overwrite Replace an existing sample with the same name (default: false)
  */
 export type _RecordOptions = Record<string, never>;
+
+/**
+ * @opts BounceGrainsOptions
+ * Options for bouncing a GrainCollection to an audio file.
+ * @usedby bounce
+ * @prop {number} density Number of grains per second in the output (default: 20)
+ * @prop {number} pitch Playback rate multiplier, 0.25–4.0 (default: 1.0)
+ * @prop {number} envelope Window envelope type: 0=Hann, 1=Hamming, 2=Triangle, 3=Tukey (default: 0)
+ * @prop {number} duration Output duration in seconds (default: same as input)
+ * @prop {boolean} normalize Peak-normalize output to prevent clipping (default: true)
+ */
+export type _BounceGrainsOptions = Record<string, never>;

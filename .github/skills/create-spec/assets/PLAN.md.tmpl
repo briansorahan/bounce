@@ -104,6 +104,7 @@ An agent executing implementation work must run this checklist before closing th
 npm test                    # All unit tests must pass — fix failures before proceeding
 npm run lint                # No lint errors — fix before proceeding
 npm run build:electron      # TypeScript must compile cleanly
+npm ci --ignore-scripts     # Verify package-lock.json is in sync — if this fails, run npm install and commit the updated lockfile
 ./build.sh                  # Full Dockerized Playwright suite — mandatory, no exceptions
 npm run dev:electron        # Manual smoke test
 ```

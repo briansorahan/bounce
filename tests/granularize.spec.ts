@@ -37,10 +37,10 @@ function createTestWavFile(filePath: string, durationSeconds = 1.0) {
 }
 
 test.describe("Granularize", () => {
-  test("granularize returns GrainCollection with correct length", async ({ window, sendCommand }) => {
+  test("grains returns GrainCollection with correct length", async ({ window, sendCommand }) => {
     test.setTimeout(60000);
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
-    const testFile = path.join(tmpDir, "test-granularize.wav");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-grains-"));
+    const testFile = path.join(tmpDir, "test-grains.wav");
     createTestWavFile(testFile, 1.0);
 
     await sendCommand(`const samp = sn.read("${testFile}")`);
@@ -48,7 +48,7 @@ test.describe("Granularize", () => {
     // 1s sample / 100ms grains = 10 grains; disable silence filtering so sine wave grains aren't skipped
     // Call without assignment so the return value is printed to the terminal
     await sendCommand(
-      `samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
+      `samp.grains({ grainSize: 100, silenceThreshold: -100 })`,
     );
 
     await expect(window.locator(".xterm-rows")).toContainText("Granularized", {
@@ -60,7 +60,7 @@ test.describe("Granularize", () => {
 
     // Assign to gc for method tests (result not printed since it's a declaration)
     await sendCommand(
-      `const gc = samp.granularize({ grainSize: 100, silenceThreshold: -100 })`,
+      `const gc = samp.grains({ grainSize: 100, silenceThreshold: -100 })`,
     );
 
     // Verify length() via REPL
@@ -86,9 +86,9 @@ test.describe("Granularize", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("granularize rejects samples longer than 20 seconds", async ({ window, sendCommand }) => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-granularize-"));
-    const testFile = path.join(tmpDir, "test-granularize-long.wav");
+  test("grains rejects samples longer than 20 seconds", async ({ window, sendCommand }) => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bounce-grains-"));
+    const testFile = path.join(tmpDir, "test-grains-long.wav");
     createTestWavFile(testFile, 0.5); // short file; we fake the check via a hash manipulation test
 
     // Pass a non-existent hash -- should surface a clear error in the terminal

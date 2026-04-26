@@ -1,7 +1,10 @@
 import { ipcMain } from "electron";
-import { GranularizeOptions } from "../database";
+import * as crypto from "crypto";
+import { GrainsOptions } from "../database";
 import { BounceError } from "../../shared/bounce-error.js";
 import { resolveAudioData } from "../audio-resolver";
+import { GrainsService } from "../services/granularize";
+import type { BounceGrainsOptions } from "../../shared/rpc/granularize.rpc";
 import type { HandlerDeps } from "./register";
 
 export function registerSampleHandlers(deps: HandlerDeps): void {
@@ -145,17 +148,64 @@ export function registerSampleHandlers(deps: HandlerDeps): void {
   });
 
   ipcMain.handle(
-    "granularize-sample",
-    async (_event, sourceHash: string, options?: GranularizeOptions) => {
+    "grains-sample",
+    async (_event, sourceHash: string, options?: GrainsOptions) => {
       try {
         if (!deps.dbManager) {
           throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
         }
         const resolved = await resolveAudioData(deps.dbManager, sourceHash);
-        return deps.dbManager.granularize(sourceHash, options ?? {}, resolved.audioData);
+        return deps.dbManager.grains(sourceHash, options ?? {}, resolved.audioData);
       } catch (error) {
         if (error instanceof BounceError) throw error;
-        throw new BounceError("SAMPLE_GRANULARIZE_FAILED", `Failed to granularize sample: ${error instanceof Error ? error.message : String(error)}`);
+        throw new BounceError("SAMPLE_GRAINS_FAILED", `Failed to grains sample: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+  );
+
+  const grainsService = new GrainsService();
+
+  ipcMain.handle(
+    "bounce-grains",
+    async (
+      _event,
+      sourceHash: string,
+      grainPositions: number[],
+      grainSizeSamples: number,
+      options?: BounceGrainsOptions,
+    ) => {
+      try {
+        if (!deps.dbManager) {
+          throw new BounceError("SAMPLE_DB_NOT_READY", "Database not initialized");
+        }
+        const resolved = await resolveAudioData(deps.dbManager, sourceHash);
+        const { audioData, sampleRate } = resolved;
+        const sourceSample = deps.dbManager.getSampleByHash(sourceHash);
+        if (!sourceSample) {
+          throw new BounceError("SAMPLE_NOT_FOUND", `Source sample not found: ${sourceHash}`);
+        }
+        const result = await grainsService.bounceGrains({
+          sourceHash,
+          audioData: Array.from(audioData),
+          sampleRate,
+          channels: sourceSample.channels,
+          duration: sourceSample.duration,
+          grainPositions,
+          grainSizeSamples,
+          options: options ?? {},
+        });
+        const pcm = new Float32Array(result.outputData);
+        const audioBuffer = Buffer.from(pcm.buffer);
+        const outputHash = crypto.createHash("sha256").update(audioBuffer).digest("hex");
+        deps.dbManager.storeRecordedSample(outputHash, outputHash.substring(0, 16), audioBuffer, result.sampleRate, result.channels, result.duration);
+        const stored = deps.dbManager.getSampleByHash(outputHash);
+        if (!stored) {
+          throw new BounceError("BOUNCE_GRAINS_STORE_FAILED", "Failed to retrieve stored bounce-grains sample");
+        }
+        return stored;
+      } catch (error) {
+        if (error instanceof BounceError) throw error;
+        throw new BounceError("BOUNCE_GRAINS_FAILED", `Failed to bounce grains: ${error instanceof Error ? error.message : String(error)}`);
       }
     },
   );

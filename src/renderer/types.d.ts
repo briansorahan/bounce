@@ -161,6 +161,14 @@ interface FeatureOptions {
   [key: string]: unknown;
 }
 
+interface BounceGrainsOptions {
+  density?: number;
+  pitch?: number;
+  envelope?: number;
+  duration?: number;
+  normalize?: boolean;
+}
+
 interface DebugLogEntry {
   id: number;
   level: string;
@@ -299,15 +307,23 @@ interface Window {
     nx: (args: string[]) => Promise<{ success: boolean; message: string }>;
     onOverlayNMF: (callback: (data: NMFVisualizationData) => void) => void;
     transpileTypeScript: (source: string) => Promise<string>;
-    granularizeSample: (
+    grainsSample: (
       sourceHash: string,
-      options?: GranularizeOptions,
+      options?: GrainsOptions,
     ) => Promise<{
       grainHashes: Array<string | null>;
       featureHash: string;
       sampleRate: number;
       grainDuration: number;
+      grainStartPositions: number[];
+      grainSizeSamples: number;
     }>;
+    bounceGrains: (
+      sourceHash: string,
+      grainPositions: number[],
+      grainSizeSamples: number,
+      options?: BounceGrainsOptions,
+    ) => Promise<SampleData>;
     corpusBuild: (
       sourceHash: string,
       featureHash: string,

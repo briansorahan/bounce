@@ -85,7 +85,7 @@ const KNOWN_OPTION_KEYS: Record<string, string[]> = {
     "numCoeffs", "numBands", "minFreq", "maxFreq",
     "windowSize", "fftSize", "hopSize", "sampleRate",
   ],
-  GranularizeOptions: [
+  GrainsOptions: [
     "grainSize", "hopSize", "jitter", "startTime", "endTime",
     "normalize", "silenceThreshold",
   ],
@@ -105,4 +105,6 @@ const KNOWN_OPTION_KEYS: Record<string, string[]> = {
   RecordOptions: ["duration", "overwrite"],
   // NxOptions
   NxOptions: ["components"],
+  // BounceGrains options
+  BounceGrainsOptions: ["density", "pitch", "envelope", "duration", "normalize"],
 };

@@ -16,6 +16,60 @@ export interface ReplRegistryEntry {
 }
 
 export const replRegistry: Record<string, ReplRegistryEntry> = {
+  "GrainCollection.length": {
+    summary: "Number of stored (non-silent) grains.",
+    visibility: "porcelain",
+    returns: "number",
+    params: [],
+  },
+  "GrainCollection.forEach": {
+    summary: "Iterate over stored grains sequentially, awaiting each callback.",
+    visibility: "porcelain",
+    returns: "Promise<void>",
+    params: [
+        {
+            "name": "callback",
+            "summary": "Function called for each non-null grain.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "GrainCollection.map": {
+    summary: "Transform stored grains to an array of values.",
+    visibility: "porcelain",
+    returns: "T[]",
+    params: [
+        {
+            "name": "callback",
+            "summary": "Function that transforms each non-null grain.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "GrainCollection.filter": {
+    summary: "Return a new GrainCollection containing only grains that pass the predicate.",
+    visibility: "porcelain",
+    returns: "GrainCollection",
+    params: [
+        {
+            "name": "predicate",
+            "summary": "Function that returns true for grains to keep.",
+            "kind": "plain"
+        }
+    ],
+  },
+  "GrainCollection.bounce": {
+    summary: "Resynthesize grains into a new sample via overlap-add.",
+    visibility: "porcelain",
+    returns: "SamplePromise",
+    params: [
+        {
+            "name": "options",
+            "summary": "Bounce options: density, pitch, envelope, duration, normalize.",
+            "kind": "options"
+        }
+    ],
+  },
   "SliceFeature.slice": {
     summary: "Re-run the onset slicer with updated options.",
     visibility: "porcelain",
@@ -153,14 +207,14 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
         }
     ],
   },
-  "Sample.granularize": {
+  "Sample.grains": {
     summary: "Create a GrainCollection for granular synthesis.",
     visibility: "porcelain",
     returns: "GrainCollectionPromise",
     params: [
         {
             "name": "options",
-            "summary": "Granularize options.",
+            "summary": "Grains options.",
             "kind": "options"
         }
     ],
@@ -463,9 +517,9 @@ export const replRegistry: Record<string, ReplRegistryEntry> = {
     ],
   },
   "fs.ls": {
-    summary: "List directory contents (dotfiles hidden). Directories in blue, audio files in green. Capped at 200 entries.",
+    summary: "List directory contents. Directories in blue, audio files in green.",
     visibility: "porcelain",
-    returns: "LsResultPromise",
+    returns: "LsResultPromise (entries are sorted alphabetically, hidden by default, max 200)",
     params: [
         {
             "name": "dirPath",
@@ -976,9 +1030,9 @@ export const replNamespaces: Record<string, ReplNamespaceEntry> = {
     visibility: "porcelain",
     methods: {
       "ls": {
-        summary: "List directory contents (dotfiles hidden). Directories in blue, audio files in green. Capped at 200 entries.",
+        summary: "List directory contents. Directories in blue, audio files in green.",
         visibility: "porcelain",
-        returns: "LsResultPromise",
+        returns: "LsResultPromise (entries are sorted alphabetically, hidden by default, max 200)",
         params: [
             {
                   "name": "dirPath",
@@ -1485,6 +1539,66 @@ export interface ReplTypeEntry {
 }
 
 export const replTypes: Record<string, ReplTypeEntry> = {
+  "GrainCollection": {
+    name: "GrainCollection",
+    summary: "A collection of grains extracted from a sample, ready for resynthesis.",
+    methods: {
+      "length": {
+        summary: "Number of stored (non-silent) grains.",
+        visibility: "porcelain",
+        returns: "number",
+        params: [],
+      },
+      "forEach": {
+        summary: "Iterate over stored grains sequentially, awaiting each callback.",
+        visibility: "porcelain",
+        returns: "Promise<void>",
+        params: [
+            {
+                  "name": "callback",
+                  "summary": "Function called for each non-null grain.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "map": {
+        summary: "Transform stored grains to an array of values.",
+        visibility: "porcelain",
+        returns: "T[]",
+        params: [
+            {
+                  "name": "callback",
+                  "summary": "Function that transforms each non-null grain.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "filter": {
+        summary: "Return a new GrainCollection containing only grains that pass the predicate.",
+        visibility: "porcelain",
+        returns: "GrainCollection",
+        params: [
+            {
+                  "name": "predicate",
+                  "summary": "Function that returns true for grains to keep.",
+                  "kind": "plain"
+            }
+      ],
+      },
+      "bounce": {
+        summary: "Resynthesize grains into a new sample via overlap-add.",
+        visibility: "porcelain",
+        returns: "SamplePromise",
+        params: [
+            {
+                  "name": "options",
+                  "summary": "Bounce options: density, pitch, envelope, duration, normalize.",
+                  "kind": "options"
+            }
+      ],
+      },
+    },
+  },
   "InstrumentResult": {
     name: "InstrumentResult",
     summary: "A sampler or granular instrument",
@@ -1668,14 +1782,14 @@ export const replTypes: Record<string, ReplTypeEntry> = {
             }
       ],
       },
-      "granularize": {
+      "grains": {
         summary: "Create a GrainCollection for granular synthesis.",
         visibility: "porcelain",
         returns: "GrainCollectionPromise",
         params: [
             {
                   "name": "options",
-                  "summary": "Granularize options.",
+                  "summary": "Grains options.",
                   "kind": "options"
             }
       ],

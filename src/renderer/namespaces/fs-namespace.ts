@@ -55,8 +55,8 @@ export class FsNamespace {
   // ── Public REPL-facing methods ────────────────────────────────────────────
 
   @describe({
-    summary: "List directory contents (dotfiles hidden). Directories in blue, audio files in green. Capped at 200 entries.",
-    returns: "LsResultPromise",
+    summary: "List directory contents. Directories in blue, audio files in green.",
+    returns: "LsResultPromise (entries are sorted alphabetically, hidden by default, max 200)",
   })
   @param("dirPath", {
     summary: "Path (absolute, relative, or ~). Defaults to cwd.",

@@ -230,10 +230,10 @@ test("AudioResult.nx rejects", async () => {
   );
 });
 
-test("AudioResult.granularize rejects", async () => {
+test("AudioResult.grains rejects", async () => {
   const audio = makeAudio();
   await assert.rejects(
-    async () => { await audio.granularize(); },
+    async () => { await audio.grains(); },
     /does not support granularization/,
   );
 });
@@ -482,7 +482,7 @@ test("SampleListResult.samples property exposes the sample array", () => {
 // ---------------------------------------------------------------------------
 
 test("GrainCollectionPromise.then resolves to the GrainCollection", async () => {
-  const gc = new GrainCollection([makeAudio("g1"), null], false, "sourcehash");
+  const gc = new GrainCollection([makeAudio("g1"), null], false, "sourcehash", [0], 1024);
   const gcp = new GrainCollectionPromise(Promise.resolve(gc));
   const result = await gcp;
   assert.equal(result.length(), 1, "only 1 non-null grain");
@@ -490,14 +490,12 @@ test("GrainCollectionPromise.then resolves to the GrainCollection", async () => 
 
 test("GrainCollectionPromise.length resolves to the non-null grain count", async () => {
   const grains = [makeAudio("g1"), makeAudio("g2"), null, makeAudio("g3")];
-  const gc = new GrainCollection(grains, false, "src");
-  const gcp = new GrainCollectionPromise(Promise.resolve(gc));
-  const len = await gcp.length();
-  assert.equal(len, 3);
+  const gc = new GrainCollection(grains, false, "src", [0, 1, 2], 1024);
+  assert.equal(gc.length(), 3);
 });
 
 test("GrainCollectionPromise.length is 0 for empty collection", async () => {
-  const gc = new GrainCollection([], false, "src");
+  const gc = new GrainCollection([], false, "src", [], 1024);
   const gcp = new GrainCollectionPromise(Promise.resolve(gc));
   assert.equal(await gcp.length(), 0);
 });
@@ -505,7 +503,7 @@ test("GrainCollectionPromise.length is 0 for empty collection", async () => {
 test("GrainCollectionPromise.map transforms each grain", async () => {
   const a1 = makeAudio("g1");
   const a2 = makeAudio("g2");
-  const gc = new GrainCollection([a1, a2], false, "src");
+  const gc = new GrainCollection([a1, a2], false, "src", [0, 1], 1024);
   const gcp = new GrainCollectionPromise(Promise.resolve(gc));
   const hashes = await gcp.map((grain) => grain.hash);
   assert.deepEqual(hashes, ["g1", "g2"]);
@@ -515,7 +513,7 @@ test("GrainCollectionPromise.filter returns a GrainCollectionPromise of matching
   const a1 = new AudioResult("g1", "g1", "/g1.wav", 44100, 0.1, 1);
   const a2 = new AudioResult("g2", "g2", "/g2.wav", 44100, 0.5, 1);
   const a3 = new AudioResult("g3", "g3", "/g3.wav", 44100, 1.0, 1);
-  const gc = new GrainCollection([a1, a2, a3], false, "src");
+  const gc = new GrainCollection([a1, a2, a3], false, "src", [0, 1, 2], 1024);
   const gcp = new GrainCollectionPromise(Promise.resolve(gc));
 
   const filtered = gcp.filter((grain) => grain.duration > 0.3);
@@ -528,7 +526,7 @@ test("GrainCollectionPromise.filter returns a GrainCollectionPromise of matching
 test("GrainCollectionPromise.forEach iterates all non-null grains", async () => {
   const a1 = makeAudio("g1");
   const a2 = makeAudio("g2");
-  const gc = new GrainCollection([a1, null, a2], false, "src");
+  const gc = new GrainCollection([a1, null, a2], false, "src", [0, 1], 1024);
   const gcp = new GrainCollectionPromise(Promise.resolve(gc));
 
   const visited: string[] = [];

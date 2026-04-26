@@ -39,7 +39,7 @@ interface MFCCOptions {
   sampleRate?: number;
 }
 
-interface GranularizeOptions {
+interface GrainsOptions {
   grainSize?: number;
   hopSize?: number;
   jitter?: number;
@@ -47,6 +47,14 @@ interface GranularizeOptions {
   endTime?: number;
   normalize?: boolean;
   silenceThreshold?: number;
+}
+
+interface BounceGrainsOptions {
+  density?: number;
+  pitch?: number;
+  envelope?: number;
+  duration?: number;
+  normalize?: boolean;
 }
 
 interface AmpSliceOptions {
@@ -110,7 +118,7 @@ declare class SampleResult extends BounceResult {
   display(): ReplValue<Promise<SampleResult>>;
   slice(options?: SliceOptions): ReplValue<Promise<BounceResult>>;
   sep(options?: SepOptions): ReplValue<Promise<BounceResult>>;
-  granularize(options?: GranularizeOptions): ReplValue<Promise<GrainCollection>>;
+  grains(options?: GrainsOptions): ReplValue<Promise<GrainCollection>>;
   onsetSlice(options?: AnalyzeOptions): ReplValue<Promise<SliceFeatureResult>>;
   ampSlice(options?: AmpSliceOptions): ReplValue<Promise<SliceFeatureResult>>;
   noveltySlice(options?: NoveltySliceOptions): ReplValue<Promise<SliceFeatureResult>>;
@@ -245,6 +253,7 @@ declare class GrainCollection extends BounceResult {
   forEach(callback: (grain: SampleResult, index: number) => void | Promise<void>): Promise<void>;
   map<T>(callback: (grain: SampleResult, index: number) => T): T[];
   filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection;
+  bounce(options?: BounceGrainsOptions): ReplValue<Promise<SampleResult>>;
 }
 
 interface SampleNamespace {

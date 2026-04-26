@@ -185,7 +185,7 @@ export class SampleNamespace implements SampleBinder {
         display: () => this.loadByHash(bound.hash),
         slice: (options) => this.sliceSamples(bound, options),
         sep: (options) => this.sepAudio(bound, options),
-        granularize: (options) => this.granularizeSample(bound, options),
+        grains: (options) => this.grainsSample(bound, options),
         onsetSlice: (options) => this.analyze(bound, options),
         ampSlice: (options) => this.analyzeAmpSlice(bound, options),
         noveltySlice: (options) => this.analyzeNoveltySlice(bound, options),
@@ -277,7 +277,7 @@ export class SampleNamespace implements SampleBinder {
       "    sample.mfcc()",
       "    sample.slice(options?)",
       "    sample.sep(options?)",
-      "    sample.granularize(options?)",
+      "    sample.grains(options?)",
       "",
       "  Type sample.loop.help() for loop usage details.",
     ].join("\n"));
@@ -1245,9 +1245,9 @@ export class SampleNamespace implements SampleBinder {
     );
   }
 
-  private async granularizeSample(
-    source?: string | SampleResult | PromiseLike<SampleResult> | GranularizeOptions,
-    options?: GranularizeOptions,
+  private async grainsSample(
+    source?: string | SampleResult | PromiseLike<SampleResult> | GrainsOptions,
+    options?: GrainsOptions,
   ): Promise<GrainCollection> {
     const resolvedSource = this.isPromiseLike<SampleResult>(source) ? await source : source;
     const isOptionsArg =
@@ -1255,7 +1255,7 @@ export class SampleNamespace implements SampleBinder {
       resolvedSource !== undefined &&
       typeof resolvedSource === "object" &&
       !(resolvedSource instanceof SampleResult);
-    const opts = isOptionsArg ? (resolvedSource as GranularizeOptions) : options;
+    const opts = isOptionsArg ? (resolvedSource as GrainsOptions) : options;
 
     let hash: string;
     if (typeof resolvedSource === "string") {
@@ -1269,7 +1269,7 @@ export class SampleNamespace implements SampleBinder {
 
     this.terminal.writeln("\x1b[36mGranularizing...\x1b[0m");
 
-    const result = await window.electron.granularizeSample(hash, opts);
+    const result = await window.electron.grainsSample(hash, opts);
 
     const grains: Array<SampleResult | null> = result.grainHashes.map(
       (grainHash: string | null) => {
@@ -1288,7 +1288,34 @@ export class SampleNamespace implements SampleBinder {
       },
     );
 
-    return new GrainCollection(grains, options?.normalize ?? false, hash);
+    const nonNullPositions: number[] = [];
+    for (let i = 0; i < result.grainHashes.length; i++) {
+      if (result.grainHashes[i] !== null) {
+        nonNullPositions.push(result.grainStartPositions[i]);
+      }
+    }
+
+    return new GrainCollection(
+      grains,
+      options?.normalize ?? false,
+      hash,
+      nonNullPositions,
+      result.grainSizeSamples,
+      async (sourceHash, positions, sizeSamples, bounceOpts) => {
+        const bounceResult = await window.electron.bounceGrains(sourceHash, positions, sizeSamples, bounceOpts);
+        return this.bindSample(
+          {
+            id: bounceResult.id,
+            hash: bounceResult.hash,
+            filePath: undefined,
+            sampleRate: bounceResult.sample_rate,
+            channels: bounceResult.channels,
+            duration: bounceResult.duration,
+          },
+          `\x1b[32mBounced: ${bounceResult.hash.substring(0, 8)}\x1b[0m`,
+        );
+      },
+    );
   }
 
   private async getAudioInputs(): Promise<AudioInputDevice[]> {
