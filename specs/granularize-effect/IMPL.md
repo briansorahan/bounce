@@ -1,0 +1,81 @@
+# Implementation: Granularize Effect (Audio Editor Workflow)
+
+**Spec:** specs/granularize-effect  
+**Beads Parent Issue:** bounce-e1f  
+**Created:** 2026-04-26  
+**Status:** In Progress
+
+## Agent Execution Protocol
+
+> **Read this first.** The main agent is the **orchestrator** — it does not write code. It runs waves of parallel sub-agents and verifies after each wave. Follow this loop autonomously without waiting for user prompts.
+
+### Wave Loop
+
+```
+1. bd ready → collect all currently unblocked task IDs for this spec
+2. If empty → run the Land the Plane Checklist in PLAN.md
+3. Spawn one sub-agent per ready task (in parallel)
+      Each sub-agent must:
+        a. bd update <id> --claim
+        b. Read the issue description fully before writing any code
+        c. Implement the task
+        d. Do NOT run tests — the orchestrator runs tests after the wave
+4. Wait for all sub-agents to complete
+5. npm test          ← orchestrator runs this; fix failures before proceeding
+6. npm run lint      ← orchestrator runs this; fix errors before proceeding
+7. If step 5 or 6 fails:
+        a. Spawn a sub-agent to diagnose and fix the failure
+        b. Go to step 5
+8. bd close <all task IDs from this wave>
+9. Go to step 1
+```
+
+If a sub-agent in step 3 reports it cannot complete its task (blocker, ambiguity, conflict), the orchestrator must resolve the issue before re-running the wave — do not close a task that was not completed.
+
+## Context
+
+<!-- Brief summary referencing key points from PLAN.md -->
+
+## Decisions Made
+
+<!-- Important decisions made during implementation that weren't in the plan.
+     Add entries here as they arise — do not wait until the end. -->
+
+## Deviations from Plan
+
+<!-- Where implementation diverged from plan and why.
+     Add entries here as they arise — do not wait until the end. -->
+
+## Flaws Discovered in Previous Phases
+
+<!-- Any issues found in RESEARCH.md or PLAN.md during implementation -->
+
+## Testing Results
+
+<!-- Test execution results, including which unit and/or Playwright tests covered REPL help() and returned-object display behavior when applicable -->
+
+---
+
+## Final Status
+
+<!-- When work is complete, summarize outcome -->
+
+**Completion Date:** {DATE}
+
+**Summary:**
+
+**Verification:**
+- [ ] `npm test` passes
+- [ ] `npm run lint` passes
+- [ ] `npm run build:electron` passes
+- [ ] `./build.sh` passes (full Dockerized Playwright suite — mandatory for every spec)
+- [ ] Manual smoke test complete
+- [ ] REPL help() coverage verified by unit and/or Playwright tests (if applicable)
+- [ ] REPL returned-object terminal summaries verified by unit and/or Playwright tests (if applicable)
+- [ ] `ARCHITECTURE.md` updated if applicable
+- [ ] Parent issue closed (`bd close {BEADS_PARENT_ID}`)
+- [ ] Changes pushed (`bd dolt push && git push`)
+
+**Known Limitations:**
+
+**Future Improvements:**
