@@ -1035,7 +1035,7 @@ export class DatabaseManager {
     sourceHash: string,
     options: GrainsOptions,
     sourceAudio: Float32Array,
-  ): { grainHashes: Array<string | null>; featureHash: string; sampleRate: number; grainDuration: number } {
+  ): { grainHashes: Array<string | null>; featureHash: string; sampleRate: number; grainDuration: number; grainStartPositions: number[]; grainSizeSamples: number } {
     const sample = this.getSampleByHash(sourceHash);
     if (!sample) {
       throw new Error(`Sample not found: ${sourceHash}`);
@@ -1074,7 +1074,9 @@ export class DatabaseManager {
       }
     }
 
-    return { grainHashes, featureHash, sampleRate, grainDuration };
+    const grainSizeSamples = Math.round((grainDuration * sampleRate));
+
+    return { grainHashes, featureHash, sampleRate, grainDuration, grainStartPositions, grainSizeSamples };
   }
 
   getDerivedSamples(

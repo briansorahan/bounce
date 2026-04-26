@@ -315,6 +315,8 @@ interface Window {
       featureHash: string;
       sampleRate: number;
       grainDuration: number;
+      grainStartPositions: number[];
+      grainSizeSamples: number;
     }>;
     bounceGrains: (
       sourceHash: string,

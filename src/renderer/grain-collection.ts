@@ -52,11 +52,14 @@ export class GrainCollection extends BounceResult {
   }
 
   /** Number of stored (non-silent) grains. */
+  @describe({ summary: "Number of stored (non-silent) grains.", returns: "number" })
   length(): number {
     return this.#grains.filter((g) => g !== null).length;
   }
 
   /** Iterate over stored grains sequentially, awaiting each callback. */
+  @describe({ summary: "Iterate over stored grains sequentially, awaiting each callback.", returns: "Promise<void>" })
+  @param("callback", { summary: "Function called for each non-null grain.", kind: "plain" })
   async forEach(
     callback: (grain: SampleResult, index: number) => void | Promise<void>,
   ): Promise<void> {
@@ -69,6 +72,8 @@ export class GrainCollection extends BounceResult {
   }
 
   /** Transform stored grains to an array of any type. */
+  @describe({ summary: "Transform stored grains to an array of values.", returns: "T[]" })
+  @param("callback", { summary: "Function that transforms each non-null grain.", kind: "plain" })
   map<T>(callback: (grain: SampleResult, index: number) => T): T[] {
     const results: T[] = [];
     let i = 0;
@@ -81,6 +86,8 @@ export class GrainCollection extends BounceResult {
   }
 
   /** Return a new GrainCollection containing only grains that pass the predicate. */
+  @describe({ summary: "Return a new GrainCollection containing only grains that pass the predicate.", returns: "GrainCollection" })
+  @param("predicate", { summary: "Function that returns true for grains to keep.", kind: "plain" })
   filter(
     predicate: (grain: SampleResult, index: number) => boolean,
   ): GrainCollection {

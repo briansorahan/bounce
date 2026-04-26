@@ -3,6 +3,14 @@
  * AUTO-GENERATED — do not edit by hand. Run `npm run generate:repl-artifacts`.
  */
 
+interface GrainCollection {
+  length(): number;
+  forEach(callback: (grain: SampleResult, index: number) => void | Promise<void>): Promise<void>;
+  map(callback: (grain: SampleResult, index: number) => T): T[];
+  filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection;
+  bounce(options?: BounceGrainsOptions): SamplePromise;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface InstrumentResult {
 }
