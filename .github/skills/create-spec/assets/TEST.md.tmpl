@@ -1,0 +1,83 @@
+# Test: {FEATURE_NAME}
+
+**Spec:** specs/{SLUG}
+**Bean:** {BEAN_ID}
+**Created:** {DATE}
+**Status:** [In Progress | Complete]
+
+---
+
+## Automated Checks
+
+Run in order. Fix failures before proceeding to the next step.
+
+```bash
+npm test                # All vitest tests must pass — unit tests AND workflow tests
+npm run lint            # Zero lint errors
+npm run build:electron  # TypeScript must compile cleanly
+```
+
+- [ ] `npm test` passes
+- [ ] `npm run lint` passes
+- [ ] `npm run build:electron` passes
+
+---
+
+## Lockfile
+
+```bash
+npm install
+git diff package-lock.json  # Must be clean (or committed if deps changed)
+```
+
+- [ ] `package-lock.json` is current and committed
+
+---
+
+## Documentation
+
+Check each condition. Update the relevant document if the condition is true.
+
+| Condition | Document | Updated? |
+|-----------|----------|----------|
+| Service boundary added or changed | `ARCHITECTURE.md` — service table | [ ] |
+| RPC method added or modified | `ARCHITECTURE.md` — RPC/IPC channel table | [ ] |
+| Database schema changed | `ARCHITECTURE.md` — schema table | [ ] |
+| REPL surface added or changed | Unit tests cover `help()` and terminal summaries | [ ] |
+| VISION.md technical principles rendered stale | `VISION.md` | [ ] |
+
+---
+
+## Workflow Test Coverage
+
+- [ ] `tests/workflows/` includes at least one scenario exercising the primary workflow added or
+  modified by this spec
+- [ ] The scenario uses `bootServices()` and asserts on a meaningful outcome
+- [ ] If a new service was added, it is wired into `bootServices()` in `tests/workflows/helpers.ts`
+
+---
+
+## Final Steps
+
+```bash
+beans update {BEAN_ID} -s completed
+git add -A && git commit -m "feat({SLUG}): ..."
+git push
+```
+
+- [ ] Parent bean closed
+- [ ] Changes pushed
+
+---
+
+## Final Status
+
+**Completion Date:**
+
+**Summary:**
+<!-- What was built. What was deferred and to which follow-up bean. -->
+
+**Known Limitations:**
+
+**Follow-up Work:**
+<!-- List any follow-up beans created during circuit-breaking or discovered during TEST. -->

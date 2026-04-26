@@ -1,0 +1,106 @@
+# Shape: {FEATURE_NAME}
+
+**Spec:** specs/{SLUG}
+**Bean:** {BEAN_ID}
+**Created:** {DATE}
+**Appetite:** [Small (~1 day) | Medium (~3–4 days) | Large (~1–2 weeks)]
+**Status:** [Draft | Approved]
+
+---
+
+## Problem
+
+<!-- What are we solving? Why now? 2–4 sentences. -->
+
+## Rough Solution Sketch
+
+<!-- Fat marker level. Key structural decisions and which services are involved.
+     If you need more than 10–15 lines, the feature isn't shaped yet — simplify. -->
+
+## Design Challenges
+
+<!-- The agent must challenge its own proposed solution before presenting this shape.
+     For each challenge below, record what was found and how it was resolved.
+     An unresolved challenge means the shape is not ready. -->
+
+**Simplest alternative**: What is the simplest design that would also solve the problem? Why is
+the proposed design better?
+
+> _Resolution:_
+
+**Failure modes**: What are the most likely ways this design fails in production?
+
+> _Resolution:_
+
+**Hidden dependencies**: What does this touch in the existing codebase that has not been
+accounted for?
+
+> _Resolution:_
+
+**Hardest part**: What is the single most technically risky piece? Is it actually resolved here,
+or just named?
+
+> _Resolution:_
+
+**No-go safety**: Are the stated no-gos safe to exclude, or do they create downstream problems?
+
+> _Resolution:_
+
+**Architectural fit**: Does this approach move toward the service-oriented JSON-RPC direction in
+VISION.md, or is it fighting the architecture?
+
+> _Resolution:_
+
+## Rabbit Holes
+
+<!-- Things that could blow the budget if not handled carefully.
+     Each entry must be RESOLVED — either closed with a concrete boundary,
+     or moved to No-Gos. An open rabbit hole means the shape is not ready. -->
+
+- **[Rabbit hole]**: [Resolution / boundary / moved to no-gos]
+
+## No-Gos
+
+<!-- Explicitly out of scope for this appetite. Be specific enough that a
+     builder would know what is excluded. -->
+
+-
+
+## Alignment
+
+Read VISION.md and evaluate this feature against each principle.
+Mark: ✓ pass | ⚠ flag (explain below) | — n/a
+
+### Product Principles
+
+| Principle | Status | Notes |
+|-----------|--------|-------|
+| REPL-first | | |
+| Self-documenting | | |
+| Hackable and extensible | | |
+| Open-source throughout | | |
+| Reflects cutting-edge research | | |
+| Non-destructive by default | | |
+
+### Technical Principles
+
+| Principle | Status | Notes |
+|-----------|--------|-------|
+| Service-oriented architecture | | |
+| Audio utility process is the central service | | |
+| Streaming is first-class | | |
+| Renderer is a service | | |
+| IPC contracts are explicit and typed | | |
+| Native addons are thin wrappers | | |
+| Database changes require versioned migrations | | |
+| New REPL surface uses decorator registration | | |
+
+<!-- Explain any ⚠ flags here -->
+
+## Approval Checklist
+
+- [ ] Every rabbit hole is resolved or explicitly moved to no-gos
+- [ ] No tangled interdependencies remain
+- [ ] Every design challenge has a documented resolution
+- [ ] Rough solution fits the appetite
+- [ ] No-gos are specific enough that a builder would know what is excluded

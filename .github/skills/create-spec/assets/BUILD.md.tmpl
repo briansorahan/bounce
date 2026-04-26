@@ -1,0 +1,57 @@
+# Build: {FEATURE_NAME}
+
+**Spec:** specs/{SLUG}
+**Bean:** {BEAN_ID}
+**Created:** {DATE}
+**Appetite:** [Small | Medium | Large]
+**Status:** [In Progress | Paused | Complete]
+
+---
+
+## Agent Execution Protocol
+
+> The main agent is the **orchestrator** — it does not write code directly.
+> Follow this loop autonomously without waiting for user prompts.
+
+### Wave Loop
+
+```
+1. beans list --json --ready  →  collect unblocked bean IDs for this spec
+2. If empty → proceed to TEST phase (run specs/{SLUG}/TEST.md checklist)
+3. Spawn one sub-agent per ready bean (in parallel). Each sub-agent must:
+     a. beans update <id> -s in-progress
+     b. Read the bean description and all referenced files before writing code
+     c. Write or flesh out tests for this bean's scope BEFORE implementing
+     d. Implement the task — make the tests pass
+     e. Do NOT run the full test suite — the orchestrator does this
+4. Wait for all sub-agents to complete
+5. npm test          ← orchestrator runs this; fix failures before proceeding
+6. npm run lint      ← orchestrator runs this; fix errors before proceeding
+7. If step 5 or 6 fails:
+     a. Spawn a sub-agent to diagnose and fix the failure
+     b. Return to step 5
+8. beans update <id> -s completed  for all beans in this wave
+9. Go to step 1
+```
+
+### Circuit Breaker
+
+If the appetite is running out before all beans are complete:
+
+1. Do not extend the budget.
+2. Identify the lowest-priority remaining beans.
+3. `beans create` a follow-up feature bean describing the deferred work.
+4. `beans update <id> -s scrapped --body-append "## Reasons for Scrapping\n\nDeferred to <follow-up-bean-id> — appetite exhausted."` for each deferred bean.
+5. Document the scope cut in Deviations below.
+
+---
+
+## Decisions Made
+
+<!-- Important decisions made during implementation not covered in SPEC.md.
+     Add entries as they arise — do not wait until the end. -->
+
+## Deviations from Spec
+
+<!-- Where implementation diverged from SPEC.md and why.
+     Include any scope cuts made under the circuit breaker. -->

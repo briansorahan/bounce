@@ -1,0 +1,98 @@
+# Spec: {FEATURE_NAME}
+
+**Spec:** specs/{SLUG}
+**Bean:** {BEAN_ID}
+**Created:** {DATE}
+**Appetite:** [Small | Medium | Large]
+**Status:** [In Progress | Complete]
+
+---
+
+## Research
+
+<!-- Constrained to the questions raised in SHAPE.md. Answer what you need
+     to design confidently — don't over-investigate. -->
+
+### Key Findings
+
+### Open Questions Resolved
+
+---
+
+## Per-Service Design
+
+<!-- For each service touched by this spec, fill in the section below.
+     Copy the block for additional services. -->
+
+### Service: `{service-name}`
+
+**Location:** `src/electron/services/{service-name}/`
+**RPC contract:** `src/shared/rpc/{service-name}.rpc.ts`
+
+**Changes:**
+<!-- New methods, modified behavior, changed return types, etc. -->
+
+**New RPC methods** (if any):
+<!-- List each method: name, params type, result type, RequestType string -->
+
+**Handler interface changes:**
+<!-- Which methods are added/modified on the Handlers interface -->
+
+**`bootServices()` update needed:** [Yes | No]
+<!-- If yes, describe what gets added to tests/workflows/helpers.ts -->
+
+---
+
+## REPL Interface Contract
+
+<!-- If this spec adds or changes REPL surface area, fill this in.
+     If not applicable, write "None." -->
+
+**Exposed objects / namespaces:**
+<!-- Which objects/namespaces expose help()? -->
+
+**Returned custom types:**
+<!-- What do new returned types print in the terminal? Which properties matter most? -->
+
+**Unit test coverage:**
+<!-- Which unit tests will verify help() output and display behavior? -->
+
+---
+
+## Acceptance Test Plan
+
+<!-- Defines done. The first BUILD bean writes these as skeletons.
+     Sub-agents flesh them out incrementally (TDD at the bean level). -->
+
+### Per-Service Unit Tests
+
+<!-- For each modified service, list the test file and key behaviors to cover. -->
+
+| Test file | Behaviors |
+|-----------|-----------|
+| `src/electron/services/{name}/{name}.test.ts` | |
+
+### Workflow Tests
+
+<!-- Tests in tests/workflows/ using bootServices() from tests/workflows/helpers.ts.
+     Each row is one scenario that spans multiple service boundaries. -->
+
+| Test file | Services involved | Scenario |
+|-----------|-------------------|----------|
+| `tests/workflows/{slug}.test.ts` | | |
+
+---
+
+## Task Graph
+
+<!-- First bean: "Write test skeletons for {SLUG}" — all others blocked by it.
+     Each bean description must be fully self-contained. -->
+
+| Bean ID | Title | Type | Blocked By |
+|---------|-------|------|------------|
+| | Write test skeletons for {SLUG} | task | — |
+| | | task | skeleton bean |
+
+```bash
+# Commands used to create beans and set dependencies (record for reproducibility)
+```

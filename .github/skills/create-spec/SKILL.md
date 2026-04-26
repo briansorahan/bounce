@@ -1,33 +1,37 @@
 ---
 name: create-spec
-description: Creates specification documents for new features and bug fixes in Bounce. Use when planning non-trivial work that requires research, planning, and implementation tracking. Follows a three-phase workflow (RESEARCH → PLAN → IMPL) with structured templates, and uses beads for all task tracking.
+description: Creates specification documents for new features and significant changes in Bounce. Follows a four-phase workflow (SHAPE → SPEC → BUILD → TEST) combining Shape Up appetite-driven scoping with test-first development. All task tracking uses beans.
 license: ISC
 metadata:
   author: briansorahan
-  version: "2.0"
+  version: "3.0"
   created: "2026-02-25"
-  updated: "2026-04-06"
+  updated: "2026-04-26"
 ---
 
 # Skill: Create New Spec
 
 ## Purpose
 
-This skill guides the creation of specification documents for new features and significant bug fixes or refactoring in Bounce.
-The spec workflow ensures thorough research, planning, and implementation tracking for all non-trivial work.
+This skill guides the creation of specification documents for new features and significant changes
+in Bounce. It combines two ideas:
 
-Each spec corresponds to **one parent beads issue** with a graph of child task issues.
-The parent issue represents the feature as a whole; child issues are the discrete implementation tasks.
-Task progress is tracked entirely in beads — never in markdown files.
+- **Shape Up** (Basecamp): appetite-driven scoping, resolved rabbit holes, explicit no-gos, and a
+  circuit breaker that enforces scope cuts instead of timeline extensions.
+- **Test-first**: per-service unit tests and workflow tests are written before (or alongside)
+  production code. Tests are the executable definition of done.
+
+Each spec corresponds to one parent bean with a graph of child task beans. Task progress is
+tracked entirely in beans — never in markdown files.
 
 ## When to Use
 
 Use this skill when:
 - Adding new FluCoMa algorithms or audio analysis features
 - Implementing new terminal UI features or visualizations
-- Making architectural changes
+- Making architectural changes or adding new services
 - Fixing complex bugs that require investigation
-- Any work that involves more than a few lines of code
+- Any work that involves more than a few files or a few hours of effort
 
 **Don't use specs for:**
 - Typos and formatting fixes
@@ -35,263 +39,385 @@ Use this skill when:
 - Dependency version updates
 - Documentation corrections
 
+## Architecture Context
+
+Bounce uses a **service-oriented JSON-RPC architecture**. Before writing a spec, understand
+the key structural patterns:
+
+- **Services** live in `src/electron/services/{name}/`. Each service is a TypeScript class that
+  implements a handler interface and exposes its functionality over JSON-RPC.
+- **RPC contracts** live in `src/shared/rpc/{name}.rpc.ts`. Each contract defines the params,
+  results, request types, handler interface, and typed client factory for one service.
+- **In-process transport** (`src/shared/rpc/connection.ts`) provides `createInProcessPair()` —
+  an EventEmitter-backed JSON-RPC connection used in workflow tests.
+- **Workflow tests** live in `tests/workflows/`. They use `bootServices()` from
+  `tests/workflows/helpers.ts` to instantiate real services with in-memory storage and a mock
+  audio engine, then exercise multi-service scenarios over the in-process JSON-RPC transport.
+- **Unit tests** live alongside source files in `src/` as `*.test.ts`.
+
+When a spec modifies or adds a service, both unit tests (for the service in isolation) and
+workflow tests (for the multi-service scenario) are expected.
+
 ## Workflow Overview
 
-The spec process has four stages:
+```
+SHAPE → SPEC → BUILD → TEST
+```
 
-1. **RESEARCH** - Gather context, explore prior art, understand constraints
-2. **PLAN** - Design the solution, define architecture, and create the beads task graph
-3. **REVIEW** - Multi-agent review rounds to catch issues before implementation begins
-4. **IMPL** - Document implementation decisions and deviations; agents execute autonomously via beads
+1. **SHAPE** — Set appetite, sketch the solution, resolve rabbit holes, declare no-gos, confirm
+   alignment with VISION.md. The agent actively challenges its own design before presenting.
+   This is the gate: nothing proceeds until the user approves the shape.
 
-Each stage has its own markdown file. Task tracking lives in beads, not in these files.
+2. **SPEC** — Research, per-service design, and acceptance test planning. The first bean in every
+   task graph writes test skeletons before any production code is touched.
 
-## Required REPL Interface Contract
+3. **BUILD** — Execute the task graph in waves. Each sub-agent writes or refines tests for its
+   bean before implementing (TDD at the bean level). Orchestrator runs `npm test` after each wave.
+   Circuit breaker enforces the appetite.
 
-Whenever the feature adds or changes Bounce REPL surface area, treat the REPL API as a user-facing product surface and document the following in the spec:
+4. **TEST** — Hard gate. All tests pass, lockfile is current, documentation is updated. The spec
+   is not done until TEST is complete.
 
-- Every exposed REPL object or namespace should provide a `help()` method with a short explanation and usage examples
-- Every custom object returned from an evaluated REPL expression should print a useful terminal summary when displayed
-- Returned summaries should highlight the most relevant, workflow-driving properties for that type instead of dumping raw structure
-- Automated coverage should explicitly confirm both `help()` output and returned-object display behavior using unit tests and/or Playwright tests
-- Every global object used to execute commands should offer tab-completion for those commands
-
-This requirement must be carried through RESEARCH, PLAN, and IMPL. Do not leave it implicit.
+---
 
 ## Step-by-Step Process
 
-### Step 1: Create Spec Structure and Parent Issue
+### Step 1: Create Spec Structure and Parent Bean
 
 ```bash
-# Choose a concise SLUG describing the work (kebab-case)
-SLUG="onset-visualization"  # example
+SLUG="my-feature"  # concise kebab-case identifier
 
-# Create spec directory and copy templates
 mkdir -p specs/$SLUG
-cp .github/skills/create-spec/assets/RESEARCH.md.tmpl specs/$SLUG/RESEARCH.md
-cp .github/skills/create-spec/assets/PLAN.md.tmpl specs/$SLUG/PLAN.md
-cp .github/skills/create-spec/assets/IMPL.md.tmpl specs/$SLUG/IMPL.md
-# REVIEW.md is created during Step 5 — do not pre-create it
+cp .github/skills/create-spec/assets/SHAPE.md.tmpl specs/$SLUG/SHAPE.md
+cp .github/skills/create-spec/assets/SPEC.md.tmpl  specs/$SLUG/SPEC.md
+cp .github/skills/create-spec/assets/BUILD.md.tmpl specs/$SLUG/BUILD.md
+cp .github/skills/create-spec/assets/TEST.md.tmpl  specs/$SLUG/TEST.md
 
-# Create the parent beads issue
-bd create \
-  --title="[spec] $SLUG" \
-  --description="Parent issue for the $SLUG spec. See specs/$SLUG/ for research, plan, and implementation docs." \
-  --type=feature \
-  --priority=2
-# Note the returned issue ID (e.g. beads-42) — you will need it throughout
+# Create the parent bean
+beans create --json "$SLUG" -t feature \
+  -d "Parent bean for the $SLUG spec. See specs/$SLUG/ for shape, spec, build, and test docs."
+# Note the returned bean ID (e.g. bounce-abc) — you will need it throughout
 
-# Fill in placeholders in the spec files (replace {SLUG}, {FEATURE_NAME}, {DATE}, {BEADS_PARENT_ID})
+# Fill in {SLUG}, {FEATURE_NAME}, {DATE}, {BEAN_ID} in all four files
 ```
 
 ### Step 2: Create Git Branch
 
 ```bash
-# Branch name matches the SLUG
 git checkout -b $SLUG
 ```
 
-### Step 3: Research Phase
+### Step 3: Shape Phase
 
-**File:** `specs/{SLUG}/RESEARCH.md`
+**File:** `specs/{SLUG}/SHAPE.md`
 
-Fill out research documentation:
-- Load context: read existing relevant code
-- Document findings in RESEARCH.md
-- If REPL surface area is involved, identify the user-facing help and display conventions that must remain consistent
+#### 3a: Draft the Shape
 
-**This file is immutable after moving to PLAN phase** (unless critical flaw discovered).
+Fill in:
 
-### Step 4: Planning Phase
+1. **Appetite** — Small (~1 day), Medium (~3–4 days), or Large (~1–2 weeks). Everything else in
+   the shape must fit this budget.
 
-**File:** `specs/{SLUG}/PLAN.md`
+2. **Problem** — What are we solving and why now? 2–4 sentences.
 
-Create the implementation plan:
-- Reference research findings from RESEARCH.md
-- Design the solution architecture
-- Identify all files that need changes
-- Define testing strategy and success criteria
-- For REPL-facing features, explicitly document the `help()` surface, returned-object terminal summaries, and which unit and/or Playwright tests will verify them
+3. **Rough solution sketch** — Fat marker level. Identify the key structural decisions and which
+   services are involved. If you need more than 10–15 lines, the feature isn't shaped yet.
 
-#### Creating the Beads Task Graph
+4. **Identify and resolve rabbit holes** — Find the specific things that could blow the budget or
+   derail the work. The goal is not to list them — it is to close them. For each, either define a
+   concrete boundary that prevents it from expanding, or move it to no-gos. Untangle any
+   interdependencies so the work can proceed in clear, separable steps.
 
-At the end of the planning phase, decompose the work into discrete beads issues and wire up their dependencies. **This must be done before moving to IMPL.**
+   > *"We reduce risk in the shaping process by solving open questions before we commit the
+   > project to a time box. We don't give a project to a team that still has rabbit holes or
+   > tangled interdependencies."* — Shape Up
 
-```bash
-# Create child issues in parallel (use sub-agents for many issues)
-# Each issue description must be self-contained — enough context to implement without re-reading the spec
-bd create --title="..." --description="..." --type=task --priority=2
-bd create --title="..." --description="..." --type=task --priority=2
-# ... repeat for each task
+5. **No-gos** — Explicitly out of scope for this appetite. Be specific.
 
-# Wire up dependencies (task B cannot start until task A is done)
-bd dep add beads-YYY beads-XXX   # beads-YYY depends on beads-XXX
-bd dep add beads-ZZZ beads-YYY   # beads-ZZZ depends on beads-YYY
+6. **Alignment with VISION.md** — Read VISION.md. Evaluate the feature against each product
+   principle and each technical principle. Mark each ✓ pass, ⚠ flag (with explanation), or — n/a.
 
-# Link all child issues to the parent
-bd dep add beads-PARENT beads-LAST-CHILD  # parent closes when last child is done
-```
+#### 3b: Challenge the Design
 
-Record all created issue IDs in the **Task Graph** section of PLAN.md.
+Before presenting the shape to the user, the agent must actively challenge its own proposed
+solution. Work through each of the following:
 
-**This file is immutable after moving to IMPL phase** (unless critical flaw discovered).
+- **Simplest alternative**: What is the simplest design that would also solve the problem? Why is
+  the proposed design better? If you cannot articulate why, simplify.
+- **Failure modes**: What are the most likely ways this design fails in production? Are they
+  acceptable?
+- **Hidden dependencies**: What does this touch in the existing codebase that has not been
+  accounted for? Read the relevant service files before answering.
+- **Hardest part**: What is the single most technically risky piece? Is it actually resolved in
+  the shape, or just named?
+- **No-go safety**: Are the stated no-gos safe to exclude, or will they create downstream
+  problems for a future spec?
+- **Architectural fit**: Does this approach move toward the service-oriented JSON-RPC direction
+  in VISION.md, or is it fighting the architecture?
 
-### Step 5: Spec Review Phase
+Document challenges and their resolutions in the **Design Challenges** section of SHAPE.md.
+If a challenge cannot be resolved, the shape is not ready.
 
-**File:** `specs/{SLUG}/REVIEW.md`
+#### 3c: Get Approval
 
-After completing the planning phase, ask the user if they would like to run a spec review. The default number of reviewers is **5** (the user may specify a different number before starting).
+**Present the shape to the user and get explicit approval before proceeding to SPEC.**
 
-#### Running a Review Round
+Before asking for approval, confirm:
+- [ ] Every rabbit hole is resolved or moved to no-gos
+- [ ] No tangled interdependencies remain
+- [ ] Every design challenge has a resolution
+- [ ] The rough solution fits the appetite
+- [ ] No-gos are specific enough that a builder would know what is out of scope
 
-1. **Create or update `specs/{SLUG}/REVIEW.md`**: Copy `assets/REVIEW.md.tmpl` on the first round; append a new round section on subsequent rounds.
+The shape document is immutable after approval unless a critical flaw is discovered.
 
-2. **Spawn N sub-agents** (default: 5), each with a fresh context window. Each sub-agent must:
-   - Read all documents in `specs/{SLUG}/` (RESEARCH.md, PLAN.md, and IMPL.md if it exists)
-   - Read any related documents referenced in the spec (e.g., `ARCHITECTURE.md`, `README.md`)
-   - Evaluate the spec against the **Reviewer Checklist** below
-   - Return a structured critique: issues found, questions raised, and specific suggested changes
+---
 
-3. **Collect and present results**: Collect all sub-agent reviews, synthesize them into a consolidated report (highlighting themes and priority issues), present the report to the user, and write/append it to `specs/{SLUG}/REVIEW.md`.
+### Step 4: Spec Phase
 
-4. **Apply agreed-upon changes**: Automatically apply all agreed-upon edits to the relevant documents. This may include any spec file (RESEARCH.md, PLAN.md, IMPL.md) or any other project document that needs updating (ARCHITECTURE.md, README.md, etc.). Record every change made — document name, what changed, and rationale — in the **Changes Applied** table in REVIEW.md.
+**File:** `specs/{SLUG}/SPEC.md`
 
-5. **Continue or stop**: Ask the user whether they would like to run another review round. If yes, repeat from step 2. Continue until the user declines.
+#### 4a: Research
 
-#### Reviewer Checklist
+Read the relevant service implementations, RPC contracts, and test files. Constrain research to
+the questions raised by the shape. Record key findings.
 
-Each sub-agent reviewer must evaluate the spec against all of the following dimensions:
+#### 4b: Per-Service Design
 
-**Completeness**
-- Are all sections of RESEARCH.md and PLAN.md (and IMPL.md if present) filled in meaningfully?
-- Are open questions answered or explicitly deferred with rationale?
-- Is the task graph specific enough to execute each issue without ambiguity?
-- Does each beads issue description contain enough standalone context to implement without re-reading the full spec?
+For each service touched by this spec, document:
+- What changes (new methods, modified behavior, new RPC contract entries)
+- New `RequestType` definitions needed in the `.rpc.ts` contract file
+- Handler interface changes
+- Client factory changes
+- Whether `bootServices()` in `tests/workflows/helpers.ts` needs updating
 
-**Consistency**
-- Do RESEARCH.md and PLAN.md agree on the approach, constraints, and scope?
-- Are there any contradictions within or between documents?
-- If IMPL.md exists, does it reflect the plan, or are deviations documented with rationale?
+If a **new service** is being added:
+- New service class in `src/electron/services/{name}/`
+- New RPC contract in `src/shared/rpc/{name}.rpc.ts`
+- New entry in `bootServices()` in `tests/workflows/helpers.ts`
+- New workflow test file `tests/workflows/{name}.test.ts`
 
-**Feasibility**
-- Is the proposed approach technically sound given the Bounce three-process architecture?
-- Are risks identified with concrete mitigations?
+#### 4c: REPL Interface Contract
 
-**REPL Interface Contract**
-- If REPL surface area is involved, is the `help()` contract fully specified for every exposed object/function?
-- Are returned-object terminal summaries defined for all new custom types?
-- Is test coverage for `help()` and display behavior explicitly planned?
+If this spec adds or changes REPL surface area:
+- Which objects/namespaces expose `help()`?
+- What do returned custom types print in the terminal?
+- Which unit tests will verify `help()` output and display behavior?
 
-**Testing Strategy**
-- Are unit and E2E tests identified for all meaningful behaviors?
-- Does the testing strategy cover edge cases and cross-platform concerns?
-- For REPL-facing features, are `help()` and returned-object display assertions explicitly included?
+If not applicable, write "None."
 
-**Clarity**
-- Is the spec clear enough for someone unfamiliar with the feature to understand and implement it?
-- Are architectural decisions well-motivated?
-- Are deviations from established conventions documented?
+#### 4d: Acceptance Test Plan
 
-### Step 6: Implementation Phase
+Specify the tests that define done. These will be written (as skeletons) in the first BUILD bean.
 
-**File:** `specs/{SLUG}/IMPL.md`
+**Per-service unit tests**: For each modified service, list the test file path and the key
+behaviors to cover. Tests live at `src/electron/services/{name}/{name}.test.ts` or alongside
+the relevant source file.
 
-IMPL.md is a decision log and deviation record — not a task tracker. All task tracking is in beads.
+**Workflow tests**: List the workflow test scenarios to add in `tests/workflows/`. Each scenario
+should name the services involved and the user-visible behavior being verified. These use the
+existing `bootServices()` harness from `tests/workflows/helpers.ts`.
 
-The **Agent Execution Protocol** at the top of IMPL.md defines the autonomous wave loop. The main agent acts as orchestrator — it never writes code directly. It:
+#### 4e: Create the Beans Task Graph
 
-1. Calls `bd ready` to find all currently unblocked tasks
-2. Spawns one sub-agent per task in parallel; each claims and implements (no individual test runs)
-3. After the wave completes, runs `npm test` and `npm run lint`
-4. If either fails, spawns a sub-agent to fix the failure, then re-runs checks
-5. Closes all tasks in the wave with `bd close`
-6. Repeats until `bd ready` returns nothing
-
-When `bd ready` is empty, proceed to Step 7 (Land the Plane).
-
-Document decisions and deviations in IMPL.md as they arise. Do not wait until the end.
-
-### Step 7: Land the Plane
-
-Run this checklist in order after all child tasks are closed. Do not skip steps.
+The **first bean must always be "Write test skeletons for {SLUG}"**. All implementation beans
+are blocked by it.
 
 ```bash
-npm test                    # All unit tests must pass
-npm run lint                # No lint errors
-npm run build:electron      # TypeScript must compile cleanly
-npm ci --ignore-scripts     # Verify package-lock.json is in sync — if this fails, run npm install and commit the updated lockfile
-./build.sh                  # Full Dockerized Playwright suite — mandatory, no exceptions
-npm run dev:electron        # Manual smoke test
+# Create the test-skeleton bean first
+beans create --json "Write test skeletons for $SLUG" -t task \
+  -d "Write vitest skeleton tests (unit + workflow) that define done for $SLUG.
+      See specs/$SLUG/SPEC.md §Acceptance Test Plan for the full list.
+      Unit tests go in src/..., workflow tests go in tests/workflows/.
+      Skeletons may use test.todo() or loose assertions — they will be fleshed
+      out incrementally during BUILD. Must be committed before BUILD begins."
+
+# Create per-service implementation beans
+beans create --json "..." -t task -d "..."  # one per service or logical unit
+
+# Block all implementation beans on the test-skeleton bean
+beans update <impl-bean-id> --blocked-by <skeleton-bean-id>
+
+# Set parent on all beans
+beans update <skeleton-bean-id> --parent <parent-bean-id>
+beans update <impl-bean-id> --parent <parent-bean-id>
 ```
 
-If any step fails, fix the issue, re-run from `npm test`, and do not proceed until the full sequence passes cleanly.
+Each bean description must be **fully self-contained**: the implementing agent must be able to
+complete it by reading only the bean description plus the files it references.
 
-Then:
-- If architecture changed, update `ARCHITECTURE.md`
-- If REPL surface area changed, verify unit and/or Playwright tests cover `help()` and returned-object display
-- Fill in the `## Final Status` section of IMPL.md
-- Set `**Status:** Complete` at the top of IMPL.md (required by prune-specs tooling)
-- Commit all spec files and implementation
-- Run `bd close {BEADS_PARENT_ID}` to close the parent issue
-- Run `bd dolt push && git push`
+Record all bean IDs in the Task Graph table in SPEC.md.
 
-### Step 8: Completion
+The spec document is immutable after moving to BUILD unless a critical flaw is discovered.
 
-Before considering work done:
-- `**Status:** Complete` is set in IMPL.md
-- `## Final Status` is filled in
-- `ARCHITECTURE.md` is accurate
-- All spec files are committed
-- Parent beads issue is closed
-- Changes are pushed to remote
+---
+
+### Step 5: Build Phase
+
+**File:** `specs/{SLUG}/BUILD.md`
+
+BUILD.md is a decision log and deviation record. The Agent Execution Protocol at the top defines
+the wave loop. The main agent is the orchestrator — it never writes code directly.
+
+#### Wave Loop
+
+```
+1. beans list --json --ready  →  collect unblocked bean IDs for this spec
+2. If empty → proceed to TEST phase
+3. Spawn one sub-agent per ready bean (in parallel). Each sub-agent must:
+     a. beans update <id> -s in-progress
+     b. Read the bean description and the referenced files before writing any code
+     c. Write or flesh out the tests for this bean's scope before implementing
+     d. Implement the task (TDD: make the tests pass)
+     e. Do NOT run the full test suite — the orchestrator does this after the wave
+4. Wait for all sub-agents to complete
+5. npm test          ← orchestrator; fix failures before proceeding
+6. npm run lint      ← orchestrator; fix errors before proceeding
+7. If step 5 or 6 fails:
+     a. Spawn a sub-agent to diagnose and fix
+     b. Return to step 5
+8. beans update <id> -s completed  for all beans in this wave
+9. Go to step 1
+```
+
+#### Circuit Breaker
+
+If the appetite is running out before all beans are complete:
+
+1. **Do not extend the budget.**
+2. Identify which remaining beans represent the lowest-priority scope.
+3. Create a follow-up feature bean for the deferred work.
+4. Mark the deferred beans scrapped on this spec with a reason.
+5. Document the scope cut in BUILD.md Deviations.
+
+Ship something real within the appetite. The follow-up bean captures what was deferred.
+
+---
+
+### Step 6: Test Phase
+
+**File:** `specs/{SLUG}/TEST.md`
+
+TEST is a hard gate. The spec is not complete until every item below passes. Do not skip steps.
+
+#### Automated Checks
+
+```bash
+npm test           # All vitest tests must pass — unit tests AND workflow tests
+npm run lint       # Zero lint errors
+npm run build:electron   # TypeScript must compile cleanly
+```
+
+If any check fails, fix it and re-run from `npm test` before continuing.
+
+#### Lockfile
+
+```bash
+npm install        # Re-run to ensure package-lock.json is current
+git diff package-lock.json   # Must be clean (or committed if deps changed)
+```
+
+#### Documentation
+
+Check each condition and update the relevant document if true:
+
+| Condition | Document to update |
+|---|---|
+| Any service boundary added or changed | `ARCHITECTURE.md` — update the service table and any affected data flow diagrams |
+| Any RPC method added or modified | `ARCHITECTURE.md` — update the IPC/RPC channel table |
+| Database schema changed | `ARCHITECTURE.md` — update the schema table |
+| REPL surface added or changed | Verify `help()` and terminal summaries are covered by unit tests |
+| VISION.md technical principles rendered stale | Update `VISION.md` |
+
+#### Workflow Test Coverage
+
+Confirm that `tests/workflows/` includes at least one test scenario exercising the primary
+workflow introduced or modified by this spec. The scenario must use `bootServices()` and assert
+on a meaningful outcome, not just that no error was thrown.
+
+#### Final Steps
+
+```bash
+beans update {BEAN_ID} -s completed
+git add -A && git commit -m "..."
+git push
+```
+
+Fill in the `## Final Status` section of TEST.md before closing the parent bean.
+
+---
+
+## Key Protocols
+
+### Test-First Protocol
+
+- The first bean in every task graph writes test skeletons before implementation begins.
+- Each sub-agent in BUILD writes or fleshes out tests for its scope before writing production
+  code. Tests are not deferred to the end.
+- Cutting scope means deferring beans (and their tests) to a follow-up spec — not skipping tests
+  silently.
+
+### Circuit Breaker Protocol
+
+- Appetite is set once, in SHAPE. It does not change during BUILD.
+- When appetite is exhausted, stop and scope-hammer. Deferred work becomes a follow-up bean.
+- Document every scope cut in BUILD.md.
+
+### Alignment Protocol
+
+- SHAPE.md always includes an alignment check against VISION.md.
+- Read VISION.md fresh each time — do not rely on memory.
+- A flagged principle (⚠) requires explanation but does not block the spec.
+- A feature that conflicts with multiple product principles should be re-shaped or abandoned.
+
+### REPL Interface Contract
+
+Whenever a feature adds or changes REPL surface area:
+- Every exposed namespace or object provides `help()`
+- Every returned custom type prints a useful, workflow-relevant terminal summary
+- Tab completion covers all commands and their parameters
+- Unit tests verify `help()` output and display behavior
+- This is verified in TEST phase before closing the parent bean
+
+### Workflow Test Protocol
+
+- Every spec that touches one or more services must add or update workflow tests in
+  `tests/workflows/` using the `bootServices()` harness.
+- The workflow test must exercise the primary scenario end-to-end across the modified service
+  boundaries — not just assert that methods exist.
+- If `bootServices()` does not include a service needed by the spec, wiring it in is part of
+  the spec's scope.
+
+---
 
 ## Handling Flaws in Previous Phases
 
-If during PLAN or IMPL you discover a flaw in a previous phase:
+If during SPEC, BUILD, or TEST you discover a flaw in a previous phase:
 
-1. **Pause and document** the flaw in the current phase's markdown file
-2. **Decide** whether to:
-   - Work around it (document workaround)
-   - Update the previous phase file (document why in current file)
-   - Start over with new research
+1. Pause and document the flaw in the current phase's file.
+2. Decide: work around it (document the workaround), update the previous file (document why),
+   or stop and re-shape from scratch.
+3. If updating a previous file, immediately scan it for newly contradictory content and remove
+   it. A document with conflicting statements is worse than one that is silent.
 
-Previous phase files should be treated as immutable except for critical corrections.
-
-## Maintaining Plan Consistency
-
-Whenever any part of a plan is changed, **immediately review the entire plan file for contradictions**:
-
-1. **Identify all sections** that reference the changed topic
-2. **Remove or update** any content that now contradicts the change
-3. **Do not leave stale content** — a plan with conflicting statements is worse than one that is silent on a topic
-
-This applies equally to PLAN.md and IMPL.md.
+---
 
 ## Resuming Paused Work
 
-When returning to a spec after a break:
+1. `beans list --json -s in-progress` and `beans list --json --ready` to find current state.
+2. Read `specs/{SLUG}/BUILD.md` for decisions and deviations so far.
+3. Re-check the appetite. If it is exhausted, circuit-break before resuming.
+4. Run `npm test` to confirm the current baseline before starting new work.
+5. If the codebase has changed significantly under the spec, check whether any beans,
+   test skeletons, or service designs need updating before continuing.
 
-1. Run `bd list --status=in_progress` and `bd ready` to see current state
-2. Read `specs/{SLUG}/IMPL.md` for context on decisions and deviations
-3. Resume the Autonomous Execution Loop from Step 6
-
-## Context Management Best Practices
-
-- **One phase at a time:** Don't load all three files at once
-- **Reference, don't copy:** Reference sections rather than duplicating content
-- **Keep files focused:** Each file serves one phase only — task tracking belongs in beads
+---
 
 ## Templates
 
-Template files are located in `.github/skills/create-spec/assets/`:
+Template files are in `.github/skills/create-spec/assets/`:
 
-- `RESEARCH.md.tmpl` - Research phase template
-- `PLAN.md.tmpl` - Planning phase template
-- `REVIEW.md.tmpl` - Spec review template (created at the start of Step 5; one file per spec, new rounds appended)
-- `IMPL.md.tmpl` - Implementation phase template
-
-When creating a new spec, copy these templates to `specs/{SLUG}/` and fill in the placeholders:
-- `{SLUG}` - The kebab-case identifier for this work
-- `{FEATURE_NAME}` - Human-readable name of the feature/fix
-- `{DATE}` - Current date in YYYY-MM-DD format
-- `{BEADS_PARENT_ID}` - The beads issue ID created in Step 1 (e.g. `beads-42`)
+- `SHAPE.md.tmpl` — appetite, sketch, design challenges, rabbit holes, no-gos, alignment
+- `SPEC.md.tmpl`  — research, per-service design, REPL contract, acceptance test plan, task graph
+- `BUILD.md.tmpl` — agent execution protocol, decisions, deviations
+- `TEST.md.tmpl`  — verification checklist, documentation checklist, final status
