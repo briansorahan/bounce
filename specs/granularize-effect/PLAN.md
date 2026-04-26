@@ -19,10 +19,6 @@ Two changes plus one default adjustment:
 
 3. **Change `silenceThreshold` default from `-60` dBFS to `-Infinity` (disabled).** Silent grain filtering should be opt-in, not opt-out. Users who want it can pass `{ silenceThreshold: -60 }` explicitly. This affects `computeGrains()` in `src/electron/services/granularize/index.ts`, the RPC type comment in `src/shared/rpc/granularize.rpc.ts`, and the opts-docs entry.
 
-1. **Rename `sample.granularize()` → `sample.grains()`** across all code, types, docs, and tests.
-
-2. **Add `grains.bounce(options?)` → `SamplePromise`** that resynthesizes a `GrainCollection` into a single new sample via overlap-add.
-
 The full chaining workflow:
 
 ```typescript
@@ -68,8 +64,19 @@ Files requiring the rename (method name, help text, option references, tests):
 | `src/shared/repl-registry.generated.ts` | Generated — will update via `npm run generate:help` after source changes |
 | `src/renderer/namespaces/inst-commands.generated.ts` | Check for references |
 | `src/renderer/bounce-api.ts` | Check for references |
-| `src/renderer/bounce-globals.d.ts` | `granularize` in Sample interface → `grains` |
+| `src/renderer/bounce-globals.d.ts` | `granularize` in Sample interface → `grains`; `interface GranularizeOptions` → `interface GrainsOptions` |
+| `src/shared/rpc/granularize.rpc.ts` | RPC method key `granularize` → `grains` in GranularizeRpc interface |
+| `src/shared/ipc-contract.ts` | IPC channel key `GranularizeSample` → `GrainsSample`, channel `"granularize-sample"` → `"grains-sample"`, method contract references |
+| `src/electron/database.ts` | Database method name `granularize()` → `grains()` if publicly exported |
+| `src/electron/preload.ts` | Preload method `granularizeSample` → `grainsSample`; IPC channel string reference |
+| `src/electron/ipc/sample-handlers.ts` | IPC handler registration key; internal method call reference |
+| `src/renderer/types.d.ts` | `window.electron.granularizeSample` → `window.electron.grainsSample` in type declaration |
+| `src/electron/audio-resolver.ts` | Feature type string references `"granularize"` → `"grains"` |
+| `src/electron/completers/options-completer.ts` | `GranularizeOptions` key references → `GrainsOptions` |
 | `src/granular-instrument.test.ts` | Update any calls to `granularize` |
+| `src/audio-resolver.test.ts` | Update feature type assertions and descriptions |
+| `src/shared/ipc-contract.test.ts` | Update IPC contract snapshots and test keys |
+| `tests/workflows/helpers.ts` | Update workflow test helper references |
 | `src/bounce-api.test.ts` | Update help coverage for renamed method |
 | `src/results-sample.test.ts` | Update test descriptions if they reference `granularize` |
 | `tests/granularize.spec.ts` | Playwright test — update REPL commands |
@@ -83,12 +90,13 @@ Pure function implementing overlap-add granular resynthesis:
 export interface ResynthesisParams {
   audioData: Float32Array;       // source PCM
   sampleRate: number;
-  grainPositions: number[];      // source sample offsets
+  grainPositions: number[];      // source sample offsets (non-null only)
   grainSizeSamples: number;
   outputLengthSamples: number;
-  pitch: number;                 // playback rate (1.0 = original)
+  pitch: number;                 // playback rate (1.0 = original, range 0.25–4.0)
   envelope: number;              // 0=Hann, 1=Hamming, 2=Triangle, 3=Tukey
-  density: number;               // grains per second in output
+  density: number;               // grains per second in output (must be > 0)
+  normalize?: boolean;           // if true (default), scale output so peak ≤ 1.0
 }
 
 export function resynthesize(params: ResynthesisParams): Float32Array;
@@ -105,11 +113,16 @@ export function resynthesize(params: ResynthesisParams): Float32Array;
 4. For each output position `outPos` (0, outputHop, 2×outputHop, ...):
    a. Select source grain index: `srcIdx = Math.round(outPos / outputLengthSamples * (grainPositions.length - 1))`, clamped to `[0, grainPositions.length - 1]`
    b. Look up source read position: `srcStart = grainPositions[srcIdx]`
-   c. Extract grain from source with pitch-shifted read: read `grainSizeSamples` output samples, advancing source position by `pitch` per output sample, using linear interpolation between source samples
-   d. Apply window envelope: multiply each grain sample by the LUT value (linearly interpolated to fit grain length)
-   e. Add to output buffer at `outPos` (overlap-add)
-5. Normalize: if peak amplitude > 1.0, scale entire output by `1.0 / peak`. This prevents clipping by default while preserving relative dynamics.
-6. Return output buffer
+   c. Extract grain from source with pitch-shifted read: for each output sample `n` in `[0, grainSizeSamples)`, compute source index `srcPos = srcStart + n * pitch`. Use linear interpolation between `Math.floor(srcPos)` and `Math.ceil(srcPos)`. If `srcPos >= audioData.length`, pad with zero (source exhausted).
+   d. Apply window envelope: for each sample `n`, compute phase `= n / grainSizeSamples`, LUT index `= phase * 1023`, linearly interpolate between adjacent LUT entries for sub-sample precision. Multiply grain sample by interpolated window value.
+   e. Overlap-add to output buffer: for each sample `n`, if `outPos + n < outputLengthSamples`, add windowed grain sample to `output[outPos + n]`. Grains extending past the buffer are truncated (no wrap).
+5. Normalize (if `normalize !== false`): find peak = max absolute value across all output samples. If peak > 1.0, scale entire output by `1.0 / peak`. This prevents clipping by default while preserving relative dynamics.
+6. Validate: reject invalid parameters before processing:
+   - `density <= 0` → throw Error
+   - `pitch < 0.25 || pitch > 4.0` → throw Error
+   - `outputLengthSamples <= 0` → throw Error
+   - `grainPositions.length === 0` → return empty Float32Array(0)
+7. Return output buffer
 
 **Note on null/silent grains:** The `grainPositions` array passed to `resynthesize()` must contain only non-null grain positions. Silent grains (filtered by threshold in the granularize step) are excluded before resynthesis. This is handled by the `GrainCollection` which stores only non-null positions.
 
@@ -125,6 +138,7 @@ export interface BounceGrainsOptions {
   pitch?: number;         // playback rate, default 1.0 (range 0.25–4.0)
   envelope?: number;      // 0=Hann, 1=Hamming, 2=Triangle, 3=Tukey, default 0
   duration?: number;      // output duration in seconds, default = input duration
+  normalize?: boolean;    // peak-normalize output to prevent clipping, default true
 }
 
 // New RPC method added to GranularizeRpc:
@@ -152,9 +166,19 @@ bounceGrains: {
 
 #### 4. IPC Contract — `src/shared/ipc-contract.ts`
 
-Re-export `BounceGrainsOptions` from the RPC contract and add the new handle channel:
+Re-export `BounceGrainsOptions` from the RPC contract and add the new handle channel. Also update the existing `GranularizeResult` interface to expose `grainStartPositions` and `grainSizeSamples` (these exist in the RPC layer but are currently missing from the IPC contract):
 
 ```typescript
+// Update existing GranularizeResult to include grain metadata:
+export interface GranularizeResult {
+  grainHashes: Array<string | null>;
+  featureHash: string;
+  sampleRate: number;
+  grainDuration: number;
+  grainStartPositions: number[];  // ADD — source sample offsets (all positions, including for null grains)
+  grainSizeSamples: number;       // ADD — grain size in samples
+}
+
 // Re-export from rpc contract (single source of truth)
 export type { BounceGrainsOptions } from "./rpc/granularize.rpc";
 
@@ -245,12 +269,16 @@ d. **Update `filter()` to preserve grain position correspondence:**
 filter(predicate: (grain: SampleResult, index: number) => boolean): GrainCollection {
   const keptGrains: Array<SampleResult | null> = [];
   const keptPositions: number[] = [];
-  let i = 0;
+  let i = 0;        // predicate index (non-null grains only)
+  let posIndex = 0; // tracks position in #grainPositions (non-null entries only)
   for (let j = 0; j < this.#grains.length; j++) {
     const grain = this.#grains[j];
-    if (grain !== null && predicate(grain, i++)) {
-      keptGrains.push(grain);
-      keptPositions.push(this.#grainPositions[j]);
+    if (grain !== null) {
+      if (predicate(grain, i++)) {
+        keptGrains.push(grain);
+        keptPositions.push(this.#grainPositions[posIndex]);
+      }
+      posIndex++; // advance only for non-null grains
     }
   }
   return new GrainCollection(keptGrains, this.#normalize, this.#sourceHash, keptPositions, this.#grainSizeSamples, this.#bounceCallback);
@@ -329,11 +357,11 @@ No new visualizations. The method uses existing terminal feedback patterns:
 
 #### REPL Contract Checklist
 
-- [x] Every exposed object/namespace/function has a `help()` entry point — `grains.bounce.help()`, `sample.grains.help()`
-- [x] Every returned custom REPL type defines a useful terminal summary — reuses existing `SampleResult` display
-- [x] The summary highlights workflow-relevant properties — hash, duration, channels, sample rate
-- [x] Unit tests identified for `help()` output — see Testing Strategy
-- [x] Playwright tests identified for returned-object display behavior — see Testing Strategy
+- [ ] Every exposed object/namespace/function has a `help()` entry point — `grains.bounce.help()`, `sample.grains.help()`
+- [ ] Every returned custom REPL type defines a useful terminal summary — reuses existing `SampleResult` display
+- [ ] The summary highlights workflow-relevant properties — hash, duration, channels, sample rate
+- [ ] Unit tests identified for `help()` output — see Testing Strategy
+- [ ] Playwright tests identified for returned-object display behavior — see Testing Strategy
 
 ### Configuration/Build Changes
 
