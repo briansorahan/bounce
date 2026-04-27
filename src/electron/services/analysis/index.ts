@@ -28,7 +28,7 @@ export class AnalysisService {
     const { port1, port2 } = new MessageChannelMain();
 
     this.child = utilityProcess.fork(
-      path.join(__dirname, "process.js"),
+      path.join(import.meta.dirname!, "process.js"),
     );
     this.child.postMessage({ type: "init" }, [port2]);
 

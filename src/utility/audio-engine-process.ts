@@ -18,15 +18,14 @@
  */
 
 import path from "path";
+import { createRequire } from "node:module";
 import { MessagePort } from "worker_threads";
 
-// __dirname is always available in CommonJS (the compiled output target)
-const _dirname: string = __dirname;
+const require = createRequire(import.meta.url);
 
 // The native addon lives two levels up from src/utility/ → build/Release/
-const addonPath = path.resolve(_dirname, "../../build/Release/audio_engine_native");
+const addonPath = path.resolve(import.meta.dirname!, "../../build/Release/audio_engine_native");
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { AudioEngine } = require(addonPath) as {
   AudioEngine: new (useNullBackend?: boolean) => AudioEngineNative;
 };

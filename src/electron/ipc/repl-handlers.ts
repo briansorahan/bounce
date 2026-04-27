@@ -3,12 +3,11 @@ import { ReplEnvRecord } from "../database";
 import { BounceError } from "../../shared/bounce-error.js";
 import type { HandlerDeps } from "./register";
 
-// Lazily loaded TypeScript transpiler — runs in the main process where require() is always available
+// Lazily loaded TypeScript transpiler — runs in the main process
 let _ts: typeof import("typescript") | null = null;
-function getMainTs(): typeof import("typescript") {
+async function getMainTs(): Promise<typeof import("typescript")> {
   if (!_ts) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _ts = require("typescript") as typeof import("typescript");
+    _ts = await import("typescript");
   }
   return _ts;
 }
@@ -46,11 +45,12 @@ export function registerReplHandlers(deps: HandlerDeps): void {
     }
   });
 
-  ipcMain.handle("transpile-typescript", (_event, source: string): string => {
-    return getMainTs().transpileModule(source, {
+  ipcMain.handle("transpile-typescript", async (_event, source: string): Promise<string> => {
+    const ts = await getMainTs();
+    return ts.transpileModule(source, {
       compilerOptions: {
         target: 99 /* ScriptTarget.ESNext */,
-        module: 1 /* ModuleKind.CommonJS */,
+        module: 99 /* ModuleKind.ESNext */,
         esModuleInterop: true,
       },
     }).outputText;

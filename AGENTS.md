@@ -187,3 +187,44 @@ beans query --json '{ beans(filter: { type: ["bug"], priority: ["critical", "hig
 # Search with text
 beans query --json '{ beans(filter: { search: "authentication" }) { id title body } }'
 ```
+
+## Build Architecture
+
+This is an Electron app that uses **ES modules everywhere**. The `package.json` has `"type": "module"` and all TypeScript is compiled to ESM.
+
+### ⚠️  Critical: ESM only — no CommonJS
+
+- **Do NOT add `require()` calls.** Use `import` for all modules. For native `.node` addons that cannot be loaded via `import`, use `createRequire(import.meta.url)` from `"node:module"`.
+- **Do NOT use `__dirname` or `__filename`.** Use `import.meta.dirname` and `import.meta.filename` instead.
+- **Do NOT change `"type": "module"` in `package.json`** or set any tsconfig `"module"` to `"commonjs"`.
+- **Do NOT use `module.exports` or `exports`.** Use `export` / `export default`.
+
+### Two TypeScript compilation targets
+
+| tsconfig | Target | Includes |
+|---|---|---|
+| `tsconfig.electron.json` | Electron main process + shared + utility | `src/electron/`, `src/shared/`, `src/utility/` |
+| `tsconfig.renderer.json` | Electron renderer (browser) | `src/renderer/` (+ transitive `src/shared/` imports) |
+
+Both output ESM to `dist/`. Since they share the same module format, the renderer re-emitting `dist/shared/` is harmless.
+
+### Native addon loading pattern
+
+Native `.node` addons cannot be loaded via ESM `import`. Use this pattern:
+
+```typescript
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const addon = require("../build/Release/flucoma_native.node");
+```
+
+### Build flow (`npm run build:electron`)
+
+1. Generate REPL artifacts
+2. `tsc -p tsconfig.electron.json` → ESM into `dist/`
+3. `tsc -p tsconfig.renderer.json` → ESM into `dist/`
+4. Copy static assets (HTML, xterm, type declarations)
+
+### Electron binary
+
+`@electron/rebuild` can wipe Electron's downloaded binary. The `rebuild` npm script includes `node node_modules/electron/install.js` at the end to restore it. If you modify the `rebuild` script, keep that step.

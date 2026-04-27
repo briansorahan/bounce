@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+
 import { OnsetFeature } from "./index";
 
 console.log("Step 1: Loading native addon...");

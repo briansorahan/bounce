@@ -41,7 +41,7 @@ const SESSION_FILENAME = "bounce-session.ts";
 const ENV_FILENAME = "repl-environment.d.ts";
 
 // Path to the generated environment declarations (adjacent to this file in dist)
-const ENV_FILE_PATH = path.resolve(__dirname, "../shared/repl-environment.d.ts");
+const ENV_FILE_PATH = path.resolve(import.meta.dirname!, "../shared/repl-environment.d.ts");
 
 // ---------------------------------------------------------------------------
 // Parent port

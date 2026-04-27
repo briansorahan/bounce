@@ -1,4 +1,5 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 const flucoma = require("../../build/Release/flucoma_native.node");
 
 export interface BufNMFCrossOptions {

@@ -67,7 +67,7 @@ export class LanguageServiceManager {
   private scriptPath: string;
 
   constructor(scriptPath?: string) {
-    this.scriptPath = scriptPath ?? path.join(__dirname, "../utility/language-service-process.js");
+    this.scriptPath = scriptPath ?? path.join(import.meta.dirname!, "../utility/language-service-process.js");
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
