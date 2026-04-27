@@ -137,10 +137,10 @@ Fill in:
 6. **Alignment with VISION.md** — Read VISION.md. Evaluate the feature against each product
    principle and each technical principle. Mark each ✓ pass, ⚠ flag (with explanation), or — n/a.
 
-#### 3b: Challenge the Design
+#### 3b: Challenge the Design (Self-Critique)
 
-Before presenting the shape to the user, the agent must actively challenge its own proposed
-solution. Work through each of the following:
+Before running the specialist review, the main agent must challenge its own proposed solution.
+Work through each of the following and document resolutions in SHAPE.md §Design Challenges:
 
 - **Simplest alternative**: What is the simplest design that would also solve the problem? Why is
   the proposed design better? If you cannot articulate why, simplify.
@@ -155,17 +155,76 @@ solution. Work through each of the following:
 - **Architectural fit**: Does this approach move toward the service-oriented JSON-RPC direction
   in VISION.md, or is it fighting the architecture?
 
-Document challenges and their resolutions in the **Design Challenges** section of SHAPE.md.
-If a challenge cannot be resolved, the shape is not ready.
+If any challenge cannot be resolved, the shape is not ready for specialist review.
 
-#### 3c: Get Approval
+#### 3c: Specialist Review
 
-**Present the shape to the user and get explicit approval before proceeding to SPEC.**
+Specialist agents bring domain expertise that no single agent can fully hold at once. The review
+process scales with appetite — larger bets warrant deeper scrutiny.
+
+| Appetite | Review process |
+|----------|----------------|
+| Small    | Skip — self-critique only |
+| Medium   | Round 1 (independent reviews) + synthesis |
+| Large    | Round 1 + synthesis + Round 2 (cross-domain responses) + final update |
+
+The four specialist agents are defined in `.github/agents/`:
+
+| Agent | File | Domain |
+|-------|------|--------|
+| `bounce-shape-ui` | `bounce-shape-ui.md` | Renderer / REPL / terminal UX |
+| `bounce-shape-audio` | `bounce-shape-audio.md` | Audio / DSP / FluCoMa / real-time |
+| `bounce-shape-arch` | `bounce-shape-arch.md` | Services / architecture / RPC contracts |
+| `bounce-shape-data` | `bounce-shape-data.md` | Persistence / schema / queries / lineage |
+
+**Round 1 — Independent domain review**
+
+Spawn all four specialist agents in parallel. Each agent must:
+1. Read `specs/{SLUG}/SHAPE.md` in full
+2. Read `VISION.md`
+3. Read the source files most relevant to their domain
+4. Produce a review with four sections: Concerns, Questions, Suggested Changes,
+   Cross-Domain Tensions (format defined in each agent file)
+
+Collect all four reviews.
+
+**Synthesis**
+
+The orchestrator reads all four reviews and produces a synthesis that:
+- Lists concerns shared across multiple reviewers (highest priority)
+- Identifies **tensions** — places where two specialists' requirements pull in opposite
+  directions (e.g., a latency constraint from audio that conflicts with a synchronous API
+  proposed by UI). These are the most important output of the discussion.
+- Lists open questions that need resolution before SPEC
+- Proposes specific edits to SHAPE.md for each concern and tension
+
+Append the synthesis to SHAPE.md under `## Specialist Review — Round 1`.
+
+**Round 2 — Cross-domain response (Large appetite only)**
+
+Spawn all four specialists again, this time providing the Round 1 synthesis alongside SHAPE.md.
+Each agent must:
+1. Read the synthesis
+2. Respond specifically to tensions involving their domain
+3. Either propose a resolution or escalate the tension as genuinely unresolvable
+
+Collect responses. Append under `## Specialist Review — Round 2`.
+
+**Apply changes**
+
+Apply all agreed edits to SHAPE.md. For any unresolved tension, document it prominently in
+SHAPE.md and present it to the user for a decision. Do not proceed until the user resolves it.
+
+#### 3d: Get Approval
+
+**Present the final shape to the user and get explicit approval before proceeding to SPEC.**
 
 Before asking for approval, confirm:
 - [ ] Every rabbit hole is resolved or moved to no-gos
 - [ ] No tangled interdependencies remain
 - [ ] Every design challenge has a resolution
+- [ ] All specialist concerns have been addressed or explicitly accepted
+- [ ] All cross-domain tensions are resolved (or accepted by the user)
 - [ ] The rough solution fits the appetite
 - [ ] No-gos are specific enough that a builder would know what is out of scope
 
