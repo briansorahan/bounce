@@ -165,7 +165,7 @@ process scales with appetite — larger bets warrant deeper scrutiny.
 | Appetite | Review process |
 |----------|----------------|
 | Small    | Skip — self-critique only |
-| Medium   | Round 1 (independent reviews) + synthesis |
+| Medium   | Round 1 + synthesis + Round 2 (cross-domain responses) + final update |
 | Large    | Round 1 + synthesis + Round 2 (cross-domain responses) + final update |
 
 The four specialist agents are defined in `.github/agents/`:
@@ -200,7 +200,7 @@ The orchestrator reads all four reviews and produces a synthesis that:
 
 Append the synthesis to SHAPE.md under `## Specialist Review — Round 1`.
 
-**Round 2 — Cross-domain response (Large appetite only)**
+**Round 2 — Cross-domain response**
 
 Spawn all four specialists again, this time providing the Round 1 synthesis alongside SHAPE.md.
 Each agent must:
