@@ -1,8 +1,11 @@
 import { ipcMain } from "electron";
+import { createRequire } from "node:module";
 import * as path from "path";
 import type { HandlerDeps } from "./register";
 import type { MidiEvent, MidiInputDevice, MidiSequenceRecord } from "../../shared/ipc-contract";
 import { BounceError } from "../../shared/bounce-error";
+
+const require = createRequire(import.meta.url);
 
 // ---------------------------------------------------------------------------
 // Native MIDI addon — loaded from the same build as the audio engine.
@@ -25,8 +28,7 @@ let _midiNative: MidiNative | null = null;
 
 function getMidiNative(): MidiNative {
   if (_midiNative) return _midiNative;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  _midiNative = require(path.resolve(__dirname, "../../../build/Release/audio_engine_native")) as MidiNative;
+  _midiNative = require(path.resolve(import.meta.dirname!, "../../../build/Release/audio_engine_native")) as MidiNative;
   return _midiNative;
 }
 

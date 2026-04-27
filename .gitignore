@@ -13,6 +13,14 @@ third_party/memory/install/
 # Coverage reports
 coverage/
 
+# Compiled JS/declaration artifacts in source tree
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+# Exception: generated type declarations that are committed
+!src/shared/repl-environment.d.ts
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

@@ -38,7 +38,7 @@ function isExempt(line: string): boolean {
 }
 
 function collectFiles(scope: "e2e" | "unit" | "all"): string[] {
-  const root = path.resolve(__dirname, "..");
+  const root = path.resolve(import.meta.dirname!, "..");
   const files: string[] = [];
 
   if (scope === "e2e" || scope === "all") {
@@ -80,7 +80,7 @@ function runRules(rules: Rule[]): Violation[] {
 }
 
 function rel(filePath: string): string {
-  return path.relative(path.resolve(__dirname, ".."), filePath);
+  return path.relative(path.resolve(import.meta.dirname!, ".."), filePath);
 }
 
 // ---------------------------------------------------------------------------

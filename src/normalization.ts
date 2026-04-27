@@ -1,5 +1,8 @@
 import type { Normalization as NativeNormalization } from "./native";
 
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+
 const addon = require("../build/Release/flucoma_native.node");
 
 export class Normalization {

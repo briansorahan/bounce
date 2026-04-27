@@ -15,6 +15,8 @@ export { BufNMFCross } from "./electron/BufNMFCross";
 export type { BufNMFCrossOptions, BufNMFCrossResult } from "./electron/BufNMFCross";
 
 // Load the native addon
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 const addon = require("../build/Release/flucoma_native.node");
 
 /**

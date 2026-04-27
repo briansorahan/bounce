@@ -62,12 +62,12 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(import.meta.dirname!, "preload.js"),
     },
   });
 
   mainWindow.maximize();
-  mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+  mainWindow.loadFile(path.join(import.meta.dirname!, "../renderer/index.html"));
 
   startAudioEngineProcess(mainWindow);
   languageServiceManager.start();
@@ -83,7 +83,7 @@ function createWindow() {
 // Audio engine utility process
 // ---------------------------------------------------------------------------
 function startAudioEngineProcess(mainWindow: BrowserWindow): void {
-  const scriptPath = path.join(__dirname, "../utility/audio-engine-process.js");
+  const scriptPath = path.join(import.meta.dirname!, "../utility/audio-engine-process.js");
 
   const { port1, port2 } = new MessageChannelMain();
   audioEnginePort = port2;
