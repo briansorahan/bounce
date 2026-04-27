@@ -1,453 +1,285 @@
 # Architecture
 
-Bounce is an Electron desktop application with three OS-level processes that communicate over IPC. This document describes the process model, data flows, persistence layer, and native addon boundaries.
+Bounce is an Electron desktop application. This document describes the process model, the
+service-oriented architecture that is being built, the current transition state, the workflow
+test infrastructure, and the native addon boundaries.
+
+---
 
 ## Process Model
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                           Electron Main Process                            │
-│                                                                            │
-│  Lifecycle · IPC Router · Database (SQLite) · Settings Store               │
-│  Native analysis (flucoma_native) · Audio file decoding                    │
-│  REPL Intelligence Layer · LanguageServiceManager                          │
-│                                                                            │
-│    ▲ ipcMain.handle / .on      ▲ MessagePort         ▲ MessagePort         │
-│    │                           │                     │                     │
-│    ▼                           ▼                     ▼                     │
-│  ┌──────────────────┐  ┌───────────────────┐  ┌────────────────────────┐  │
-│  │ Renderer Process │  │  Audio Engine     │  │  Language Service      │  │
-│  │                  │  │  Utility Process  │  │  Utility Process       │  │
-│  │  xterm.js REPL   │  │                   │  │                        │  │
-│  │  Canvas overlays │  │  Native playback  │  │  TypeScript compiler   │  │
-│  │  Bounce API / NS │  │  (audio_engine_   │  │  Virtual REPL project  │  │
-│  │  Web Audio       │  │  native)          │  │  Type-aware completion │  │
-│  │  Tab completion  │  │  Instrument mgmt  │  │  (language-service-    │  │
-│  │  Ghost text      │  │  Playback telem.  │  │  process.ts)           │  │
-│  └──────────────────┘  └───────────────────┘  └────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Electron Main Process                             │
+│                                                                             │
+│  ProcessManagerService · EventBus · PersistenceService · QueryService       │
+│  Services (AudioFile, Filesystem, Project, Instrument, Midi, Mixer, …)      │
+│  IPC bridge layer (ipc/) · LanguageServiceManager · CorpusManager          │
+│                                                                             │
+│    ▲ ipcMain.handle / .on      ▲ MessagePort         ▲ MessagePort          │
+│    │ (bridge layer)            │                     │                      │
+│    ▼                           ▼                     ▼                      │
+│  ┌──────────────────┐  ┌───────────────────┐  ┌──────────────────────────┐ │
+│  │ Renderer Process │  │  Audio Engine     │  │  Analysis Utility        │ │
+│  │                  │  │  Utility Process  │  │  Process                 │ │
+│  │  xterm.js REPL   │  │                   │  │                          │ │
+│  │  Canvas overlays │  │  miniaudio        │  │  FluCoMa native addon    │ │
+│  │  Bounce API / NS │  │  Instruments      │  │  CPU-intensive DSP       │ │
+│  │  Tab completion  │  │  Mixer            │  │  (onset, NMF, MFCC…)     │ │
+│  └──────────────────┘  └───────────────────┘  └──────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Renderer Process
+Three OS-level processes, always running:
 
-**Entry point:** `src/renderer/main.ts` → `BounceApp.mount()`
+- **Main process** — owns all services, the SQLite database, the event bus, and the IPC bridge
+  to the renderer. CPU-intensive DSP is offloaded to the analysis utility process.
+- **Renderer process** — hosts the xterm.js REPL and canvas visualizations. Calls the main
+  process via the Electron IPC bridge. Never touches the filesystem, database, or native
+  audio directly.
+- **Audio engine utility process** — real-time audio playback via miniaudio. Communicates
+  with main over a dedicated MessagePort.
 
-Responsibilities:
+One additional utility process spawned on demand:
 
-- Terminal UI via xterm.js (input handling, display, history, tab completion)
-- REPL evaluation — parses user input, auto-awaits promises, formats results
-- Canvas-based visualization overlays (waveforms, onset markers, NMF heatmaps)
-- Audio recording via Web Audio MediaRecorder API
-- Namespace objects that translate user commands into IPC calls
-- Tab completion via debounced `completion:request` IPC calls — renders ghost text only (no completion menu)
+- **Analysis utility process** — runs FluCoMa DSP algorithms (`flucoma_native` addon)
+  synchronously without blocking the main process event loop.
 
-The renderer never touches the filesystem, database, or native audio engine directly. All such operations go through IPC to the main process. The renderer is also unaware of the language service — completion flows through main.
+---
 
-### Main Process
+## Service-Oriented Architecture
 
-**Entry point:** `src/electron/main.ts`
+Bounce is being built around a graph of services. Each service has one clearly stated
+responsibility, exposes its functionality over a typed JSON-RPC contract, and communicates
+with other services only through those contracts or through the shared event bus.
 
-Responsibilities:
+### Services
 
-- App lifecycle (window creation, quit handling)
-- IPC router — organized into domain handler modules in `src/electron/ipc/`
-- SQLite database management (better-sqlite3) with versioned migrations
-- Settings persistence (JSON file)
-- Audio file decoding (audio-decode)
-- FluCoMa analysis via flucoma_native addon (onset detection, NMF, MFCC, spectral shape)
-- Spawning and managing the audio engine utility process
-- Relaying playback telemetry from utility process to renderer
-- **REPL Intelligence Layer** — receives `CompletionContext` from the language service and dispatches to 6 completer types (identifier, property, file path, sample hash, options, typed value)
-- **LanguageServiceManager** — spawns and supervises the language service utility process; implements crash-loop prevention (3 crashes in 60s → incremental restore → clean-slate → disabled)
-- **Session persistence** — on startup, restores the language service session from command history; on project switch or history clear, resets the session
+Services live in `src/electron/services/{name}/`. Each service is a TypeScript class that:
 
-### Audio Engine Utility Process
+- Implements a `*Handlers` interface generated from its RPC contract
+- Accepts only typed service clients or the event bus as constructor dependencies
+- Has zero Electron imports (no `ipcMain`, no `BrowserWindow`, no `utilityProcess`)
+- Exposes a `listen(connection: MessageConnection)` method to bind to a JSON-RPC transport
+
+Current services:
+
+| Service | Location | Responsibility |
+|---------|----------|----------------|
+| `AudioFileService` | `services/audio-file/` | Decode audio files, compute hashes, emit `SampleLoaded` |
+| `AnalysisService` | `services/analysis/` | FluCoMa DSP (onset, NMF, MFCC) via utility process |
+| `FilesystemService` | `services/filesystem/` | Directory listing, cwd management, glob |
+| `ProjectService` | `services/project/` | Project CRUD, current project tracking |
+| `InstrumentService` | `services/instrument/` | Instrument and sample-map persistence |
+| `MidiService` | `services/midi/` | MIDI sequence storage and retrieval |
+| `MixerService` | `services/mixer/` | Mixer channel and master state |
+| `ReplEnvService` | `services/repl-env/` | REPL variable and function persistence |
+| `GrainsService` | `services/granularize/` | Granular synthesis parameters |
+| `PersistenceService` | `services/persistence/` | Event bus subscriber → SQLite writes |
+| `QueryService` | `services/query/` | All SQLite read operations |
+| `ProcessManagerService` | `services/process-manager/` | Dependency graph, start/stop ordering |
+
+### RPC Contracts
+
+Each service's public API is defined in `src/shared/rpc/{name}.rpc.ts`. A contract file
+contains:
+
+- The `*Rpc` interface extending `RpcContract` — maps method names to `{ params, result }`
+- `RequestType` objects (vscode-jsonrpc) — one per method
+- The `*Handlers` interface — implemented by the service class
+- `register*Handlers()` — binds a handlers implementation to a `MessageConnection`
+- `create*Client()` — wraps a `MessageConnection` as a typed client
+
+```typescript
+// Usage pattern
+const pair = createInProcessPair();
+const service = new AudioFileService(bus, sampleQuery, cwdQuery);
+service.listen(pair.server);
+pair.server.listen();
+pair.client.listen();
+const client = createAudioFileClient(pair.client);
+const result = await client.invoke("readAudioFile", { filePathOrHash: "kick.wav" });
+```
+
+### Event Bus
+
+`EventBus` (`src/shared/event-bus.ts`) is a synchronous, in-process pub/sub channel for
+domain events. Services emit events when state changes; `PersistenceService` subscribes and
+writes them to SQLite in batched transactions.
+
+Domain events:
+
+| Event | Emitted by | Effect |
+|-------|-----------|--------|
+| `SampleLoaded` | `AudioFileService` | Persists sample + metadata to DB |
+| `RecordingStored` | `AudioFileService` | Persists recording as sample |
+| `CwdChanged` | `FilesystemService` | Updates settings store |
+| `InstrumentCreated/Deleted` | `InstrumentService` | Persists instrument record |
+| `InstrumentSampleAdded` | `InstrumentService` | Persists MIDI note mapping |
+| `MidiSequenceSaved/Deleted` | `MidiService` | Persists MIDI sequence |
+| `MixerChannelUpdated` | `MixerService` | Persists mixer channel state |
+| `MixerMasterUpdated` | `MixerService` | Persists master bus state |
+| `ReplEnvSaved` | `ReplEnvService` | Persists REPL variables |
+
+`ProjectLoaded` and `ProjectRemoved` are emitted for notification only — `ProjectService`
+writes those synchronously for strong consistency.
+
+### Query Interfaces
+
+Read operations use narrow per-domain query interfaces defined in
+`src/shared/query-interfaces.ts`. Each service declares only the interface it needs:
+
+```
+ISampleQuery    getSampleByHash, listSamples, getRawMetadata, getSampleByRecordingName
+ICwdQuery       getCwd
+IProjectQuery   getCurrentProject, listProjects
+IInstrumentQuery  getInstrument, listInstruments, getInstrumentSamples
+IMidiQuery      getMidiSequence, listMidiSequences
+IMixerQuery     getMixerState
+IReplEnvQuery   getReplEnv
+IQueryService   extends all of the above (full read access)
+```
+
+In production, `QueryService` implements `IQueryService` against SQLite.
+In workflow tests, `InMemoryQueryService` implements it against `InMemoryStore`.
+
+### ProcessManagerService
+
+`ProcessManagerService` (`services/process-manager/`) owns the service dependency graph.
+Services register a `ServiceDescriptor` declaring their name, dependencies, and
+start/stop/isReady callbacks. The manager topologically sorts the graph (Kahn's algorithm)
+and calls start/stop in the correct order.
+
+**Future**: a compile-time code-generation script will parse each service's constructor
+parameters using the TypeScript compiler API, extract `ServiceClient<SomeRpc>` dependencies,
+and emit the registration calls automatically — eliminating the hand-maintained list.
+
+---
+
+## Transition State
+
+The service-oriented architecture is **actively being built**. The old Electron IPC handler
+layer (`src/electron/ipc/`) still exists and remains in production. The two layers coexist:
+
+| Layer | Location | Status |
+|-------|----------|--------|
+| New service layer | `src/electron/services/` + `src/shared/rpc/` | Active development |
+| Old IPC handler layer | `src/electron/ipc/` + `src/electron/preload.ts` | Legacy, being migrated |
+
+**The renderer still uses the old pattern.** `preload.ts` exposes `ipcRenderer.invoke` calls
+via `contextBridge`; the renderer calls `window.electron.*`. Migrating the renderer to talk
+directly to services is a future architectural goal.
+
+**When adding new features**: use the service pattern. Add a service in `src/electron/services/`,
+define its RPC contract in `src/shared/rpc/`, and wire it through the existing IPC bridge
+layer only as needed until the renderer is migrated. Do not add new handlers to the old
+`ipc/` layer.
+
+---
+
+## In-Process Transport and Workflow Tests
+
+### In-Process Transport
+
+`createInProcessPair()` (`src/shared/rpc/connection.ts`) creates a paired
+`(client, server) MessageConnection` backed by a Node `EventEmitter`. No I/O, no
+serialization overhead, no Electron required. Used by workflow tests and by any code that
+needs two services to communicate in the same process.
+
+### Workflow Test Infrastructure
+
+`tests/workflows/` contains vitest workflow tests. Each test file exercises a multi-service
+scenario end-to-end at the JSON-RPC boundary.
+
+**`tests/workflows/helpers.ts`** provides `bootServices()`, which instantiates all services
+with in-process JSON-RPC pairs, in-memory storage, and a mock audio engine:
+
+- `InMemoryStore` + `InMemoryPersistenceService` + `InMemoryQueryService` — mirrors the
+  SQLite schema in Maps; no native deps
+- `MockAudioEngineService` — pure TypeScript mock; no `audio_engine_native` addon
+- All real service implementations connected via `createInProcessPair()`
+
+`bootServices()` returns typed clients for every service and a `cleanup()` function.
+
+```typescript
+const { ctx, cleanup } = bootServices();
+await ctx.audioFileClient.invoke("readAudioFile", { filePathOrHash: "/tmp/test.wav" });
+cleanup();
+```
+
+**When a spec adds a new service**, it must be wired into `bootServices()` in `helpers.ts`
+and given a corresponding mock or real implementation that works without native deps.
+
+---
+
+## IPC Bridge Layer (Legacy)
+
+The IPC bridge in `src/electron/ipc/` connects the renderer to main process services via
+Electron's `ipcMain.handle` / `ipcMain.on`. Handlers in this layer are being progressively
+refactored to delegate to services rather than accessing the database directly.
+
+The bridge receives a `HandlerDeps` object providing access to `DatabaseManager`,
+`SettingsStore`, `CorpusManager`, `LanguageServiceManager`, and ports to the audio engine and
+main window. New handler code should call service clients rather than `DatabaseManager`
+directly.
+
+---
+
+## Audio Engine Utility Process
 
 **Entry point:** `src/utility/audio-engine-process.ts`
 
-Spawned by the main process via `Electron.utilityProcess.fork()`. Communicates with main over a `MessagePort`.
+Spawned by the main process via `utilityProcess.fork()`. Communicates with main over a
+`MessagePort`.
 
 Responsibilities:
+- Real-time audio playback via `audio_engine_native` (miniaudio)
+- Polyphonic instrument voice management (note on/off, sample mapping)
+- Mixer: 9 channels (0–7 user, 8 preview), constant-power pan, solo-in-place
+- Playback telemetry (position, ended, error) and mixer peak levels (~60 Hz) back to main
 
-- Real-time audio playback via audio_engine_native addon (built on miniaudio)
-- Sample playback with loop support
-- Polyphonic instrument voice allocation (note on/off, parameter control)
-- Sending playback telemetry (position, ended, error) back to main
+The main process relays telemetry to the renderer via `webContents.send()`.
 
-This process exists so that audio I/O never blocks the main or renderer processes.
+RPC contract: `src/shared/rpc/audio-engine.rpc.ts`.
+Mock for tests: `tests/workflows/mock-audio-engine.ts`.
 
-### Language Service Utility Process
+---
+
+## Analysis Utility Process
+
+**Entry point:** `src/electron/services/analysis/process.ts`
+
+Spawned by `AnalysisService` (`services/analysis/index.ts`) via `utilityProcess.fork()`.
+Communicates with the main process over a `MessagePort` using a simple
+`{ id, method, params }` / `{ id, result | error }` protocol.
+
+Purpose: run FluCoMa DSP algorithms (`flucoma_native`) synchronously without blocking the
+main process event loop. Handles one request at a time (the Promise-based supervisor
+serialises requests automatically).
+
+RPC contract: `src/shared/rpc/analysis.rpc.ts`.
+For workflow tests, `AnalysisService` (`services/analysis/service.ts`) provides a
+`vscode-jsonrpc`-compatible variant that does not spawn a utility process.
+
+---
+
+## Language Service Utility Process
 
 **Entry point:** `src/utility/language-service-process.ts`
 
-Spawned by the main process via `Electron.utilityProcess.fork()`. Communicates with main over a `MessagePort`. Initializes lazily — the TypeScript language service (`ts.createLanguageService()`) is created on the first `langservice:parse` request; `langservice:ready` is sent once it is ready.
+Spawned by `LanguageServiceManager` (`src/electron/language-service-manager.ts`).
+Communicates with main over a `MessagePort`. Initializes lazily on the first parse request.
 
 Responsibilities:
-
 - Maintains a virtual TypeScript project representing the current REPL session
-- Parses REPL input buffers and cursor positions to produce a structured `CompletionContext`
-- Resolves variable types for type-aware completion (user-defined variables, return types of Bounce API calls)
-- Appends evaluated commands to the virtual project as they are executed
-- Reports health metrics (memory, parse latency, error count) to main
+- Parses REPL input + cursor position → `CompletionContext`
+- Resolves variable types for type-aware completion
+- Reports health metrics (memory, parse latency, error count)
 
-The language service is intentionally thin — no business logic, no database access. All filtering, visibility decisions, and result assembly happen in the main process intelligence layer.
+`LanguageServiceManager` implements crash-loop prevention: 3 crashes in 60 s → incremental
+restore → clean-slate → disabled.
 
-## IPC Communication
-
-Three IPC patterns are used, each defined in `src/shared/ipc-contract.ts`:
-
-### Invoke / Handle (request-response)
-
-Used for operations that return data. The renderer calls `window.electron.<method>()` (exposed via preload script and `contextBridge`), which maps to `ipcRenderer.invoke(channel, ...args)`. The main process handles with `ipcMain.handle(channel, handler)`.
-
-Domains and their handler modules (`src/electron/ipc/`):
-
-| Handler file | Domain | Key channels |
-|---|---|---|
-| `audio-handlers.ts` | Audio file I/O | `read-audio-file` |
-| `analysis-handlers.ts` | DSP analysis | `analyze-onset-slice`, `analyze-buf-nmf`, `analyze-mfcc` |
-| `feature-handlers.ts` | Feature storage | `store-feature`, `get-most-recent-feature`, `create-slice-samples` |
-| `sample-handlers.ts` | Sample management | `list-samples`, `get-sample-by-hash`, `store-recording`, `granularize-sample` |
-| `project-handlers.ts` | Projects | `get-current-project`, `list-projects`, `load-project`, `remove-project` |
-| `history-handlers.ts` | History & logging | `save-command`, `get-command-history`, `clear-command-history`, `debug-log` |
-| `repl-handlers.ts` | REPL persistence | `save-repl-env`, `get-repl-env`, `transpile-typescript` |
-| `filesystem-handlers.ts` | Filesystem | `fs-ls`, `fs-cd`, `fs-pwd`, `fs-glob`, `fs-walk` |
-| `corpus-handlers.ts` | Corpus analysis | `corpus-build`, `corpus-query`, `corpus-resynthesize` |
-| `nmf-handlers.ts` | NMF commands | `analyze-nmf`, `visualize-nmf`, `sep`, `nx` |
-| `mixer-handlers.ts` | Mixer state | `get-mixer-state`, `save-mixer-channel`, `save-mixer-master` |
-| `midi-handlers.ts` | MIDI sequences | `save-midi-sequence`, `get-midi-sequence`, `list-midi-sequences`, `delete-midi-sequence` |
-| `transport-handlers.ts` | Transport control | `transport-set-bpm`, `transport-start`, `transport-stop` |
-| `error-handlers.ts` | Background errors | `get-background-errors`, `dismiss-background-error`, `dismiss-all-background-errors` |
-| `completion-handlers.ts` | Tab completion | `completion:request` |
-
-All handler modules receive a shared `HandlerDeps` interface providing access to `dbManager`, `settingsStore`, `corpusManager`, `languageServiceManager`, `getAudioEnginePort()`, and `getMainWindow()`. These deps use lazy getters — handler code must access them inside callbacks, not at registration time.
-
-### Send / On (fire-and-forget, renderer → main)
-
-Used for commands where the renderer does not need a response, primarily playback, instrument, and mixer control:
-
-- `play-sample`, `stop-sample`
-- `define-instrument`, `free-instrument`, `load-instrument-sample`
-- `instrument-note-on`, `instrument-note-off`, `instrument-stop-all`
-- `set-instrument-param`, `subscribe-instrument-telemetry`
-- `mixer-set-channel-gain`, `mixer-set-channel-pan`, `mixer-set-channel-mute`, `mixer-set-channel-solo`
-- `mixer-attach-instrument`, `mixer-detach-channel`
-- `mixer-set-master-gain`, `mixer-set-master-mute`
-
-The main process receives these and forwards the relevant commands to the audio engine utility process via `MessagePort.postMessage()`. Mixer commands are also persisted to the DB via `mixer_channels` / `mixer_master` tables.
-
-### Push Events (main → renderer)
-
-The main process pushes telemetry events to the renderer via `webContents.send()`:
-
-- `playback-position` — current playback position (samples), used for animated playheads
-- `playback-ended` — playback completed
-- `playback-error` — audio engine error
-- `overlay-nmf-visualization` — NMF analysis results for visualization
-- `mixer-levels` — per-channel and master peak levels (~60 Hz), used for status bar meters
-
-### MessagePort (main ↔ audio engine utility process)
-
-Defined in `src/shared/audio-engine-protocol.ts`. The main process creates a `MessageChannelMain` and passes one port to the utility process. Messages are typed unions:
-
-**Commands (main → utility):** `play`, `stop`, `stop-all`, `define-instrument`, `free-instrument`, `load-instrument-sample`, `instrument-note-on`, `instrument-note-off`, `instrument-stop-all`, `set-instrument-param`, `subscribe-instrument-telemetry`, `unsubscribe-instrument-telemetry`, `mixer-set-channel-gain`, `mixer-set-channel-pan`, `mixer-set-channel-mute`, `mixer-set-channel-solo`, `mixer-attach-instrument`, `mixer-detach-channel`, `mixer-set-master-gain`, `mixer-set-master-mute`
-
-**Telemetry (utility → main):** `position`, `ended`, `error`, `mixer-levels`
-
-The main process relays telemetry from the utility process to the renderer via `webContents.send()`.
-
-### MessagePort (main ↔ language service utility process)
-
-A separate `MessageChannelMain` connects the main process to the language service utility process. All messages are plain JSON objects. `LanguageServiceManager` (`src/electron/language-service-manager.ts`) owns this port.
-
-**Main → Language Service:**
-
-| Message type | Purpose |
-|---|---|
-| `langservice:parse` | Parse buffer + cursor position → CompletionContext |
-| `langservice:session-append` | Add one evaluated command to the virtual session |
-| `langservice:session-restore` | Bulk-replay command array on startup or after crash |
-| `langservice:session-reset` | Clear virtual session (project switch or history clear) |
-| `langservice:status` | Poll readiness before the service signals ready |
-
-**Language Service → Main:**
-
-| Message type | Purpose |
-|---|---|
-| `langservice:ready` | Service is initialized and ready to accept parse requests |
-| `langservice:parse:response` | CompletionContext result for a previous parse request |
-| `langservice:health` | Periodic health metrics (memory, parse latency, error count) |
-
-**Tab completion flow:**
-
-```
-Renderer  ──completion:request──▶  Main (completion-handlers.ts)
-                                     │
-                                     ├── languageServiceManager.parse(buffer, cursor)
-                                     │      └──langservice:parse──▶ Language Service
-                                     │      └──langservice:parse:response──▶ Main
-                                     │
-                                     └── ReplIntelligence.predict(context)
-                                            ├── IdentifierCompleter
-                                            ├── PropertyCompleter
-                                            ├── FilePathCompleter
-                                            ├── SampleHashCompleter
-                                            ├── OptionsCompleter
-                                            └── TypedValueCompleter
-                                     │
-                                     └──PredictionResult[]──▶ Renderer (ghost text)
-```
-
-## Data Flows
-
-### Loading a Sample
-
-```
-User: sn.read("kick.wav")
-  → Renderer: sn.read() calls window.electron.readAudioFile("kick.wav")
-    → Main: audio-handlers decodes file with audio-decode
-    → Main: computes SHA-256 hash of audio data
-    → Main: stores in SQLite (samples table, project-scoped)
-    → Main: returns { hash, sampleRate, channels, duration, audioData }
-  → Renderer: wraps result in Sample object with play(), onsets(), etc.
-  → REPL: displays sample summary (duration, channels, sample rate)
-```
-
-### Playing Audio
-
-```
-User: sample.play()
-  → Renderer: calls window.electron.playSample(hash, loop, ...)
-    → Main: receives on ipcMain.on("play-sample")
-    → Main: loads PCM from database, converts to Float32Array
-    → Main: posts { type: "play", pcm, sampleRate, ... } to AudioEnginePort
-      → Utility: audio_engine_native.play() starts miniaudio playback
-      → Utility: posts { type: "position", positionInSamples } at regular intervals
-    → Main: relays position to renderer via webContents.send("playback-position")
-  → Renderer: updates animated playhead on waveform canvas
-      → Utility: posts { type: "ended" } when playback completes
-    → Main: relays to renderer via webContents.send("playback-ended")
-  → Renderer: removes playhead, cleans up playback state
-```
-
-### Running an Analysis (Onsets)
-
-```
-User: sample.onsets()
-  → Renderer: calls window.electron.analyzeOnsetSlice(audioData, options)
-    → Main: analysis-handlers calls flucoma_native.onsetSlice(audioData, options)
-    → Main: returns array of onset frame positions
-  → Renderer: computes feature hash, calls window.electron.storeFeature(...)
-    → Main: persists to features table in SQLite
-  → Renderer: wraps in OnsetFeature object with slice(), play(), etc.
-  → REPL: displays onset count and feature summary
-```
-
-### Recording Audio
-
-```
-User: sn.dev(0).record("take1")
-  → Renderer: uses Web Audio getUserMedia + MediaRecorder
-  → Renderer: collects audio chunks into Blob
-  → User: recording.stop()
-  → Renderer: decodes Blob with audio-decode
-  → Renderer: calls window.electron.storeRecording(name, audioData, ...)
-    → Main: computes hash, stores in samples table
-  → Renderer: wraps result as Sample object
-```
-
-### Instrument Playback
-
-```
-User: inst.new("keys", 8)
-  → Renderer: calls window.electron.createDbInstrument("keys", "sampler", ...)
-    → Main: persists to instruments table
-  → Renderer: calls window.electron.defineInstrument(id, "sampler", 8)
-    → Main: posts { type: "define-instrument" } to AudioEnginePort
-      → Utility: allocates instrument with 8-voice polyphony
-
-User: keys.loadSample(60, sample)
-  → Renderer: calls window.electron.addDbInstrumentSample(...)
-    → Main: persists to instrument_samples table
-  → Renderer: calls window.electron.loadInstrumentSample(id, 60, hash, ...)
-    → Main: loads PCM from database
-    → Main: posts { type: "load-instrument-sample", pcm, ... } to AudioEnginePort
-      → Utility: stores sample buffer for note 60
-
-User: keys.noteOn(60, 100)
-  → Renderer: calls window.electron.instrumentNoteOn(id, 60, 100)
-    → Main: posts { type: "instrument-note-on" } to AudioEnginePort
-      → Utility: audio_engine_native allocates voice, starts playback
-```
-
-## Database
-
-SQLite via better-sqlite3, stored in the platform's app data directory. Location overridable with the `BOUNCE_USER_DATA_PATH` environment variable.
-
-### Schema
-
-All data tables are project-scoped (foreign key to `projects.id` with CASCADE delete).
-
-| Table | Purpose |
-|---|---|
-| `schema_versions` | Migration tracking |
-| `projects` | Named workspaces. Includes `session_start_timestamp` — Unix ms timestamp marking the start of the current language service session for this project. Updated on `clear-command-history` and `load-project`. |
-| `samples` | Audio PCM data (BLOB) + metadata (hash, sample rate, channels, duration) |
-| `features` | Cached analysis results (JSON). Unique per (project, sample_hash, feature_hash) |
-| `samples_features` | Links derived samples back to source sample + feature |
-| `command_history` | REPL command history for replay. Commands added after `session_start_timestamp` are replayed into the language service on startup. |
-| `repl_env` | Persisted REPL variables and functions (JSON or function source) |
-| `instruments` | Named instrument definitions with config |
-| `instrument_samples` | MIDI note → sample mapping per instrument |
-| `mixer_channels` | Per-project mixer channel state (gain, pan, mute, solo, attached instrument) |
-| `mixer_master` | Per-project master bus state (gain, mute) |
-| `midi_sequences` | Named MIDI sequences (duration, event count) |
-| `midi_events` | Individual MIDI events (type, channel, note, velocity, CC) ordered by timestamp |
-| `background_errors` | Non-fatal errors from main/utility processes for user visibility via `errors()` |
-
-### Migrations
-
-One versioned migration in `src/electron/database.ts` creates all tables, tracked by the `schema_versions` table. See `src/electron/database.ts` for full DDL.
-
-Adding new migrations should follow the guide in `.github/skills/add-database-migration/SKILL.md`.
-
-## Native Addons
-
-Two native C++ addons are built via node-gyp (configured in `binding.gyp`). Source lives in `native/`.
-
-### flucoma_native
-
-Audio analysis algorithms from the FluCoMa toolkit. Loaded by the main process.
-
-| Export | Algorithm |
-|---|---|
-| `onsetSlice` | Onset detection (frame positions) |
-| `bufNMF` | Non-negative Matrix Factorization (source separation) |
-| `mfcc` | Mel-frequency cepstral coefficients |
-| `spectralShape` | Spectral shape descriptors |
-| `normalize` | Feature normalization |
-| `kdTree` | K-dimensional tree for nearest-neighbor corpus queries |
-
-Dependencies: FluCoMa core, Eigen, HISSTools FFT, Accelerate (macOS).
-
-### audio_engine_native
-
-Real-time audio playback engine. Loaded by the utility process only.
-
-| Export | Purpose |
-|---|---|
-| `play` | Start sample playback (with optional loop region) |
-| `stop` | Stop playback of a specific sample |
-| `stopAll` | Stop all active playback |
-| `defineInstrument` | Create polyphonic instrument with voice count |
-| `freeInstrument` | Destroy instrument and free voices |
-| `loadInstrumentSample` | Map sample buffer to MIDI note |
-| `instrumentNoteOn` | Trigger note with velocity |
-| `instrumentNoteOff` | Release note |
-| `instrumentStopAll` | Silence all voices on instrument |
-| `setInstrumentParam` | Set instrument parameter |
-| `mixerSetChannelGain` | Set channel gain (dB) |
-| `mixerSetChannelPan` | Set channel pan (-1.0 L to +1.0 R, constant-power) |
-| `mixerSetChannelMute` | Mute/unmute channel |
-| `mixerSetChannelSolo` | Solo/unsolo channel (solo-in-place) |
-| `mixerAttachInstrument` | Route instrument to a mixer channel |
-| `mixerDetachChannel` | Remove instrument assignment from channel |
-| `mixerSetMasterGain` | Set master bus gain (dB) |
-| `mixerSetMasterMute` | Mute/unmute master bus |
-| `onMixerLevels` | Register peak meter callback (~60 Hz, with peak-hold) |
-
-**Mixer architecture:** 9 channels total (indices 0–7 = user channels, index 8 = preview). Unattached instruments and legacy processors render into the preview channel. User channels mix to the master bus with constant-power pan law. Solo-in-place silences non-soloed user channels; preview channel is always exempt.
-
-Dependencies: miniaudio, AudioToolbox/CoreAudio (macOS).
-
-## Renderer Architecture
-
-### REPL
-
-`BounceApp` (in `src/renderer/app.ts`) manages the terminal UI:
-
-- Input buffer with cursor movement, history navigation, reverse search (Ctrl+R)
-- Tab completion with nested property support
-- Command parsing for built-in commands (help, clear, etc.)
-- `ReplEvaluator` (in `src/renderer/repl-evaluator.ts`) that auto-awaits top-level expressions and assignments so users don't need explicit `await`
-
-### Namespaces
-
-The Bounce API is built in `src/renderer/bounce-api.ts` and provides 11 namespaces plus globals, each defined in `src/renderer/namespaces/`:
-
-| REPL name | Module | Purpose |
-|---|---|---|
-| `sn` | `sample-namespace.ts` | Sample loading, listing, audio device access, recording |
-| `vis` | `vis-namespace.ts` | Visualization scene creation and rendering |
-| `proj` | `project-namespace.ts` | Project management |
-| `env` | `env-namespace.ts` | REPL scope inspection, persistence, dev-mode toggle |
-| `corpus` | `corpus-namespace.ts` | Concatenative synthesis |
-| `fs` | `fs-namespace.ts` | Filesystem navigation |
-| `inst` | `instrument-namespace.ts` | Instrument creation, sample mapping, note events |
-| `mx` | `mixer-namespace.ts` | 8-channel mixer: gain, pan, mute, solo, instrument routing |
-| `midi` | `midi-namespace.ts` | MIDI input devices, sequence recording and playback |
-| `transport` | `transport-namespace.ts` | BPM, start/stop, transport clock |
-| `pat` | `pat-namespace.ts` | Pattern sequencing |
-| *(globals)* | `globals.ts` | `help()`, `clear()`, `debug()`, `errors()` top-level utilities |
-
-All namespace classes are decorated with `@namespace` (from `src/shared/repl-registry.ts`) which injects a `help()` method and registers descriptors used by the REPL Intelligence Layer for tab completion and help rendering.
-
-### Visualization
-
-Canvas-based overlays rendered on top of the xterm.js terminal:
-
-- `VisualizationSceneManager` manages stacked scenes
-- Waveform rendering with animated playheads (per-sample tracking for concurrent playback)
-- Onset slice markers overlaid on waveforms
-- NMF component heatmaps
-
-### Result Types
-
-Custom result objects in `src/renderer/results/` and `src/renderer/bounce-result.ts`:
-
-- All extend `BounceResult` for consistent terminal display formatting
-- Thenable wrappers (`SamplePromise`, `OnsetFeaturePromise`, etc.) enable chaining without `await` in the REPL
-- Each result type prints a concise summary emphasizing workflow-relevant properties
-
-## Application State Taxonomy
-
-Bounce maintains several distinct layers of state with different persistence and restore semantics:
-
-### Durable Project State (SQLite, persists across restarts)
-
-| State | Table | Restored on |
-|---|---|---|
-| Audio samples (hash, metadata) | `samples`, `samples_*_metadata` | On demand (hash lookups) |
-| Analysis features | `features`, `samples_features` | On demand |
-| REPL variables and functions | `repl_env` | App startup (`get-repl-env`) |
-| Command history | `command_history` | App startup (`get-command-history`) |
-| Instruments and sample maps | `instruments`, `instrument_samples` | On demand |
-| Mixer channel state | `mixer_channels`, `mixer_master` | App startup (mixer panel) |
-| MIDI sequences | `midi_sequences`, `midi_events` | On demand |
-| Background errors | `background_errors` | On demand (`errors()`) |
-
-### Session State (SQLite + in-memory, bounded lifetime)
-
-The **language service session** is the set of REPL commands executed since the last `session_start_timestamp`. It gives the TypeScript language service enough context to resolve variable types for completion.
-
-- `projects.session_start_timestamp` — Unix ms timestamp stored in SQLite. Commands in `command_history` with `timestamp > session_start_timestamp` form the session source.
-- Reset on: `clear-command-history` IPC, `load-project` IPC (project switch)
-- Restored to language service on: app startup (after `langservice:ready`), after language service crash (via `LanguageServiceManager.restoreSession()`)
-
-### Ephemeral REPL State (in-memory only, lost on restart)
-
-- Active JavaScript scope variables (`ReplEvaluator.scopeVars`)
-- Terminal screen contents and scroll position
-- Command buffer and cursor position
-- Tab completion candidates
-- Visualization overlays (waveform canvases, playhead positions)
-- Active playback handles
-
-### Settings (JSON file, persists across restarts)
-
-`<userData>/settings.json` stores:
-- `cwd` — current working directory for filesystem operations
-- `currentProjectName` — last active project name
+---
 
 ## REPL Intelligence Layer
 
@@ -455,9 +287,9 @@ The intelligence layer provides type-aware tab completion by combining two compo
 
 ### Decorator Registration System
 
-All REPL-exposed namespaces and porcelain result types are classes decorated with `@namespace` or `@replType` (from `src/shared/repl-registry.ts`). Every public method carries `@describe` and zero or more `@param` decorators:
+All REPL-exposed namespaces and result types use decorators from `src/shared/repl-registry.ts`:
 
-```ts
+```typescript
 @namespace("sn", { summary: "Sample namespace" })
 class SampleNamespace {
   @describe({ summary: "Load an audio file.", returns: "SamplePromise" })
@@ -466,56 +298,157 @@ class SampleNamespace {
 }
 ```
 
-At build time, `scripts/generate-repl-artifacts.ts` scans all decorated classes and emits:
-- `src/shared/repl-registry.generated.ts` — flat registry of method metadata (summary, visibility, param kinds) imported by the intelligence layer
-- `src/shared/repl-environment.d.ts` — TypeScript ambient declarations for the REPL global scope, imported by the language service virtual project
-
-At runtime, the `@namespace`/`@replType` decorators also register `NamespaceDescriptor` / `TypeDescriptor` objects into an in-memory registry (`src/shared/repl-registration.ts`), used by the help system.
+At build time, `scripts/generate-repl-artifacts.ts` emits:
+- `src/shared/repl-registry.generated.ts` — flat registry of method metadata
+- `src/shared/repl-environment.d.ts` — ambient TypeScript declarations for the REPL scope
 
 ### Completer Dispatch
 
-`ReplIntelligence` (`src/electron/repl-intelligence.ts`) receives a `CompletionContext` from the language service and dispatches to one of six completers:
+`ReplIntelligence` (`src/electron/repl-intelligence.ts`) receives a `CompletionContext` and
+dispatches to one of six completers:
 
 | Completer | Triggered by | Produces |
-|---|---|---|
-| `IdentifierCompleter` | Identifier position | Namespace names, global names |
+|-----------|-------------|---------|
+| `IdentifierCompleter` | Identifier position | Namespace and global names |
 | `PropertyCompleter` | Property access (`.`) | Method names for a known type |
 | `FilePathCompleter` | `@param kind: "filePath"` | Filesystem paths |
-| `SampleHashCompleter` | `@param kind: "sampleHash"` | Sample hash prefixes from DB |
-| `OptionsCompleter` | Object literal key position | Option object keys for a method |
-| `TypedValueCompleter` | `@param kind: "typed"` | Session variables matching expected type |
+| `SampleHashCompleter` | `@param kind: "sampleHash"` | Hash prefixes from DB |
+| `OptionsCompleter` | Object literal key | Option keys for a method |
+| `TypedValueCompleter` | `@param kind: "typed"` | Session variables of matching type |
 
-Visibility is controlled by `devMode` (toggled via `env.dev(true/false)`): plumbing-visibility items are hidden by default and shown only when dev mode is on.
+---
 
-### Porcelain / Plumbing Visibility
+## Native Addons
 
-Every method has a `visibility` field (default: `"porcelain"`). Plumbing methods are infrastructure-level operations not intended for casual users. Both levels require full `@describe`/`@param` documentation — visibility is a display filter, not a documentation gate.
+Two C++ native addons built via node-gyp (`binding.gyp`). Source in `native/`.
 
-```
-env.dev()        → shows current mode
-env.dev(true)    → enables dev mode (plumbing visible in help and completions)
-env.dev(false)   → disables dev mode
-```
+### `flucoma_native`
+
+Loaded by the analysis utility process. FluCoMa audio analysis algorithms (all header-only
+from `third_party/flucoma-core/`):
+
+| Export | Algorithm |
+|--------|-----------|
+| `onsetSlice` | Onset detection |
+| `ampSlice` | Amplitude-based slicing |
+| `noveltySlice` | Novelty-based slicing |
+| `transientSlice` | Transient-based slicing |
+| `bufNMF` | Non-negative Matrix Factorization |
+| `mfcc` | Mel-frequency cepstral coefficients |
+| `spectralShape` | Centroid, spread, skewness, kurtosis, rolloff, flatness, crest |
+| `normalize` | Feature normalization |
+| `kdTree` | K-dimensional tree for nearest-neighbor queries |
+
+Dependencies: FluCoMa core, Eigen, HISSTools FFT, Accelerate (macOS) / BLAS (Linux).
+
+### `audio_engine_native`
+
+Loaded by the audio engine utility process only.
+
+| Export | Purpose |
+|--------|---------|
+| `play` / `stop` / `stopAll` | Sample playback |
+| `defineInstrument` / `freeInstrument` | Polyphonic instrument allocation |
+| `loadInstrumentSample` | MIDI note → sample buffer mapping |
+| `instrumentNoteOn/Off/StopAll` | Voice triggering |
+| `setInstrumentParam` | Instrument parameter control |
+| `mixer*` | Gain, pan, mute, solo, routing |
+| `onMixerLevels` | Peak meter callback (~60 Hz) |
+
+Dependencies: miniaudio, AudioToolbox/CoreAudio (macOS), ALSA (Linux).
+
+---
+
+## Database
+
+SQLite via better-sqlite3. Stored in the platform app data directory; overridable with
+`BOUNCE_USER_DATA_PATH` (used for test isolation).
+
+All data tables are project-scoped (foreign key to `projects.id` with CASCADE delete).
+
+| Table | Purpose |
+|-------|---------|
+| `schema_versions` | Migration tracking |
+| `projects` | Named workspaces with `session_start_timestamp` |
+| `samples` | Audio PCM (BLOB) + metadata (hash, sample rate, channels, duration) |
+| `raw_sample_metadata` | Original file path per hash |
+| `features` | Cached analysis results (JSON), unique per (project, sample_hash, feature_hash) |
+| `samples_features` | Links derived samples back to source sample + feature |
+| `command_history` | REPL command history for language service session restore |
+| `repl_env` | Persisted REPL variables and functions |
+| `instruments` | Named instrument definitions |
+| `instrument_samples` | MIDI note → sample mapping per instrument |
+| `mixer_channels` | Per-project mixer channel state |
+| `mixer_master` | Per-project master bus state |
+| `midi_sequences` | Named MIDI sequences |
+| `midi_events` | Individual MIDI events ordered by timestamp |
+| `background_errors` | Non-fatal errors for user visibility via `errors()` |
+
+Schema changes require a versioned migration. See `.github/skills/add-database-migration/SKILL.md`.
+
+---
+
+## Renderer Architecture
+
+### REPL
+
+`BounceApp` (`src/renderer/app.ts`) manages the terminal:
+
+- xterm.js input handling, history navigation, reverse search (Ctrl+R)
+- `ReplEvaluator` auto-awaits top-level expressions and assignments
+- Tab completion via debounced `completion:request` IPC — renders ghost text only
+- Canvas-based visualization overlays (waveforms, onset markers, NMF heatmaps)
+
+### Namespaces
+
+The Bounce API (`src/renderer/bounce-api.ts`) exposes 11 namespaces via `@namespace`
+decorators, each in `src/renderer/namespaces/`:
+
+| REPL name | Module | Purpose |
+|-----------|--------|---------|
+| `sn` | `sample-namespace.ts` | Sample loading, listing, recording |
+| `vis` | `vis-namespace.ts` | Visualization scenes |
+| `proj` | `project-namespace.ts` | Project management |
+| `env` | `env-namespace.ts` | REPL scope, dev mode |
+| `corpus` | `corpus-namespace.ts` | Concatenative synthesis |
+| `fs` | `fs-namespace.ts` | Filesystem navigation |
+| `inst` | `instrument-namespace.ts` | Instruments, note events |
+| `mx` | `mixer-namespace.ts` | Mixer channels |
+| `midi` | `midi-namespace.ts` | MIDI input, sequences |
+| `transport` | `transport-namespace.ts` | BPM, start/stop |
+| `pat` | `pat-namespace.ts` | Pattern sequencing |
+| *(globals)* | `globals.ts` | `help()`, `clear()`, `debug()`, `errors()` |
+
+### Result Types
+
+Custom result objects in `src/renderer/results/` extend `BounceResult`. Thenable wrappers
+(`SamplePromise`, `OnsetFeaturePromise`, etc.) enable chaining without explicit `await`.
+Each type prints a concise terminal summary emphasizing workflow-relevant properties.
+
+---
+
+## Application State
+
+| Layer | Storage | Restored on |
+|-------|---------|-------------|
+| Audio samples + metadata | SQLite | On demand |
+| Analysis features | SQLite | On demand |
+| REPL variables and functions | SQLite (`repl_env`) | App startup |
+| Command history | SQLite | App startup (language service replay) |
+| Instruments + sample maps | SQLite | On demand |
+| Mixer state | SQLite | App startup |
+| MIDI sequences | SQLite | On demand |
+| Language service session | In-memory (rebuilt from history) | After `langservice:ready` |
+| Active REPL scope variables | In-memory | Lost on restart |
+| Terminal screen / visualizations | In-memory | Lost on restart |
+| CWD + current project name | `settings.json` | App startup |
+
+---
 
 ## Configuration
 
-### Settings Store
+**Settings file:** `<userData>/settings.json` — `cwd` and `currentProjectName`.
 
-JSON file at `<userData>/settings.json`:
-
-- `cwd` — current working directory for filesystem operations
-- `currentProjectName` — last active project name
-
-### Environment Variables
-
-- `BOUNCE_USER_DATA_PATH` — override the default app data directory (useful for test isolation)
-- `BOUNCE_NULL_AUDIO` — set to `1` to use miniaudio's null backend (no hardware audio device required); used in CI/Docker test environments
-
-### Analysis Options
-
-All analysis functions accept option objects with sensible defaults:
-
-- `OnsetSliceOptions` — threshold, minSliceLength, filterSize, frameDelta, etc.
-- `BufNMFOptions` — components, iterations, fftSize, hopSize, windowSize
-- `MFCCOptions` — numCoeffs, numBands, freqRange, window parameters
-- `GranularizeOptions` — grainSize, hopSize, jitter, timespan
+**Environment variables:**
+- `BOUNCE_USER_DATA_PATH` — override app data directory (test isolation)
+- `BOUNCE_NULL_AUDIO` — set to `1` for miniaudio null backend (CI/Docker)
