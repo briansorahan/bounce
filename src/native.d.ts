@@ -264,3 +264,14 @@ export class TransientSlice {
   process(audioBuffer: Float32Array | Float64Array): number[];
   reset(): void;
 }
+
+export interface AdditiveRenderOptions {
+  fundamentalHz: number;
+  numPartials: number;
+  spectralTilt: number;
+  durationSec: number;
+  sampleRate?: number;
+  fftSize?: number;
+}
+
+export function renderAdditive(options: AdditiveRenderOptions): Float32Array;

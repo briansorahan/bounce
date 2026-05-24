@@ -6,6 +6,7 @@ import {
 
 // Re-export types
 export type { OnsetFeatureOptions, OnsetSliceOptions, MFCCFeatureOptions } from "./native";
+export type { AdditiveRenderOptions } from "./native";
 export { SpectralShapeFeature } from "./spectral-shape";
 export type { SpectralShapeOptions, SpectralShapeResult } from "./spectral-shape";
 export { Normalization } from "./normalization";
@@ -253,4 +254,12 @@ export class TransientSlice {
   reset(): void {
     this._native.reset();
   }
+}
+
+/**
+ * Render an additive synthesis tone via iFFT overlap-add.
+ * Returns a Float32Array of audio samples, peak-normalized to 1.0.
+ */
+export function renderAdditive(options: import("./native").AdditiveRenderOptions): Float32Array {
+  return addon.renderAdditive(options);
 }
