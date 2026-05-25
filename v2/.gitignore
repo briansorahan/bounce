@@ -3,3 +3,5 @@ testdata/.cache/
 
 # Build artifacts
 bounce
+*.o
+*.a
