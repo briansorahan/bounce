@@ -6,7 +6,7 @@
 
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { KDTree } from "./kdtree";
+import { KDTree } from "./kdtree.js";
 
 // ---------------------------------------------------------------------------
 // addPoint + size

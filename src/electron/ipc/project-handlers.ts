@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
-import { ProjectListRecord } from "../database";
+import { ProjectListRecord } from "../database.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import type { HandlerDeps } from "./register";
+import type { HandlerDeps } from "./register.js";
 
 function toProjectData(
   deps: HandlerDeps,

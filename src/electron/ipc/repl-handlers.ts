@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
-import { ReplEnvRecord } from "../database";
+import { ReplEnvRecord } from "../database.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import type { HandlerDeps } from "./register";
+import type { HandlerDeps } from "./register.js";
 
 // Lazily loaded TypeScript transpiler — runs in the main process
 let _ts: typeof import("typescript") | null = null;

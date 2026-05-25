@@ -8,8 +8,8 @@ import type {
   InstrumentSampleRecord,
   MixerState,
   ReplEnvEntry,
-} from "./domain-types";
-import type { MidiEvent, MidiSequenceRecord } from "./ipc-contract";
+} from "./domain-types.js";
+import type { MidiEvent, MidiSequenceRecord } from "./ipc-contract.js";
 
 // ---------------------------------------------------------------------------
 // Narrow per-domain query interfaces.

@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import { BounceError } from "../../shared/bounce-error.js";
-import type { HandlerDeps } from "./register";
+import type { HandlerDeps } from "./register.js";
 
 export function registerCorpusHandlers(deps: HandlerDeps): void {
   const { corpusManager } = deps;

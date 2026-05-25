@@ -8,7 +8,7 @@
 
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { dispatch } from "./electron/services/analysis/dispatch";
+import { dispatch } from "./electron/services/analysis/dispatch.js";
 
 const SAMPLE_RATE = 44100;
 const DURATION    = 0.5;

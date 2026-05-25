@@ -1,4 +1,4 @@
-import type { IQueryService } from "../../../shared/query-interfaces";
+import type { IQueryService } from "../../../shared/query-interfaces.js";
 import type {
   SampleRecord,
   SampleListRecord,
@@ -10,10 +10,10 @@ import type {
   MixerState,
   MixerChannelState,
   ReplEnvEntry,
-} from "../../../shared/domain-types";
-import type { MidiEvent, MidiSequenceRecord } from "../../../shared/ipc-contract";
-import type { DatabaseManager } from "../../database";
-import type { SettingsStore } from "../../settings-store";
+} from "../../../shared/domain-types.js";
+import type { MidiEvent, MidiSequenceRecord } from "../../../shared/ipc-contract.js";
+import type { DatabaseManager } from "../../database.js";
+import type { SettingsStore } from "../../settings-store.js";
 
 /**
  * DatabaseQueryService — read-only query service backed by DatabaseManager.

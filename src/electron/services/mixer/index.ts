@@ -2,11 +2,11 @@ import type { MessageConnection } from "vscode-jsonrpc";
 import {
   registerMixerHandlers,
   createMixerClient,
-} from "../../../shared/rpc/mixer.rpc";
-import type { MixerHandlers, MixerRpc } from "../../../shared/rpc/mixer.rpc";
-import type { MixerState } from "../../../shared/domain-types";
-import type { EventBus } from "../../../shared/event-bus";
-import type { IMixerQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/mixer.rpc.js";
+import type { MixerHandlers, MixerRpc } from "../../../shared/rpc/mixer.rpc.js";
+import type { MixerState } from "../../../shared/domain-types.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { IMixerQuery } from "../../../shared/query-interfaces.js";
 
 /**
  * MixerService — persist and read mixer channel / master state.

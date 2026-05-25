@@ -3,7 +3,7 @@ import { test } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DatabaseManager } from "./electron/database";
+import { DatabaseManager } from "./electron/database.js";
 
 function withTempDb(fn: (dbPath: string) => void): void {
   const dbPath = path.join(os.tmpdir(), `bounce-projects-${Date.now()}-${Math.random()}.db`);

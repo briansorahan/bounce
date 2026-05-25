@@ -1,4 +1,4 @@
-import { OnsetFeature, MFCCFeature } from "./index";
+import { OnsetFeature, MFCCFeature } from "./index.js";
 import { test } from "vitest";
 
 // Create a test signal (sine wave with amplitude envelope)

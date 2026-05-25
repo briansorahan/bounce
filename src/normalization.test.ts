@@ -6,7 +6,7 @@
 
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { Normalization } from "./normalization";
+import { Normalization } from "./normalization.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

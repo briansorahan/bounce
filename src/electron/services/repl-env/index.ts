@@ -2,11 +2,11 @@ import type { MessageConnection } from "vscode-jsonrpc";
 import {
   registerReplEnvHandlers,
   createReplEnvClient,
-} from "../../../shared/rpc/repl-env.rpc";
-import type { ReplEnvHandlers, ReplEnvRpc } from "../../../shared/rpc/repl-env.rpc";
-import type { ReplEnvEntry } from "../../../shared/domain-types";
-import type { EventBus } from "../../../shared/event-bus";
-import type { IReplEnvQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/repl-env.rpc.js";
+import type { ReplEnvHandlers, ReplEnvRpc } from "../../../shared/rpc/repl-env.rpc.js";
+import type { ReplEnvEntry } from "../../../shared/domain-types.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { IReplEnvQuery } from "../../../shared/query-interfaces.js";
 
 /**
  * ReplEnvService — save and retrieve the REPL environment snapshot.

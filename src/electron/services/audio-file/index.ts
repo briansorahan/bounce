@@ -3,21 +3,21 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import type { MessageConnection } from "vscode-jsonrpc";
 import decode from "audio-decode";
-import { SettingsStore } from "../../settings-store";
-import { AUDIO_EXTENSIONS } from "../../audio-extensions";
+import { SettingsStore } from "../../settings-store.js";
+import { AUDIO_EXTENSIONS } from "../../audio-extensions.js";
 import { BounceError } from "../../../shared/bounce-error.js";
 import {
   registerAudioFileHandlers,
   createAudioFileClient,
-} from "../../../shared/rpc/audio-file.rpc";
+} from "../../../shared/rpc/audio-file.rpc.js";
 import type {
   AudioFileHandlers,
   AudioFileRpc,
   ReadAudioFileResult,
-} from "../../../shared/rpc/audio-file.rpc";
-import type { EventBus } from "../../../shared/event-bus";
-import type { ISampleQuery, ICwdQuery } from "../../../shared/query-interfaces";
-import type { SampleListRecord } from "../../../shared/domain-types";
+} from "../../../shared/rpc/audio-file.rpc.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { ISampleQuery, ICwdQuery } from "../../../shared/query-interfaces.js";
+import type { SampleListRecord } from "../../../shared/domain-types.js";
 
 /**
  * AudioFileService — decode audio files, compute hashes, persist via EventBus.

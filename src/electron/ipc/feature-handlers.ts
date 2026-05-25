@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
-import { FeatureOptions } from "../database";
+import { FeatureOptions } from "../database.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import type { HandlerDeps } from "./register";
+import type { HandlerDeps } from "./register.js";
 
 export function registerFeatureHandlers(deps: HandlerDeps): void {
   ipcMain.handle(

@@ -6,7 +6,7 @@
  */
 
 import type { MessageConnection } from "vscode-jsonrpc";
-import { dispatch } from "./dispatch";
+import { dispatch } from "./dispatch.js";
 import {
   registerAnalysisHandlers,
   type AnalysisHandlers,
@@ -14,8 +14,8 @@ import {
   type BufNMFResult,
   type BufNMFCrossResult,
   type MFCCResult,
-} from "../../../shared/rpc/analysis.rpc";
-import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc";
+} from "../../../shared/rpc/analysis.rpc.js";
+import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc.js";
 
 export class AnalysisService implements AnalysisHandlers {
   async onsetSlice(params: AnalysisRpc["onsetSlice"]["params"]): Promise<OnsetSliceResult> {

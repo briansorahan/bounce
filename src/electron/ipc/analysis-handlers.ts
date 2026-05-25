@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { OnsetSlice, BufNMF, MFCCFeature, AmpSlice, NoveltySlice, TransientSlice } from "../../index";
+import { OnsetSlice, BufNMF, MFCCFeature, AmpSlice, NoveltySlice, TransientSlice } from "../../index.js";
 import { BounceError } from "../../shared/bounce-error.js";
 import {
   BufNMFOptions,
@@ -8,7 +8,7 @@ import {
   AmpSliceOptions,
   NoveltySliceOptions,
   TransientSliceOptions,
-} from "../ipc-types";
+} from "../ipc-types.js";
 
 export function registerAnalysisHandlers(): void {
   ipcMain.handle(

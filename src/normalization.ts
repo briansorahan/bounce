@@ -1,4 +1,4 @@
-import type { Normalization as NativeNormalization } from "./native";
+import type { Normalization as NativeNormalization } from "./native.js";
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);

@@ -2,11 +2,11 @@ import type { MessageConnection } from "vscode-jsonrpc";
 import {
   registerProjectHandlers,
   createProjectClient,
-} from "../../../shared/rpc/project.rpc";
-import type { ProjectHandlers, ProjectRpc } from "../../../shared/rpc/project.rpc";
-import type { ProjectListEntry, ProjectRecord } from "../../../shared/domain-types";
-import type { EventBus } from "../../../shared/event-bus";
-import type { IProjectQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/project.rpc.js";
+import type { ProjectHandlers, ProjectRpc } from "../../../shared/rpc/project.rpc.js";
+import type { ProjectListEntry, ProjectRecord } from "../../../shared/domain-types.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { IProjectQuery } from "../../../shared/query-interfaces.js";
 
 /**
  * Minimal write interface for ProjectService.

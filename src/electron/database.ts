@@ -2,8 +2,8 @@ import Database from "better-sqlite3";
 import { app } from "electron";
 import * as path from "path";
 import * as crypto from "crypto";
-import type { MidiEvent, MidiSequenceRecord } from "../shared/ipc-contract";
-import { computeGrains } from "./services/granularize";
+import type { MidiEvent, MidiSequenceRecord } from "../shared/ipc-contract.js";
+import { computeGrains } from "./services/granularize/index.js";
 
 export interface DebugLogEntry {
   id: number;

@@ -1,6 +1,6 @@
 import { RequestType, ResponseError, type MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
-import type { MixerChannelState, MixerMasterState, MixerState } from "../domain-types";
+import type { RpcContract } from "./types.js";
+import type { MixerChannelState, MixerMasterState, MixerState } from "../domain-types.js";
 
 export interface MixerRpc extends RpcContract {
   getMixerState: {

@@ -2,11 +2,11 @@ import type { MessageConnection } from "vscode-jsonrpc";
 import {
   registerInstrumentHandlers,
   createInstrumentClient,
-} from "../../../shared/rpc/instrument.rpc";
-import type { InstrumentHandlers, InstrumentRpc } from "../../../shared/rpc/instrument.rpc";
-import type { InstrumentRecord, InstrumentSampleRecord } from "../../../shared/domain-types";
-import type { EventBus } from "../../../shared/event-bus";
-import type { IInstrumentQuery, ISampleQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/instrument.rpc.js";
+import type { InstrumentHandlers, InstrumentRpc } from "../../../shared/rpc/instrument.rpc.js";
+import type { InstrumentRecord, InstrumentSampleRecord } from "../../../shared/domain-types.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { IInstrumentQuery, ISampleQuery } from "../../../shared/query-interfaces.js";
 
 /**
  * InstrumentService — create / delete instruments and assign samples to them.

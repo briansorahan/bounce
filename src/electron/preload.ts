@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { FeatureOptions, GrainsOptions } from "./database";
+import type { FeatureOptions, GrainsOptions } from "./database.js";
 import type {
   BufNMFOptions,
   MFCCOptions,
@@ -8,8 +8,8 @@ import type {
   AmpSliceOptions,
   NoveltySliceOptions,
   TransientSliceOptions,
-} from "./ipc-types";
-import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData, BounceGrainsOptions } from "../shared/ipc-contract";
+} from "./ipc-types.js";
+import type { ElectronAPI, MidiEvent, TransportTickData, AudioDeviceInfoData, BounceGrainsOptions } from "../shared/ipc-contract.js";
 
 const api: ElectronAPI = {
   version: process.versions.electron,

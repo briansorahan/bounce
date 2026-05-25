@@ -1,4 +1,4 @@
-import type { SpectralShapeFeature as NativeSpectralShapeFeature } from "./native";
+import type { SpectralShapeFeature as NativeSpectralShapeFeature } from "./native.js";
 
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);

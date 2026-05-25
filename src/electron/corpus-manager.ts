@@ -1,6 +1,6 @@
-import { MFCCFeature, SpectralShapeFeature, Normalization, KDTree } from "../index";
-import type { DatabaseManager } from "./database";
-import { resolveAudioData } from "./audio-resolver";
+import { MFCCFeature, SpectralShapeFeature, Normalization, KDTree } from "../index.js";
+import type { DatabaseManager } from "./database.js";
+import { resolveAudioData } from "./audio-resolver.js";
 
 export interface CorpusSegment {
   hash: string;

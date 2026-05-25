@@ -1,6 +1,6 @@
 import { RequestType, ResponseError, type MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
-import type { ProjectListEntry } from "../domain-types";
+import type { RpcContract } from "./types.js";
+import type { ProjectListEntry } from "../domain-types.js";
 
 export interface ProjectRpc extends RpcContract {
   loadProject: {

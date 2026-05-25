@@ -1,5 +1,5 @@
 import { RequestType, ResponseError, MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
+import type { RpcContract } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Option types (mirrors src/electron/ipc-types.ts — kept separate so this
