@@ -1,7 +1,7 @@
 import * as path from "path";
 import { utilityProcess, type UtilityProcess, MessageChannelMain } from "electron";
-import type { ServiceClient } from "../../../shared/rpc/types";
-import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc";
+import type { ServiceClient } from "../../../shared/rpc/types.js";
+import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc.js";
 
 type PendingRequest = {
   resolve: (value: unknown) => void;

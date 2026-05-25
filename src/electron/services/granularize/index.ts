@@ -27,8 +27,8 @@ import {
   type GrainsOptions,
   type GrainsResult,
   type GrainsRpc,
-} from "../../../shared/rpc/granularize.rpc";
-import { resynthesize } from "./resynthesize";
+} from "../../../shared/rpc/granularize.rpc.js";
+import { resynthesize } from "./resynthesize.js";
 
 /**
  * Pure synchronous computation — safe to call from synchronous contexts

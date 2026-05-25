@@ -1,5 +1,5 @@
 import { RequestType, ResponseError, type MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
+import type { RpcContract } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Contract

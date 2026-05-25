@@ -1,12 +1,12 @@
 import * as path from "path";
 import * as fs from "fs";
 import type { MessageConnection } from "vscode-jsonrpc";
-import { SettingsStore } from "../../settings-store";
-import { AUDIO_EXTENSIONS } from "../../audio-extensions";
+import { SettingsStore } from "../../settings-store.js";
+import { AUDIO_EXTENSIONS } from "../../audio-extensions.js";
 import {
   registerFilesystemHandlers,
   createFilesystemClient,
-} from "../../../shared/rpc/filesystem.rpc";
+} from "../../../shared/rpc/filesystem.rpc.js";
 import type {
   FilesystemHandlers,
   FilesystemRpc,
@@ -14,9 +14,9 @@ import type {
   FileType,
   LsResult,
   WalkResult,
-} from "../../../shared/rpc/filesystem.rpc";
-import type { EventBus } from "../../../shared/event-bus";
-import type { ICwdQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/filesystem.rpc.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { ICwdQuery } from "../../../shared/query-interfaces.js";
 
 function direntToFileType(d: fs.Dirent): FileType {
   if (d.isFile()) return "file";

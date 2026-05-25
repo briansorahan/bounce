@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
-import type { HandlerDeps } from "./register";
-import { BounceError } from "../../shared/bounce-error";
+import type { HandlerDeps } from "./register.js";
+import { BounceError } from "../../shared/bounce-error.js";
 
 export function registerErrorHandlers(deps: HandlerDeps): void {
   ipcMain.handle("get-background-errors", () => {

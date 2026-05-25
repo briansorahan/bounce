@@ -1,4 +1,4 @@
-import { DatabaseManager } from "./database";
+import { DatabaseManager } from "./database.js";
 
 let dbManagerInstance: DatabaseManager | null = null;
 

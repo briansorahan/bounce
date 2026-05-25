@@ -2,18 +2,18 @@ import {
   OnsetFeature as NativeOnsetFeature,
   OnsetSlice as NativeOnsetSlice,
   MFCCFeature as NativeMFCCFeature,
-} from "./native";
+} from "./native.js";
 
 // Re-export types
-export type { OnsetFeatureOptions, OnsetSliceOptions, MFCCFeatureOptions } from "./native";
-export type { AdditiveRenderOptions } from "./native";
-export { SpectralShapeFeature } from "./spectral-shape";
-export type { SpectralShapeOptions, SpectralShapeResult } from "./spectral-shape";
-export { Normalization } from "./normalization";
-export { KDTree } from "./kdtree";
-export type { KNNResult } from "./kdtree";
-export { BufNMFCross } from "./electron/BufNMFCross";
-export type { BufNMFCrossOptions, BufNMFCrossResult } from "./electron/BufNMFCross";
+export type { OnsetFeatureOptions, OnsetSliceOptions, MFCCFeatureOptions } from "./native.js";
+export type { AdditiveRenderOptions } from "./native.js";
+export { SpectralShapeFeature } from "./spectral-shape.js";
+export type { SpectralShapeOptions, SpectralShapeResult } from "./spectral-shape.js";
+export { Normalization } from "./normalization.js";
+export { KDTree } from "./kdtree.js";
+export type { KNNResult } from "./kdtree.js";
+export { BufNMFCross } from "./electron/BufNMFCross.js";
+export type { BufNMFCrossOptions, BufNMFCrossResult } from "./electron/BufNMFCross.js";
 
 // Load the native addon
 import { createRequire } from "node:module";
@@ -260,6 +260,6 @@ export class TransientSlice {
  * Render an additive synthesis tone via iFFT overlap-add.
  * Returns a Float32Array of audio samples, peak-normalized to 1.0.
  */
-export function renderAdditive(options: import("./native").AdditiveRenderOptions): Float32Array {
+export function renderAdditive(options: import("./native.js").AdditiveRenderOptions): Float32Array {
   return addon.renderAdditive(options);
 }

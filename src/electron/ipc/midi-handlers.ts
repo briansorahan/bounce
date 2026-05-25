@@ -1,9 +1,9 @@
 import { ipcMain } from "electron";
 import { createRequire } from "node:module";
 import * as path from "path";
-import type { HandlerDeps } from "./register";
-import type { MidiEvent, MidiInputDevice, MidiSequenceRecord } from "../../shared/ipc-contract";
-import { BounceError } from "../../shared/bounce-error";
+import type { HandlerDeps } from "./register.js";
+import type { MidiEvent, MidiInputDevice, MidiSequenceRecord } from "../../shared/ipc-contract.js";
+import { BounceError } from "../../shared/bounce-error.js";
 
 const require = createRequire(import.meta.url);
 

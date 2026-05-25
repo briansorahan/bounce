@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import type { HandlerDeps } from "./register";
+import type { HandlerDeps } from "./register.js";
 
 export function registerMixerHandlers(deps: HandlerDeps): void {
   const { getAudioEnginePort } = deps;

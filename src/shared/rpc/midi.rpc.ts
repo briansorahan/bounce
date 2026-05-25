@@ -1,6 +1,6 @@
 import { RequestType, ResponseError, type MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
-import type { MidiEvent, MidiSequenceRecord } from "../ipc-contract";
+import type { RpcContract } from "./types.js";
+import type { MidiEvent, MidiSequenceRecord } from "../ipc-contract.js";
 
 export interface MidiRpc extends RpcContract {
   saveMidiSequence: {

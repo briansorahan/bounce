@@ -2,9 +2,9 @@ import { ipcMain } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { SettingsStore } from "../settings-store";
-import { AUDIO_EXTENSIONS } from "../audio-extensions";
-import type { HandlerDeps } from "./register";
+import { SettingsStore } from "../settings-store.js";
+import { AUDIO_EXTENSIONS } from "../audio-extensions.js";
+import type { HandlerDeps } from "./register.js";
 
 export type FileType =
   | "file"

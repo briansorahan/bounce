@@ -1,4 +1,4 @@
-import { OnsetFeature } from "./index";
+import { OnsetFeature } from "./index.js";
 
 async function main() {
   console.log("Testing FluCoMa OnsetFeature binding...\n");

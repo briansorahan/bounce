@@ -7,8 +7,8 @@ import type {
   PushChannel,
   ElectronAPI,
   IpcChannelName,
-} from "./ipc-contract";
-import { IpcChannel } from "./ipc-contract";
+} from "./ipc-contract.js";
+import { IpcChannel } from "./ipc-contract.js";
 import { test } from "vitest";
 
 function assert(condition: boolean, msg: string): asserts condition {

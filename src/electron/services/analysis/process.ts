@@ -10,8 +10,8 @@
  * the IPC router.
  */
 
-import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc";
-import { dispatch } from "./dispatch";
+import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc.js";
+import { dispatch } from "./dispatch.js";
 
 type AnalysisRequest = {
   id: string;

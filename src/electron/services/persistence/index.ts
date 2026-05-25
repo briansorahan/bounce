@@ -1,6 +1,6 @@
-import type { DomainEvent, EventBus } from "../../../shared/event-bus";
-import type { DatabaseManager } from "../../database";
-import type { SettingsStore } from "../../settings-store";
+import type { DomainEvent, EventBus } from "../../../shared/event-bus.js";
+import type { DatabaseManager } from "../../database.js";
+import type { SettingsStore } from "../../settings-store.js";
 
 /**
  * PersistenceService — batching event consumer backed by DatabaseManager.

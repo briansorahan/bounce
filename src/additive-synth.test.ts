@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { renderAdditive } from "./index";
+import { renderAdditive } from "./index.js";
 
 /**
  * Measure the amplitude of a given frequency in a signal via a DFT at that frequency.

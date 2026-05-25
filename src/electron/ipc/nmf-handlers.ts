@@ -1,11 +1,11 @@
 import { ipcMain, BrowserWindow } from "electron";
-import { DatabaseManager } from "../database";
-import { debugLog } from "../logger";
-import { BufNMF } from "../BufNMF";
-import { BufNMFCross } from "../BufNMFCross";
+import { DatabaseManager } from "../database.js";
+import { debugLog } from "../logger.js";
+import { BufNMF } from "../BufNMF.js";
+import { BufNMFCross } from "../BufNMFCross.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import { resolveAudioData } from "../audio-resolver";
-import type { HandlerDeps } from "./register";
+import { resolveAudioData } from "../audio-resolver.js";
+import type { HandlerDeps } from "./register.js";
 
 interface CommandResult {
   success: boolean;
