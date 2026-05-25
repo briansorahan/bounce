@@ -1,11 +1,11 @@
 import { ipcMain } from "electron";
 import * as crypto from "crypto";
-import { GrainsOptions } from "../database";
+import { GrainsOptions } from "../database.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import { resolveAudioData } from "../audio-resolver";
-import { GrainsService } from "../services/granularize";
-import type { BounceGrainsOptions } from "../../shared/rpc/granularize.rpc";
-import type { HandlerDeps } from "./register";
+import { resolveAudioData } from "../audio-resolver.js";
+import { GrainsService } from "../services/granularize/index.js";
+import type { BounceGrainsOptions } from "../../shared/rpc/granularize.rpc.js";
+import type { HandlerDeps } from "./register.js";
 
 export function registerSampleHandlers(deps: HandlerDeps): void {
   ipcMain.handle("list-samples", async () => {

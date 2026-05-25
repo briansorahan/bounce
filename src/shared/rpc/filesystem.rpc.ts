@@ -1,5 +1,5 @@
 import { RequestType, ResponseError, MessageConnection } from "vscode-jsonrpc";
-import type { RpcContract } from "./types";
+import type { RpcContract } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Data shapes

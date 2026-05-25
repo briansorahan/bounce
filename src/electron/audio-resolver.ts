@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import decode from "audio-decode";
-import type { DatabaseManager } from "./database";
+import type { DatabaseManager } from "./database.js";
 
 export interface ResolvedAudio {
   audioData: Float32Array;

@@ -1,4 +1,4 @@
-import type { MidiEvent } from "./ipc-contract";
+import type { MidiEvent } from "./ipc-contract.js";
 
 // ---------------------------------------------------------------------------
 // Domain events — one type per state-mutating operation.

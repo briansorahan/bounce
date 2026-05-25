@@ -13,6 +13,7 @@ Napi::Object InitKDTree(Napi::Env env, Napi::Object exports);
 Napi::Object InitAmpSlice(Napi::Env env, Napi::Object exports);
 Napi::Object InitNoveltySlice(Napi::Env env, Napi::Object exports);
 Napi::Object InitTransientSlice(Napi::Env env, Napi::Object exports);
+Napi::Object InitAdditiveSynth(Napi::Env env, Napi::Object exports);
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitOnsetFeature(env, exports);
@@ -26,6 +27,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitAmpSlice(env, exports);
   InitNoveltySlice(env, exports);
   InitTransientSlice(env, exports);
+  InitAdditiveSynth(env, exports);
   return exports;
 }
 

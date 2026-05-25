@@ -9,8 +9,8 @@
 
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import type { DatabaseManager } from "./electron/database";
-import { resolveAudioData } from "./electron/audio-resolver";
+import type { DatabaseManager } from "./electron/database.js";
+import { resolveAudioData } from "./electron/audio-resolver.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,13 +1,13 @@
 import { app, BrowserWindow, ipcMain, session, MessageChannelMain, utilityProcess, type UtilityProcess } from "electron";
 import * as path from "path";
 import * as fs from "fs";
-import { DatabaseManager } from "./database";
-import { setDatabaseManager } from "./logger";
-import { CorpusManager } from "./corpus-manager";
-import { SettingsStore } from "./settings-store";
-import { registerAllHandlers } from "./ipc/register";
-import { logBackgroundError } from "./logger";
-import { LanguageServiceManager } from "./language-service-manager";
+import { DatabaseManager } from "./database.js";
+import { setDatabaseManager } from "./logger.js";
+import { CorpusManager } from "./corpus-manager.js";
+import { SettingsStore } from "./settings-store.js";
+import { registerAllHandlers } from "./ipc/register.js";
+import { logBackgroundError } from "./logger.js";
+import { LanguageServiceManager } from "./language-service-manager.js";
 
 let dbManager: DatabaseManager | undefined = undefined;
 let settingsStore: SettingsStore | undefined = undefined;

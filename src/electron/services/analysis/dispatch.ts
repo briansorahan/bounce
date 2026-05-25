@@ -6,8 +6,8 @@
  * same logic without spawning a child process.
  */
 
-import { OnsetSlice, AmpSlice, NoveltySlice, TransientSlice, BufNMF, BufNMFCross, MFCCFeature } from "../../../index";
-import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc";
+import { OnsetSlice, AmpSlice, NoveltySlice, TransientSlice, BufNMF, BufNMFCross, MFCCFeature } from "../../../index.js";
+import type { AnalysisRpc } from "../../../shared/rpc/analysis.rpc.js";
 
 export function dispatch(method: keyof AnalysisRpc, params: unknown): unknown {
   switch (method) {

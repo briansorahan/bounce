@@ -2,11 +2,11 @@ import type { MessageConnection } from "vscode-jsonrpc";
 import {
   registerMidiHandlers,
   createMidiClient,
-} from "../../../shared/rpc/midi.rpc";
-import type { MidiHandlers, MidiRpc } from "../../../shared/rpc/midi.rpc";
-import type { MidiEvent, MidiSequenceRecord } from "../../../shared/ipc-contract";
-import type { EventBus } from "../../../shared/event-bus";
-import type { IMidiQuery } from "../../../shared/query-interfaces";
+} from "../../../shared/rpc/midi.rpc.js";
+import type { MidiHandlers, MidiRpc } from "../../../shared/rpc/midi.rpc.js";
+import type { MidiEvent, MidiSequenceRecord } from "../../../shared/ipc-contract.js";
+import type { EventBus } from "../../../shared/event-bus.js";
+import type { IMidiQuery } from "../../../shared/query-interfaces.js";
 
 /**
  * MidiService — save / delete MIDI sequences.

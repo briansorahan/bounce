@@ -16,6 +16,7 @@
         "native/src/amp_slice.cpp",
         "native/src/novelty_slice.cpp",
         "native/src/transient_slice.cpp",
+        "native/src/additive_synth.cpp",
         "third_party/hisstools/HISSTools_FFT/HISSTools_FFT.cpp"
       ],
       "include_dirs": [

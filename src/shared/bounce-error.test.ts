@@ -1,5 +1,5 @@
-import { BounceError } from "./bounce-error";
-import type { SerializedBounceError } from "./bounce-error";
+import { BounceError } from "./bounce-error.js";
+import type { SerializedBounceError } from "./bounce-error.js";
 import assert from "node:assert/strict";
 import { test } from "vitest";
 

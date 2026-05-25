@@ -4,12 +4,12 @@ import * as fs from "fs";
 import * as os from "os";
 import * as crypto from "crypto";
 import decode from "audio-decode";
-import { SettingsStore } from "../settings-store";
-import { AUDIO_EXTENSIONS, AUDIO_EXTENSIONS_NO_DOT } from "../audio-extensions";
-import { debugLog } from "../logger";
+import { SettingsStore } from "../settings-store.js";
+import { AUDIO_EXTENSIONS, AUDIO_EXTENSIONS_NO_DOT } from "../audio-extensions.js";
+import { debugLog } from "../logger.js";
 import { BounceError } from "../../shared/bounce-error.js";
-import { resolveAudioData } from "../audio-resolver";
-import type { HandlerDeps } from "./register";
+import { resolveAudioData } from "../audio-resolver.js";
+import type { HandlerDeps } from "./register.js";
 
 // ---------------------------------------------------------------------------
 // Request-response correlation for audio engine utility process messages
