@@ -1,0 +1,7 @@
+# Cached test fixtures (downloaded from Freesound)
+testdata/.cache/
+
+# Build artifacts
+bounce
+*.o
+*.a
