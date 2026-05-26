@@ -26,6 +26,7 @@ src/**/*.d.ts.map
 *.db
 .beads-credential-key
 
+v2/bounce
 v2/**/*.o
 v2/**/*.o.tmp
 v2/**/*.a
