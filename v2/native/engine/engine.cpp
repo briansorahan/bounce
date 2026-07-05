@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -12,10 +13,10 @@ static struct EngineState {
     ma_device device;
     bool deviceInited = false;
 
-    std::vector<float> audioData;
-    int channels = 0;
-    int sampleRate = 0;
-    long long totalFrames = 0;
+    std::shared_ptr<const std::vector<float>> audioData;
+    std::atomic<int> channels{0};
+    std::atomic<int> sampleRate{0};
+    std::atomic<long long> totalFrames{0};
 
     std::atomic<long long> position{0};
     std::atomic<bool> playing{false};
@@ -24,17 +25,28 @@ static struct EngineState {
 } g_engine;
 
 static void data_callback(ma_device* pDevice, void* pOutput, const void* /*pInput*/, ma_uint32 frameCount) {
-    (void)pDevice;
     auto* out = static_cast<float*>(pOutput);
+    const int ch = static_cast<int>(pDevice->playback.channels);
+
+    if (ch <= 0) {
+        return;
+    }
 
     if (!g_engine.playing.load(std::memory_order_relaxed)) {
-        std::memset(out, 0, frameCount * g_engine.channels * sizeof(float));
+        std::memset(out, 0, frameCount * ch * sizeof(float));
+        return;
+    }
+
+    auto audioData = std::atomic_load_explicit(&g_engine.audioData, std::memory_order_acquire);
+    if (!audioData || audioData->empty()) {
+        std::memset(out, 0, frameCount * ch * sizeof(float));
+        g_engine.playing.store(false, std::memory_order_relaxed);
+        g_engine.position.store(0, std::memory_order_relaxed);
         return;
     }
 
     long long pos = g_engine.position.load(std::memory_order_relaxed);
-    long long total = g_engine.totalFrames;
-    int ch = g_engine.channels;
+    long long total = static_cast<long long>(audioData->size() / static_cast<size_t>(ch));
 
     long long framesToCopy = static_cast<long long>(frameCount);
     if (pos + framesToCopy > total) {
@@ -47,7 +59,7 @@ static void data_callback(ma_device* pDevice, void* pOutput, const void* /*pInpu
         return;
     }
 
-    std::memcpy(out, g_engine.audioData.data() + pos * ch,
+    std::memcpy(out, audioData->data() + pos * ch,
                 static_cast<size_t>(framesToCopy) * ch * sizeof(float));
 
     if (framesToCopy < static_cast<long long>(frameCount)) {
@@ -86,8 +98,8 @@ int engine_init(int use_null_backend) {
     }
 
     g_engine.deviceInited = true;
-    g_engine.sampleRate = static_cast<int>(g_engine.device.sampleRate);
-    g_engine.channels = 2;
+    g_engine.sampleRate.store(static_cast<int>(g_engine.device.sampleRate), std::memory_order_relaxed);
+    g_engine.channels.store(2, std::memory_order_relaxed);
     return 0;
 }
 
@@ -100,9 +112,11 @@ void engine_shutdown(void) {
     g_engine.deviceInited = false;
 
     std::lock_guard<std::mutex> lock(g_engine.loadMutex);
-    g_engine.audioData.clear();
-    g_engine.totalFrames = 0;
-    g_engine.position.store(0);
+    std::atomic_store_explicit(&g_engine.audioData, std::shared_ptr<const std::vector<float>>{}, std::memory_order_release);
+    g_engine.totalFrames.store(0, std::memory_order_relaxed);
+    g_engine.sampleRate.store(0, std::memory_order_relaxed);
+    g_engine.channels.store(0, std::memory_order_relaxed);
+    g_engine.position.store(0, std::memory_order_relaxed);
 }
 
 int engine_load(const char* path) {
@@ -135,14 +149,16 @@ int engine_load(const char* path) {
     int fileSampleRate = static_cast<int>(decoder.outputSampleRate);
     ma_decoder_uninit(&decoder);
 
+    auto loadedData = std::make_shared<const std::vector<float>>(std::move(data));
+
     {
         std::lock_guard<std::mutex> lock(g_engine.loadMutex);
-        g_engine.playing.store(false);
-        g_engine.audioData = std::move(data);
-        g_engine.totalFrames = static_cast<long long>(framesRead);
-        g_engine.channels = 2;
-        g_engine.sampleRate = fileSampleRate;
-        g_engine.position.store(0);
+        g_engine.playing.store(false, std::memory_order_relaxed);
+        std::atomic_store_explicit(&g_engine.audioData, loadedData, std::memory_order_release);
+        g_engine.totalFrames.store(static_cast<long long>(framesRead), std::memory_order_relaxed);
+        g_engine.channels.store(2, std::memory_order_relaxed);
+        g_engine.sampleRate.store(fileSampleRate, std::memory_order_relaxed);
+        g_engine.position.store(0, std::memory_order_relaxed);
     }
 
     return 0;
@@ -150,7 +166,7 @@ int engine_load(const char* path) {
 
 int engine_play(void) {
     if (!g_engine.deviceInited) return -1;
-    if (g_engine.totalFrames == 0) return -2;
+    if (g_engine.totalFrames.load(std::memory_order_relaxed) == 0) return -2;
     g_engine.playing.store(true, std::memory_order_relaxed);
     return 0;
 }
@@ -170,15 +186,15 @@ long long engine_position(void) {
 }
 
 int engine_sample_rate(void) {
-    return g_engine.sampleRate;
+    return g_engine.sampleRate.load(std::memory_order_relaxed);
 }
 
 int engine_channels(void) {
-    return g_engine.channels;
+    return g_engine.channels.load(std::memory_order_relaxed);
 }
 
 long long engine_total_frames(void) {
-    return g_engine.totalFrames;
+    return g_engine.totalFrames.load(std::memory_order_relaxed);
 }
 
 } // extern "C"

@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"errors"
 	"math"
 	"testing"
 )
@@ -384,5 +385,50 @@ func TestKDTreeQuery_Empty(t *testing.T) {
 	}
 	if len(result.Indices) != 0 {
 		t.Errorf("expected no results for empty data, got %d", len(result.Indices))
+	}
+}
+
+func TestOnsetSlice_InvalidHopSize(t *testing.T) {
+	opts := DefaultOnsetOpts()
+	opts.HopSize = 0
+	_, err := OnsetSlice([]float32{1.0, 0.5, -0.2}, opts)
+	if !errors.Is(err, ErrInvalidOptions) {
+		t.Fatalf("expected ErrInvalidOptions, got %v", err)
+	}
+}
+
+func TestMFCC_InvalidHopSize(t *testing.T) {
+	opts := DefaultMFCCOpts()
+	opts.HopSize = 0
+	_, err := MFCC([]float32{1.0, 0.5, -0.2}, opts)
+	if !errors.Is(err, ErrInvalidOptions) {
+		t.Fatalf("expected ErrInvalidOptions, got %v", err)
+	}
+}
+
+func TestNormalize_RaggedRows_ReturnsError(t *testing.T) {
+	_, err := Normalize(
+		[][]float64{
+			{1, 2},
+			{3},
+		},
+		NormalizeMinMax,
+	)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestKDTreeQuery_QueryDimensionMismatch_ReturnsError(t *testing.T) {
+	_, err := KDTreeQuery(
+		[][]float64{
+			{0, 0},
+			{1, 1},
+		},
+		[]float64{0},
+		1,
+	)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
 	}
 }

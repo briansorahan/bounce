@@ -14,11 +14,45 @@ package analysis
 import "C"
 import (
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
 // ErrAnalysisFailed is returned when a FluCoMa algorithm encounters an error.
-var ErrAnalysisFailed = errors.New("analysis failed")
+var (
+	ErrAnalysisFailed = errors.New("analysis failed")
+	ErrInvalidOptions = errors.New("invalid analysis options")
+	ErrInvalidInput   = errors.New("invalid analysis input")
+)
+
+func invalidOptionsf(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidOptions, fmt.Sprintf(format, args...))
+}
+
+func invalidInputf(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidInput, fmt.Sprintf(format, args...))
+}
+
+func requirePositiveInt(name string, value int) error {
+	if value <= 0 {
+		return invalidOptionsf("%s must be > 0 (got %d)", name, value)
+	}
+	return nil
+}
+
+func requireNonNegativeInt(name string, value int) error {
+	if value < 0 {
+		return invalidOptionsf("%s must be >= 0 (got %d)", name, value)
+	}
+	return nil
+}
+
+func requirePositiveFloat(name string, value float64) error {
+	if value <= 0 {
+		return invalidOptionsf("%s must be > 0 (got %f)", name, value)
+	}
+	return nil
+}
 
 // OnsetOpts configures onset slice detection.
 type OnsetOpts struct {
@@ -51,6 +85,27 @@ func DefaultOnsetOpts() OnsetOpts {
 func OnsetSlice(audio []float32, opts OnsetOpts) ([]int, error) {
 	if len(audio) == 0 {
 		return nil, nil
+	}
+	if err := requireNonNegativeInt("Function", opts.Function); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("MinSliceLength", opts.MinSliceLength); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("FilterSize", opts.FilterSize); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("FrameDelta", opts.FrameDelta); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("WindowSize", opts.WindowSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("FFTSize", opts.FFTSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("HopSize", opts.HopSize); err != nil {
+		return nil, err
 	}
 
 	maxOnsets := len(audio) / (opts.HopSize + 1)
@@ -115,6 +170,24 @@ func AmpSlice(audio []float32, opts AmpSliceOpts) ([]int, error) {
 	if len(audio) == 0 {
 		return nil, nil
 	}
+	if err := requireNonNegativeInt("FastRampUp", opts.FastRampUp); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("FastRampDown", opts.FastRampDown); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("SlowRampUp", opts.SlowRampUp); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("SlowRampDown", opts.SlowRampDown); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("MinSliceLength", opts.MinSliceLength); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveFloat("SampleRate", opts.SampleRate); err != nil {
+		return nil, err
+	}
 
 	maxSlices := len(audio) / 64
 	if maxSlices < 64 {
@@ -172,6 +245,24 @@ func DefaultNoveltySliceOpts() NoveltySliceOpts {
 func NoveltySlice(audio []float32, opts NoveltySliceOpts) ([]int, error) {
 	if len(audio) == 0 {
 		return nil, nil
+	}
+	if err := requirePositiveInt("KernelSize", opts.KernelSize); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("FilterSize", opts.FilterSize); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("MinSliceLength", opts.MinSliceLength); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("WindowSize", opts.WindowSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("FFTSize", opts.FFTSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("HopSize", opts.HopSize); err != nil {
+		return nil, err
 	}
 
 	maxSlices := len(audio) / (opts.HopSize + 1)
@@ -232,6 +323,24 @@ func DefaultTransientSliceOpts() TransientSliceOpts {
 func TransientSlice(audio []float32, opts TransientSliceOpts) ([]int, error) {
 	if len(audio) == 0 {
 		return nil, nil
+	}
+	if err := requirePositiveInt("Order", opts.Order); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("BlockSize", opts.BlockSize); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("PadSize", opts.PadSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("WindowSize", opts.WindowSize); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("ClumpLength", opts.ClumpLength); err != nil {
+		return nil, err
+	}
+	if err := requireNonNegativeInt("MinSliceLength", opts.MinSliceLength); err != nil {
+		return nil, err
 	}
 
 	maxSlices := len(audio) / (opts.BlockSize + 1)
@@ -297,6 +406,30 @@ type MFCCResult struct {
 func MFCC(audio []float32, opts MFCCOpts) (*MFCCResult, error) {
 	if len(audio) == 0 {
 		return &MFCCResult{}, nil
+	}
+	if err := requirePositiveInt("NumCoeffs", opts.NumCoeffs); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("NumBands", opts.NumBands); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("WindowSize", opts.WindowSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("FFTSize", opts.FFTSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("HopSize", opts.HopSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveFloat("SampleRate", opts.SampleRate); err != nil {
+		return nil, err
+	}
+	if opts.MinFreq < 0 {
+		return nil, invalidOptionsf("MinFreq must be >= 0 (got %f)", opts.MinFreq)
+	}
+	if opts.MaxFreq <= opts.MinFreq {
+		return nil, invalidOptionsf("MaxFreq must be greater than MinFreq (got %f <= %f)", opts.MaxFreq, opts.MinFreq)
 	}
 
 	maxFrames := (len(audio)-opts.WindowSize)/opts.HopSize + 1
@@ -367,21 +500,42 @@ func DefaultSpectralShapeOpts() SpectralShapeOpts {
 
 // SpectralShapeResult holds per-frame spectral descriptors.
 type SpectralShapeResult struct {
-	Frames    int         // Number of frames processed
-	Centroid  []float64   // Spectral centroid per frame
-	Spread    []float64   // Spectral spread per frame
-	Skewness  []float64   // Spectral skewness per frame
-	Kurtosis  []float64   // Spectral kurtosis per frame
-	Rolloff   []float64   // Spectral rolloff per frame
-	Flatness  []float64   // Spectral flatness per frame
-	Crest     []float64   // Spectral crest per frame
-	Raw       [][]float64 // [frames][7] raw output
+	Frames   int         // Number of frames processed
+	Centroid []float64   // Spectral centroid per frame
+	Spread   []float64   // Spectral spread per frame
+	Skewness []float64   // Spectral skewness per frame
+	Kurtosis []float64   // Spectral kurtosis per frame
+	Rolloff  []float64   // Spectral rolloff per frame
+	Flatness []float64   // Spectral flatness per frame
+	Crest    []float64   // Spectral crest per frame
+	Raw      [][]float64 // [frames][7] raw output
 }
 
 // SpectralShape computes 7 spectral descriptors per frame.
 func SpectralShape(audio []float32, opts SpectralShapeOpts) (*SpectralShapeResult, error) {
 	if len(audio) == 0 {
 		return &SpectralShapeResult{}, nil
+	}
+	if err := requirePositiveInt("WindowSize", opts.WindowSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("FFTSize", opts.FFTSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("HopSize", opts.HopSize); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveFloat("SampleRate", opts.SampleRate); err != nil {
+		return nil, err
+	}
+	if opts.MinFreq < 0 {
+		return nil, invalidOptionsf("MinFreq must be >= 0 (got %f)", opts.MinFreq)
+	}
+	if opts.MaxFreq != -1 && opts.MaxFreq <= opts.MinFreq {
+		return nil, invalidOptionsf("MaxFreq must be -1 or greater than MinFreq (got %f <= %f)", opts.MaxFreq, opts.MinFreq)
+	}
+	if opts.RolloffTarget <= 0 || opts.RolloffTarget > 100 {
+		return nil, invalidOptionsf("RolloffTarget must be within (0, 100] (got %f)", opts.RolloffTarget)
 	}
 
 	maxFrames := (len(audio)-opts.WindowSize)/opts.HopSize + 1
@@ -477,14 +631,29 @@ func NMF(audio []float32, opts NMFOpts) (*NMFResult, error) {
 	if len(audio) == 0 {
 		return &NMFResult{}, nil
 	}
+	if err := requirePositiveInt("Rank", opts.Rank); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("Iterations", opts.Iterations); err != nil {
+		return nil, err
+	}
+	if err := requirePositiveInt("FFTSize", opts.FFTSize); err != nil {
+		return nil, err
+	}
 
 	hopSize := opts.HopSize
 	if hopSize <= 0 {
 		hopSize = opts.FFTSize / 2
 	}
+	if err := requirePositiveInt("HopSize", hopSize); err != nil {
+		return nil, err
+	}
 	windowSize := opts.WindowSize
 	if windowSize <= 0 {
 		windowSize = opts.FFTSize
+	}
+	if err := requirePositiveInt("WindowSize", windowSize); err != nil {
+		return nil, err
 	}
 
 	estimatedWindows := (len(audio) + hopSize) / hopSize
@@ -494,7 +663,7 @@ func NMF(audio []float32, opts NMFOpts) (*NMFResult, error) {
 		(*C.float)(unsafe.Pointer(&audio[0])),
 		C.int(len(audio)),
 		&out[0], C.int(opts.Rank),
-		C.int(opts.Iterations), C.int(opts.FFTSize), C.int(opts.HopSize), C.int(opts.WindowSize),
+		C.int(opts.Iterations), C.int(opts.FFTSize), C.int(hopSize), C.int(windowSize),
 	)
 
 	if n < 0 {
@@ -532,10 +701,19 @@ func Normalize(data [][]float64, mode NormalizeMode) ([][]float64, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
+
 	numRows := len(data)
 	numCols := len(data[0])
+	for i := 0; i < numRows; i++ {
+		if len(data[i]) != numCols {
+			return nil, invalidInputf("row %d has %d columns, expected %d", i, len(data[i]), numCols)
+		}
+	}
 	if numCols == 0 {
 		return nil, nil
+	}
+	if mode < NormalizeMinMax || mode > NormalizeRobust {
+		return nil, invalidOptionsf("mode must be one of %d, %d, %d (got %d)", NormalizeMinMax, NormalizeStandardize, NormalizeRobust, mode)
 	}
 
 	flat := make([]C.double, numRows*numCols)
@@ -582,6 +760,20 @@ func KDTreeQuery(data [][]float64, query []float64, k int) (*KNNResult, error) {
 
 	numPoints := len(data)
 	numDims := len(data[0])
+	for i := 0; i < numPoints; i++ {
+		if len(data[i]) != numDims {
+			return nil, invalidInputf("row %d has %d dimensions, expected %d", i, len(data[i]), numDims)
+		}
+	}
+	if numDims == 0 {
+		return &KNNResult{}, nil
+	}
+	if len(query) != numDims {
+		return nil, invalidInputf("query has %d dimensions, expected %d", len(query), numDims)
+	}
+	if k > numPoints {
+		k = numPoints
+	}
 
 	flat := make([]C.double, numPoints*numDims)
 	for i := 0; i < numPoints; i++ {
